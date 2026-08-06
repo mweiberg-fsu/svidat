@@ -1,0 +1,53 @@
+<h2>Plot layout: stacked vs grid</h2>
+<p class="subtitle">3 variables selected (CNDC, SSPS, T2). Which arrangement in the main window?</p>
+
+<div class="options" data-multiselect="false">
+  <div class="option" data-choice="stacked" onclick="toggleSelect(this)">
+    <div class="letter">A</div>
+    <div class="content">
+      <h3>Stacked, full width</h3>
+      <p>One plot per row, shared x-axis (time) below the bottom plot only. Zoom/pan on any plot syncs all of them since they share the same time axis. Best for comparing timing of events across variables.</p>
+      <div class="mockup" style="margin-top:10px">
+        <div class="mockup-body">
+          <div style="border:1px solid var(--border,#444);height:70px;margin-bottom:4px;display:flex;align-items:center;justify-content:center;font-size:12px;opacity:.7">CNDC — line chart</div>
+          <div style="border:1px solid var(--border,#444);height:70px;margin-bottom:4px;display:flex;align-items:center;justify-content:center;font-size:12px;opacity:.7">SSPS — line chart</div>
+          <div style="border:1px solid var(--border,#444);height:70px;display:flex;align-items:center;justify-content:center;font-size:12px;opacity:.7">T2 — line chart</div>
+          <div style="text-align:center;font-size:11px;margin-top:4px;opacity:.6">shared time axis</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="option" data-choice="grid" onclick="toggleSelect(this)">
+    <div class="letter">B</div>
+    <div class="content">
+      <h3>2-column grid</h3>
+      <p>Plots wrap into a 2-column grid once more than 2 variables are selected. Each plot keeps its own x-axis labels. More compact vertically, but harder to visually line up a spike in one variable with the same moment in another.</p>
+      <div class="mockup" style="margin-top:10px">
+        <div class="mockup-body" style="display:grid;grid-template-columns:1fr 1fr;gap:4px">
+          <div style="border:1px solid var(--border,#444);height:70px;display:flex;align-items:center;justify-content:center;font-size:12px;opacity:.7">CNDC</div>
+          <div style="border:1px solid var(--border,#444);height:70px;display:flex;align-items:center;justify-content:center;font-size:12px;opacity:.7">SSPS</div>
+          <div style="border:1px solid var(--border,#444);height:70px;display:flex;align-items:center;justify-content:center;font-size:12px;opacity:.7">T2</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="section" style="margin-top:24px">
+  <h3>Per-plot interaction (sketch)</h3>
+  <p class="subtitle">Drag-select a time range on a plot → small toolbar appears for that plot only (flagging is per-variable, since each variable has its own QC flag column)</p>
+  <div class="mockup">
+    <div class="mockup-header">CNDC</div>
+    <div class="mockup-body">
+      <div style="border:1px solid var(--border,#444);height:90px;position:relative;display:flex;align-items:center;justify-content:center;font-size:12px;opacity:.7">
+        line chart, with a shaded rectangle over a dragged time range
+        <div style="position:absolute;left:35%;top:0;bottom:0;width:20%;background:rgba(170,59,255,0.25);border:1px solid var(--accent,#aa3bff)"></div>
+      </div>
+      <div style="margin-top:6px;display:flex;gap:8px;align-items:center;font-size:12px">
+        <span class="label">Selected: 14:02–14:18 (16 points)</span>
+        <select class="mock-input" style="width:auto"><option>Z — Good data</option><option>K — Suspect - visual</option><option>S — Spike - visual</option></select>
+        <button class="mock-button">Apply Flag</button>
+      </div>
+    </div>
+  </div>
+</div>

@@ -1,0 +1,123 @@
+<h2>Full layout: navbar + resizable sidebar</h2>
+<p class="subtitle">Desktop view first, mobile breakpoint below. Same dark theme as the rest of the app.</p>
+
+<style>
+  .demo { background:#16171d; border:1px solid #2e303a; border-radius:8px; overflow:hidden; font-family:system-ui,sans-serif; margin-bottom:20px; }
+  .demo-nav { display:flex; align-items:center; justify-content:space-between; padding:10px 20px; border-bottom:1px solid #2e303a; }
+  .demo-logo { font-weight:700; color:#f3f4f6; }
+  .demo-logo span { color:#c084fc; }
+  .demo-account { display:flex; align-items:center; gap:8px; color:#f3f4f6; font-size:13px; }
+  .demo-avatar { width:24px; height:24px; border-radius:50%; background:linear-gradient(135deg,#c084fc,#7c3aed); }
+  .demo-body { display:flex; height:380px; }
+  .demo-sidebar { width:250px; border-right:1px solid #2e303a; padding:0; position:relative; flex-shrink:0; }
+  .demo-resize-handle { position:absolute; top:0; right:-3px; width:6px; height:100%; cursor:ew-resize; }
+  .demo-welcome { padding:16px; border-bottom:1px solid #2e303a; display:flex; align-items:center; gap:10px; }
+  .demo-welcome .avatar-lg { width:36px; height:36px; border-radius:50%; background:linear-gradient(135deg,#c084fc,#7c3aed); }
+  .demo-welcome-text { color:#f3f4f6; font-size:13px; }
+  .demo-welcome-text b { display:block; font-size:14px; }
+  .demo-links { padding:10px 16px; border-bottom:1px solid #2e303a; display:flex; flex-direction:column; gap:8px; }
+  .demo-links a { color:#d1d5db; font-size:13px; text-decoration:none; }
+  .demo-picker { padding:16px; display:flex; flex-direction:column; gap:10px; }
+  .demo-picker label { color:#9ca3af; font-size:11px; text-transform:uppercase; letter-spacing:0.5px; }
+  .demo-select { background:#1f2028; border:1px solid #2e303a; color:#d1d5db; padding:6px 8px; border-radius:6px; font-size:13px; width:100%; box-sizing:border-box; }
+  .demo-main { flex:1; padding:20px; color:#9ca3af; font-size:13px; }
+
+  .demo-mobile { width:375px; margin:0 auto; }
+  .demo-mobile .demo-body { flex-direction:column; height:auto; }
+  .demo-mobile .demo-sidebar { width:100%; border-right:none; border-bottom:1px solid #2e303a; }
+  .demo-mobile .demo-resize-handle { display:none; }
+  .demo-mobile .demo-links { flex-direction:row; flex-wrap:wrap; gap:14px; }
+  .demo-mobile .demo-main { padding:16px; }
+</style>
+
+<div class="mockup">
+  <div class="mockup-header">Desktop (&gt;1024px) — sidebar resizable via right-edge drag handle</div>
+  <div class="mockup-body">
+    <div class="demo">
+      <div class="demo-nav">
+        <div class="demo-logo">SVI<span>DAT</span></div>
+        <div class="demo-account"><div class="demo-avatar"></div> admin ▾</div>
+      </div>
+      <div class="demo-body">
+        <div class="demo-sidebar">
+          <div class="demo-welcome">
+            <div class="avatar-lg"></div>
+            <div class="demo-welcome-text">Welcome<b>admin</b></div>
+          </div>
+          <div class="demo-links">
+            <a>Files</a>
+            <a>Admin</a>
+            <a>Profile</a>
+          </div>
+          <div class="demo-picker">
+            <div>
+              <label>Ship</label>
+              <select class="demo-select"><option>KAQP</option></select>
+            </div>
+            <div>
+              <label>Year</label>
+              <select class="demo-select"><option>2025</option></select>
+            </div>
+            <div>
+              <label>File</label>
+              <select class="demo-select"><option>KAQP_20251107v20001</option></select>
+            </div>
+          </div>
+          <div class="demo-resize-handle"></div>
+        </div>
+        <div class="demo-main">Main content area (Files page / Data viewer / Profile / Admin)</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="mockup">
+  <div class="mockup-header">Mobile (&le;1024px) — sidebar becomes a horizontal strip under the navbar</div>
+  <div class="mockup-body">
+    <div class="demo demo-mobile">
+      <div class="demo-nav">
+        <div class="demo-logo">SVI<span>DAT</span></div>
+        <div class="demo-account"><div class="demo-avatar"></div></div>
+      </div>
+      <div class="demo-body">
+        <div class="demo-sidebar">
+          <div class="demo-welcome">
+            <div class="avatar-lg"></div>
+            <div class="demo-welcome-text">Welcome<b>admin</b></div>
+          </div>
+          <div class="demo-links">
+            <a>Files</a>
+            <a>Admin</a>
+            <a>Profile</a>
+          </div>
+          <div class="demo-picker">
+            <div>
+              <label>Ship</label>
+              <select class="demo-select"><option>KAQP</option></select>
+            </div>
+            <div>
+              <label>Year</label>
+              <select class="demo-select"><option>2025</option></select>
+            </div>
+            <div>
+              <label>File</label>
+              <select class="demo-select"><option>KAQP_20251107v20001</option></select>
+            </div>
+          </div>
+        </div>
+        <div class="demo-main">Main content area</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="options">
+  <div class="option" data-choice="approve" onclick="toggleSelect(this)">
+    <div class="letter">✓</div>
+    <div class="content"><h3>Looks right, proceed</h3><p>1024px breakpoint, drag-to-resize sidebar (200-400px range), full-width app layout</p></div>
+  </div>
+  <div class="option" data-choice="changes" onclick="toggleSelect(this)">
+    <div class="letter">✎</div>
+    <div class="content"><h3>Needs changes</h3><p>Tell me what to adjust</p></div>
+  </div>
+</div>

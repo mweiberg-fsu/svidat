@@ -1,3 +1,4 @@
+# IGNORE LIST FOR GIT
 # Ship data + generated storage tree (server/app/config.py DATA_DIR, default
 # server/data/) — raw/temp/drafts/published/audit_blobs/avatars, plus the
 # get_data.sh sync staging dir. Never commit ship netCDF files.

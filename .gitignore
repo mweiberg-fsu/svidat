@@ -23,3 +23,6 @@ client/dist/
 # Superpowers design/plan docs — kept locally as design-rationale reference
 # (see CLAUDE.md), not repo content.
 docs/superpowers/
+
+# Claude Code project instructions — kept locally, not repo content.
+CLAUDE.md

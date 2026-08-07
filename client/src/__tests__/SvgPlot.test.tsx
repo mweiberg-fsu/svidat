@@ -1308,4 +1308,21 @@ describe('SvgPlot', () => {
     expect(caught).toBeNull()
     expect(screen.queryByTestId('hover-tooltip')).not.toBeInTheDocument()
   })
+
+  it('shows "no data" when the nearest sample has a null value', async () => {
+    const time = hourlyTimes(18)
+    const values = time.map((_, i) => (i === 5 ? null : i))
+    vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
+      time,
+      variables: { temperature: { values, flags: time.map(() => 'Z') } },
+    })
+
+    const { container } = renderSvgPlot('FILE_A', ['temperature'])
+    await waitFor(() => expect(container.querySelector('svg')).toBeInTheDocument())
+
+    const svg = container.querySelector('svg')!
+    fireEvent.mouseMove(svg, { clientX: pxForIndex(5, 18), clientY: 100 })
+
+    expect(screen.getByTestId('hover-tooltip')).toHaveTextContent('no data')
+  })
 })

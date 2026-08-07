@@ -944,7 +944,7 @@ export function SvgPlot() {
         >
           <div>{data.time[hoverTip.idx].slice(0, 10)}</div>
           <div>{data.time[hoverTip.idx].slice(11, 19)}</div>
-          <div>{hoverTipValue}</div>
+          <div>{hoverTipValue === null || hoverTipValue === undefined ? 'no data' : hoverTipValue}</div>
         </div>
       )}
       {variables.map((varName, rowIdx) => {

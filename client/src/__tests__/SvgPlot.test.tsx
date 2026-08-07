@@ -1164,4 +1164,41 @@ describe('SvgPlot', () => {
 
     expect(openSpy).toHaveBeenCalledTimes(1)
   })
+
+  it('shows a tooltip with date, time, and value when hovering a plot row', async () => {
+    const time = hourlyTimes(18)
+    vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
+      time,
+      variables: { temperature: { values: time.map((_, i) => i), flags: time.map(() => 'Z') } },
+    })
+
+    const { container } = renderSvgPlot('FILE_A', ['temperature'])
+    await waitFor(() => expect(container.querySelector('svg')).toBeInTheDocument())
+
+    const svg = container.querySelector('svg')!
+    fireEvent.mouseMove(svg, { clientX: pxForIndex(5, 18), clientY: 100 })
+
+    const tip = screen.getByTestId('hover-tooltip')
+    expect(tip).toHaveTextContent('2025-01-01')
+    expect(tip).toHaveTextContent('05:00:00')
+    expect(tip).toHaveTextContent('5')
+  })
+
+  it('hides the tooltip on mouse leave', async () => {
+    const time = hourlyTimes(18)
+    vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
+      time,
+      variables: { temperature: { values: time.map((_, i) => i), flags: time.map(() => 'Z') } },
+    })
+
+    const { container } = renderSvgPlot('FILE_A', ['temperature'])
+    await waitFor(() => expect(container.querySelector('svg')).toBeInTheDocument())
+
+    const svg = container.querySelector('svg')!
+    fireEvent.mouseMove(svg, { clientX: pxForIndex(5, 18), clientY: 100 })
+    expect(screen.getByTestId('hover-tooltip')).toBeInTheDocument()
+
+    fireEvent.mouseLeave(svg)
+    expect(screen.queryByTestId('hover-tooltip')).not.toBeInTheDocument()
+  })
 })

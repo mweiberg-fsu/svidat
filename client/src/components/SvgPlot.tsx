@@ -534,6 +534,12 @@ export function SvgPlot() {
     startPx: number
     currentPx: number
   } | null>(null)
+  const [hoverTip, setHoverTip] = useState<{
+    varName: string
+    clientX: number
+    clientY: number
+    idx: number
+  } | null>(null)
 
   // Fetches variable data on mount, whenever the selected file/variables
   // change, and after a flag is applied elsewhere (via EditSessionContext's
@@ -818,6 +824,8 @@ export function SvgPlot() {
   const [startIdx, endIdx] = xRange ?? [0, data.time.length - 1]
   const { ticks: xTicks, stepMs: xTickStepMs } = timeTickIndices(data.time, startIdx, endIdx)
   const xTickShowSeconds = xTickStepMs < 60000
+  const firstTickDate =
+    xTicks.length > 0 ? (xTicks[0].overrideIso ?? data.time[xTicks[0].idx]).slice(0, 10) : ''
   const datasetTitle = metadata?.global_attrs.title
   const titlePrefix = typeof datasetTitle === 'string' ? datasetTitle : null
 
@@ -827,6 +835,7 @@ export function SvgPlot() {
     scaleMin: number,
     scaleMax: number
   ) => {
+    setHoverTip(null)
     if (e.shiftKey) {
       e.preventDefault()
       const rect = e.currentTarget.getBoundingClientRect()
@@ -850,6 +859,21 @@ export function SvgPlot() {
       flagDragStartRef.current = { originLeft: rect.left, startPx, varName, startIdx, endIdx }
       setFlagDrag({ varName, startPx, currentPx: startPx })
     }
+  }
+
+  // Updates the pointer-tracking tooltip as the mouse moves over a row's
+  // plot area — skipped while any drag gesture is active so it doesn't
+  // fight the drag's own visual feedback (rubber-band / Y-zoom box).
+  const handleRowMouseMove = (e: ReactMouseEvent<SVGSVGElement>, varName: string) => {
+    if (xDrag || yDrag || flagDrag) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    const px = e.clientX - rect.left
+    const idx = pxToIdx(px, startIdx, endIdx, plotWidth, data.time.length)
+    setHoverTip({ varName, clientX: e.clientX, clientY: e.clientY, idx })
+  }
+
+  const handleRowMouseLeave = () => {
+    setHoverTip(null)
   }
 
   // Reads the CURRENT value for whichever slot a snapshot targets — used to
@@ -892,8 +916,34 @@ export function SvgPlot() {
     else undoOnce()
   }
 
+  const hoverTipSeries = hoverTip ? data.variables[hoverTip.varName] : null
+  const hoverTipValue = hoverTipSeries ? hoverTipSeries.values[hoverTip!.idx] : null
+
   return (
     <div className="svg-plot" ref={containerRef}>
+      {hoverTip && hoverTipSeries && (
+        <div
+          data-testid="hover-tooltip"
+          style={{
+            position: 'fixed',
+            left: hoverTip.clientX + 12,
+            top: hoverTip.clientY + 12,
+            pointerEvents: 'none',
+            zIndex: 1000,
+            background: '#1f2937',
+            color: '#ffffff',
+            fontSize: 12,
+            fontFamily: FONT_FAMILY,
+            padding: '4px 8px',
+            borderRadius: 4,
+            whiteSpace: 'nowrap',
+          }}
+        >
+          <div>{data.time[hoverTip.idx].slice(0, 10)}</div>
+          <div>{data.time[hoverTip.idx].slice(11, 19)}</div>
+          <div>{hoverTipValue}</div>
+        </div>
+      )}
       {variables.map((varName, rowIdx) => {
         const series = data.variables[varName]
         if (!series) return null
@@ -949,6 +999,8 @@ export function SvgPlot() {
               height={rowHeight}
               fontFamily={FONT_FAMILY}
               onMouseDown={(e) => handleRowMouseDown(e, varName, scale.min, scale.max)}
+              onMouseMove={(e) => handleRowMouseMove(e, varName)}
+              onMouseLeave={handleRowMouseLeave}
               style={{ cursor: shiftHeld ? 'crosshair' : ctrlHeld ? 'ns-resize' : undefined }}
             >
               <rect x={0} y={0} width={plotWidth} height={rowHeight} fill="#ffffff" />
@@ -1018,6 +1070,14 @@ export function SvgPlot() {
               {xTicks.map(({ idx, overrideIso }, tickPos) => {
                 const isFirst = tickPos === 0
                 const isLast = tickPos === xTicks.length - 1
+                const tickIso = overrideIso ?? data.time[idx]
+                // Only the first tick anchors the date by default; later ticks
+                // (including the synthetic edge tick) repeat it only when they
+                // land on a different calendar day, so a tight zoom window
+                // within one day doesn't cram a redundant date next to the
+                // adjacent time-only label (see the day-boundary test above
+                // for the case where it IS needed).
+                const showDate = isFirst || tickIso.slice(0, 10) !== firstTickDate
                 return (
                   <g key={idx}>
                     <line
@@ -1034,11 +1094,7 @@ export function SvgPlot() {
                       fontSize={11}
                       fill={tickLabelColor}
                     >
-                      {formatTimeTick(
-                        overrideIso ?? data.time[idx],
-                        isFirst || !!overrideIso,
-                        xTickShowSeconds
-                      )}
+                      {formatTimeTick(tickIso, showDate, xTickShowSeconds)}
                     </text>
                   </g>
                 )
@@ -1094,6 +1150,23 @@ export function SvgPlot() {
                     opacity={FLAG_HIGHLIGHT_FILL_OPACITY}
                   />
                 )}
+                {highlightRange &&
+                  Array.from(
+                    { length: highlightRange[1] - highlightRange[0] + 1 },
+                    (_, i) => highlightRange[0] + i
+                  ).map((idx) => {
+                    const v = series.values[idx]
+                    if (v === null || v === undefined) return null
+                    return (
+                      <circle
+                        key={`sel-pt-${idx}`}
+                        cx={scale.x(idx)}
+                        cy={scale.y(v)}
+                        r={2.5}
+                        fill={FLAG_HIGHLIGHT_COLOR}
+                      />
+                    )
+                  })}
                 <path
                   d={buildPath(series.values, scale, startIdx, endIdx)}
                   fill="none"

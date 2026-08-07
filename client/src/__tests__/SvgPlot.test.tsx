@@ -1201,4 +1201,111 @@ describe('SvgPlot', () => {
     fireEvent.mouseLeave(svg)
     expect(screen.queryByTestId('hover-tooltip')).not.toBeInTheDocument()
   })
+
+  it('resets the hover tooltip when switching to a dataset with fewer samples', async () => {
+    const timeA = hourlyTimes(18) // 19 samples, indices 0-18
+    const timeB = hourlyTimes(4) // 5 samples, indices 0-4 — shorter than the hovered index
+
+    vi.spyOn(apiClient, 'getVariableData').mockImplementation((file: string) => {
+      if (file === 'FILE_B') {
+        return Promise.resolve({
+          time: timeB,
+          variables: {
+            temperature: { values: timeB.map((_, i) => i), flags: timeB.map(() => 'Z') },
+          },
+        })
+      }
+      return Promise.resolve({
+        time: timeA,
+        variables: {
+          temperature: { values: timeA.map((_, i) => i), flags: timeA.map(() => 'Z') },
+        },
+      })
+    })
+
+    function SwitchFile() {
+      const sel = usePlotSelection()
+      return (
+        <>
+          <button data-testid="switch-file" onClick={() => sel.setFile('FILE_B')}>
+            switch file
+          </button>
+          <button
+            data-testid="switch-variables"
+            onClick={() => sel.setVariables(['temperature'])}
+          >
+            switch variables
+          </button>
+        </>
+      )
+    }
+
+    setToken('tok')
+    localStorage.setItem('svidat_role', 'qca')
+    localStorage.setItem('svidat_username', 'testuser')
+
+    const { container } = render(
+      <AuthProvider>
+        <MemoryRouter>
+          <PlotSelectionProvider>
+            <EditSessionProvider>
+              <Setup file="FILE_A" variables={['temperature']} />
+              <SwitchFile />
+              <SvgPlot />
+            </EditSessionProvider>
+          </PlotSelectionProvider>
+        </MemoryRouter>
+      </AuthProvider>
+    )
+    fireEvent.click(screen.getByTestId('set-file'))
+    fireEvent.click(screen.getByTestId('set-variables'))
+    await waitFor(() => expect(container.querySelector('svg')).toBeInTheDocument())
+
+    const svg = container.querySelector('svg')!
+    // Hover an index (15) that only exists in the 19-sample FILE_A dataset —
+    // FILE_B only has 5 samples, so this index would be out of range there.
+    fireEvent.mouseMove(svg, { clientX: pxForIndex(15, 18), clientY: 100 })
+    expect(screen.getByTestId('hover-tooltip')).toBeInTheDocument()
+
+    // A render crash here (stale hoverTip.idx read against the shorter
+    // dataset) happens inside React's own scheduling — after the data-fetch
+    // effect's `.then` calls setData — so it surfaces as a process-level
+    // uncaught exception / unhandled rejection rather than a synchronous
+    // throw any `expect(...).toThrow()` around the fireEvent calls would
+    // catch. Capture it directly instead.
+    // Minimal ambient typing for Node's `process` event emitter — this
+    // project's browser tsconfig (tsconfig.app.json) doesn't include
+    // @types/node, so `process` has no type here even though it exists at
+    // runtime under vitest's Node-based test environment.
+    const nodeProcess = globalThis as unknown as {
+      process: {
+        on: (event: string, listener: (reason: unknown) => void) => void
+        off: (event: string, listener: (reason: unknown) => void) => void
+      }
+    }
+    let caught: unknown = null
+    const onError = (reason: unknown) => {
+      caught = reason
+    }
+    nodeProcess.process.on('uncaughtException', onError)
+    nodeProcess.process.on('unhandledRejection', onError)
+    try {
+      // Switching file/variables without the pointer leaving the SVG (so
+      // mouseleave never fires) must not carry the stale index over — it
+      // should be cleared by the [file, variables] reset effect instead.
+      fireEvent.click(screen.getByTestId('switch-file'))
+      fireEvent.click(screen.getByTestId('switch-variables'))
+      await waitFor(() =>
+        expect(apiClient.getVariableData).toHaveBeenLastCalledWith('FILE_B', ['temperature'])
+      )
+      // Let any render error triggered by the resolved fetch surface.
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    } finally {
+      nodeProcess.process.off('uncaughtException', onError)
+      nodeProcess.process.off('unhandledRejection', onError)
+    }
+
+    expect(caught).toBeNull()
+    expect(screen.queryByTestId('hover-tooltip')).not.toBeInTheDocument()
+  })
 })

@@ -41,6 +41,8 @@ const FLAG_HIGHLIGHT_COLOR = '#ff00ff'
 const FLAG_HIGHLIGHT_FILL_OPACITY = 0.15
 const FLAG_HIGHLIGHT_PAD_PX = 12
 const FONT_FAMILY = 'Arial, sans-serif'
+const TOOLTIP_BG_COLOR = '#1f2937'
+const TOOLTIP_TEXT_COLOR = '#ffffff'
 
 // Inclusive [startIdx, endIdx] window into the shared time axis. `null` means
 // full extent — every row zooms to the same window since they share one
@@ -587,6 +589,7 @@ export function SvgPlot() {
   useEffect(() => {
     setXRange(null)
     setYOverrides({})
+    setHoverTip(null)
     undoStackRef.current = []
     redoStackRef.current = []
   }, [file, variables])
@@ -917,7 +920,7 @@ export function SvgPlot() {
   }
 
   const hoverTipSeries = hoverTip ? data.variables[hoverTip.varName] : null
-  const hoverTipValue = hoverTipSeries ? hoverTipSeries.values[hoverTip!.idx] : null
+  const hoverTipValue = hoverTip && hoverTipSeries ? hoverTipSeries.values[hoverTip.idx] : null
 
   return (
     <div className="svg-plot" ref={containerRef}>
@@ -930,8 +933,8 @@ export function SvgPlot() {
             top: hoverTip.clientY + 12,
             pointerEvents: 'none',
             zIndex: 1000,
-            background: '#1f2937',
-            color: '#ffffff',
+            background: TOOLTIP_BG_COLOR,
+            color: TOOLTIP_TEXT_COLOR,
             fontSize: 12,
             fontFamily: FONT_FAMILY,
             padding: '4px 8px',

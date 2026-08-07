@@ -91,6 +91,11 @@ for ship_year in "${SHIP_YEARS[@]}"; do
     echo "[$i/$total] ${ship_year}"
 
     # -a: archive (recurse, preserve perms/times); -z: compress.
+    # macOS ships rsync 2.6.9, which — unlike modern rsync — won't create a
+    # multi-level missing destination path (e.g. STAGING_DIR/SHIP/YEAR when
+    # SHIP doesn't exist yet either), only the final component. Pre-create it.
+    mkdir -p "$STAGING_DIR/${ship_year}"
+
     # No --delete: local files absent on remote are left alone.
     rsync -azh \
         -e "ssh -o BatchMode=no" \

@@ -1325,4 +1325,49 @@ describe('SvgPlot', () => {
 
     expect(screen.getByTestId('hover-tooltip')).toHaveTextContent('no data')
   })
+
+  it('hides the tooltip as soon as a shift+drag (X-zoom) starts', async () => {
+    const time = hourlyTimes(18)
+    vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
+      time,
+      variables: { temperature: { values: time.map((_, i) => i), flags: time.map(() => 'Z') } },
+    })
+
+    const { container } = renderSvgPlot('FILE_A', ['temperature'])
+    await waitFor(() => expect(container.querySelector('svg')).toBeInTheDocument())
+
+    const svg = container.querySelector('svg')!
+    fireEvent.mouseMove(svg, { clientX: pxForIndex(5, 18), clientY: 100 })
+    expect(screen.getByTestId('hover-tooltip')).toBeInTheDocument()
+
+    fireEvent.mouseDown(svg, { clientX: pxForIndex(4, 18), shiftKey: true })
+    expect(screen.queryByTestId('hover-tooltip')).not.toBeInTheDocument()
+
+    // Moving over the row mid-drag must not resurrect the tooltip.
+    fireEvent.mouseMove(svg, { clientX: pxForIndex(6, 18), clientY: 100 })
+    expect(screen.queryByTestId('hover-tooltip')).not.toBeInTheDocument()
+
+    fireEvent.mouseUp(window, { clientX: pxForIndex(14, 18) })
+  })
+
+  it('hides the tooltip as soon as a plain drag (flag-select) starts', async () => {
+    const time = hourlyTimes(18)
+    vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
+      time,
+      variables: { temperature: { values: time.map((_, i) => i), flags: time.map(() => 'Z') } },
+    })
+    vi.spyOn(apiClient, 'openSession').mockResolvedValue({ status: 'opened' })
+
+    const { container } = renderSvgPlot('FILE_A', ['temperature'])
+    await waitFor(() => expect(container.querySelector('svg')).toBeInTheDocument())
+
+    const svg = container.querySelector('svg')!
+    fireEvent.mouseMove(svg, { clientX: pxForIndex(5, 18), clientY: 100 })
+    expect(screen.getByTestId('hover-tooltip')).toBeInTheDocument()
+
+    fireEvent.mouseDown(svg, { clientX: pxForIndex(4, 18) })
+    expect(screen.queryByTestId('hover-tooltip')).not.toBeInTheDocument()
+
+    fireEvent.mouseUp(window, { clientX: pxForIndex(14, 18) })
+  })
 })

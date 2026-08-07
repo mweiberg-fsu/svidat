@@ -1,0 +1,18 @@
+# Ship data + generated storage tree (server/app/config.py DATA_DIR, default
+# server/data/) — raw/temp/drafts/published/audit_blobs/avatars, plus the
+# get_data.sh sync staging dir. Never commit ship netCDF files.
+server/data/
+
+# Backend runtime state
+server/.env
+server/svidat.db
+server/.venv/
+__pycache__/
+*.pyc
+
+# Frontend
+client/node_modules/
+client/dist/
+
+# OS
+.DS_Store

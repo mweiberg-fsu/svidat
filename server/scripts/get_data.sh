@@ -39,7 +39,11 @@ mkdir -p "$STAGING_DIR" "$DEST_DIR"
 echo "Listing ship/year directories on ${REMOTE_HOST} ..."
 # One remote find call (not one ssh round-trip per ship) — %P prints paths
 # relative to REMOTE_PATH, e.g. "WTDF/2020".
-mapfile -t SHIP_YEARS < <(
+# Built via a read loop, not `mapfile` (bash 4+) — macOS ships bash 3.2.
+SHIP_YEARS=()
+while IFS= read -r line; do
+    SHIP_YEARS+=("$line")
+done < <(
     ssh -o BatchMode=no "${SSH_USER}@${REMOTE_HOST}" \
         "find '${REMOTE_PATH}' -mindepth 2 -maxdepth 2 -type d -printf '%P\n'" | sort
 )

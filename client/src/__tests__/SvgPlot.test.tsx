@@ -70,6 +70,13 @@ function pxForIndex(index: number, lastIndex: number): number {
   return 70 + (index / lastIndex) * INNER_WIDTH // MARGIN.left + ...
 }
 
+// Default row height (no ResizeObserver in jsdom) is 200; inner plot height
+// is ROW_HEIGHT - MARGIN.top - MARGIN.bottom = 200 - 26 - 36 = 138.
+const INNER_HEIGHT = 200 - 26 - 36
+function pyForValue(value: number, min: number, max: number): number {
+  return 26 + INNER_HEIGHT - ((value - min) / (max - min)) * INNER_HEIGHT // MARGIN.top + ...
+}
+
 describe('SvgPlot', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
@@ -1176,7 +1183,7 @@ describe('SvgPlot', () => {
     await waitFor(() => expect(container.querySelector('svg')).toBeInTheDocument())
 
     const svg = container.querySelector('svg')!
-    fireEvent.mouseMove(svg, { clientX: pxForIndex(5, 18), clientY: 100 })
+    fireEvent.mouseMove(svg, { clientX: pxForIndex(5, 18), clientY: pyForValue(5, 0, 20) })
 
     const tip = screen.getByTestId('hover-tooltip')
     expect(tip).toHaveTextContent('2025-01-01')
@@ -1195,7 +1202,7 @@ describe('SvgPlot', () => {
     await waitFor(() => expect(container.querySelector('svg')).toBeInTheDocument())
 
     const svg = container.querySelector('svg')!
-    fireEvent.mouseMove(svg, { clientX: pxForIndex(5, 18), clientY: 100 })
+    fireEvent.mouseMove(svg, { clientX: pxForIndex(5, 18), clientY: pyForValue(5, 0, 20) })
     expect(screen.getByTestId('hover-tooltip')).toBeInTheDocument()
 
     fireEvent.mouseLeave(svg)
@@ -1264,7 +1271,7 @@ describe('SvgPlot', () => {
     const svg = container.querySelector('svg')!
     // Hover an index (15) that only exists in the 19-sample FILE_A dataset —
     // FILE_B only has 5 samples, so this index would be out of range there.
-    fireEvent.mouseMove(svg, { clientX: pxForIndex(15, 18), clientY: 100 })
+    fireEvent.mouseMove(svg, { clientX: pxForIndex(15, 18), clientY: pyForValue(15, 0, 20) })
     expect(screen.getByTestId('hover-tooltip')).toBeInTheDocument()
 
     // A render crash here (stale hoverTip.idx read against the shorter
@@ -1309,7 +1316,7 @@ describe('SvgPlot', () => {
     expect(screen.queryByTestId('hover-tooltip')).not.toBeInTheDocument()
   })
 
-  it('shows "no data" when the nearest sample has a null value', async () => {
+  it('does not show the tooltip when the nearest sample is a gap (null value) — no line to hover', async () => {
     const time = hourlyTimes(18)
     const values = time.map((_, i) => (i === 5 ? null : i))
     vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
@@ -1321,9 +1328,13 @@ describe('SvgPlot', () => {
     await waitFor(() => expect(container.querySelector('svg')).toBeInTheDocument())
 
     const svg = container.querySelector('svg')!
-    fireEvent.mouseMove(svg, { clientX: pxForIndex(5, 18), clientY: 100 })
-
-    expect(screen.getByTestId('hover-tooltip')).toHaveTextContent('no data')
+    // Try at the line's neighboring y-values too, not just one guess — a
+    // null sample has no drawn segment anywhere near this x, so no y should
+    // trigger the tooltip.
+    fireEvent.mouseMove(svg, { clientX: pxForIndex(5, 18), clientY: pyForValue(4, 0, 20) })
+    expect(screen.queryByTestId('hover-tooltip')).not.toBeInTheDocument()
+    fireEvent.mouseMove(svg, { clientX: pxForIndex(5, 18), clientY: pyForValue(6, 0, 20) })
+    expect(screen.queryByTestId('hover-tooltip')).not.toBeInTheDocument()
   })
 
   it('hides the tooltip as soon as a shift+drag (X-zoom) starts', async () => {
@@ -1337,17 +1348,52 @@ describe('SvgPlot', () => {
     await waitFor(() => expect(container.querySelector('svg')).toBeInTheDocument())
 
     const svg = container.querySelector('svg')!
-    fireEvent.mouseMove(svg, { clientX: pxForIndex(5, 18), clientY: 100 })
+    fireEvent.mouseMove(svg, { clientX: pxForIndex(5, 18), clientY: pyForValue(5, 0, 20) })
     expect(screen.getByTestId('hover-tooltip')).toBeInTheDocument()
 
     fireEvent.mouseDown(svg, { clientX: pxForIndex(4, 18), shiftKey: true })
     expect(screen.queryByTestId('hover-tooltip')).not.toBeInTheDocument()
 
     // Moving over the row mid-drag must not resurrect the tooltip.
-    fireEvent.mouseMove(svg, { clientX: pxForIndex(6, 18), clientY: 100 })
+    fireEvent.mouseMove(svg, { clientX: pxForIndex(6, 18), clientY: pyForValue(6, 0, 20) })
     expect(screen.queryByTestId('hover-tooltip')).not.toBeInTheDocument()
 
     fireEvent.mouseUp(window, { clientX: pxForIndex(14, 18) })
+  })
+
+  it('does not show the tooltip when the cursor is far from the line, even at the right x', async () => {
+    const time = hourlyTimes(18)
+    vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
+      time,
+      variables: { temperature: { values: time.map((_, i) => i), flags: time.map(() => 'Z') } },
+    })
+
+    const { container } = renderSvgPlot('FILE_A', ['temperature'])
+    await waitFor(() => expect(container.querySelector('svg')).toBeInTheDocument())
+
+    const svg = container.querySelector('svg')!
+    // Index 5 (value 5) sits at y ≈ pyForValue(5, 0, 20) ≈ 129.5 — clientY 10
+    // is nowhere near it.
+    fireEvent.mouseMove(svg, { clientX: pxForIndex(5, 18), clientY: 10 })
+
+    expect(screen.queryByTestId('hover-tooltip')).not.toBeInTheDocument()
+  })
+
+  it('shows the tooltip when the cursor is within 8px of the line', async () => {
+    const time = hourlyTimes(18)
+    vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
+      time,
+      variables: { temperature: { values: time.map((_, i) => i), flags: time.map(() => 'Z') } },
+    })
+
+    const { container } = renderSvgPlot('FILE_A', ['temperature'])
+    await waitFor(() => expect(container.querySelector('svg')).toBeInTheDocument())
+
+    const svg = container.querySelector('svg')!
+    const lineY = pyForValue(5, 0, 20)
+    fireEvent.mouseMove(svg, { clientX: pxForIndex(5, 18), clientY: lineY + 7 })
+
+    expect(screen.getByTestId('hover-tooltip')).toBeInTheDocument()
   })
 
   it('hides the tooltip as soon as a plain drag (flag-select) starts', async () => {
@@ -1362,7 +1408,7 @@ describe('SvgPlot', () => {
     await waitFor(() => expect(container.querySelector('svg')).toBeInTheDocument())
 
     const svg = container.querySelector('svg')!
-    fireEvent.mouseMove(svg, { clientX: pxForIndex(5, 18), clientY: 100 })
+    fireEvent.mouseMove(svg, { clientX: pxForIndex(5, 18), clientY: pyForValue(5, 0, 20) })
     expect(screen.getByTestId('hover-tooltip')).toBeInTheDocument()
 
     fireEvent.mouseDown(svg, { clientX: pxForIndex(4, 18) })

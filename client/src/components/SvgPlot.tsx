@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
 import { getFileMetadata, getVariableData } from '../api/client'
 import { usePlotSelection } from '../context/PlotSelectionContext'
-import type { FileMetadata, VariableDataResponse } from '../api/types'
+import type { FileMetadata, VariableDataResponse, VariableSeries } from '../api/types'
 import { useEditSession } from '../context/EditSessionContext'
 import { FLAG_CODES } from '../constants/flagCodes'
 
@@ -43,6 +43,7 @@ const FLAG_HIGHLIGHT_PAD_PX = 12
 const FONT_FAMILY = 'Arial, sans-serif'
 const TOOLTIP_BG_COLOR = '#1f2937'
 const TOOLTIP_TEXT_COLOR = '#ffffff'
+const LINE_HOVER_THRESHOLD_PX = 8
 
 // Inclusive [startIdx, endIdx] window into the shared time axis. `null` means
 // full extent — every row zooms to the same window since they share one
@@ -866,12 +867,27 @@ export function SvgPlot() {
 
   // Updates the pointer-tracking tooltip as the mouse moves over a row's
   // plot area — skipped while any drag gesture is active so it doesn't
-  // fight the drag's own visual feedback (rubber-band / Y-zoom box).
-  const handleRowMouseMove = (e: ReactMouseEvent<SVGSVGElement>, varName: string) => {
+  // fight the drag's own visual feedback (rubber-band / Y-zoom box), and
+  // skipped unless the cursor is within LINE_HOVER_THRESHOLD_PX of the
+  // plotted line itself (so the tooltip reads as attached to the line, not
+  // the whole plot area). A null value at the nearest index has no drawn
+  // line to be near, so it never triggers the tooltip either.
+  const handleRowMouseMove = (
+    e: ReactMouseEvent<SVGSVGElement>,
+    varName: string,
+    scale: Scale,
+    series: VariableSeries
+  ) => {
     if (xDrag || yDrag || flagDrag) return
     const rect = e.currentTarget.getBoundingClientRect()
     const px = e.clientX - rect.left
+    const py = e.clientY - rect.top
     const idx = pxToIdx(px, startIdx, endIdx, plotWidth, data.time.length)
+    const value = series.values[idx]
+    if (value === null || value === undefined || Math.abs(scale.y(value) - py) > LINE_HOVER_THRESHOLD_PX) {
+      setHoverTip(null)
+      return
+    }
     setHoverTip({ varName, clientX: e.clientX, clientY: e.clientY, idx })
   }
 
@@ -944,7 +960,7 @@ export function SvgPlot() {
         >
           <div>{data.time[hoverTip.idx].slice(0, 10)}</div>
           <div>{data.time[hoverTip.idx].slice(11, 19)}</div>
-          <div>{hoverTipValue === null || hoverTipValue === undefined ? 'no data' : hoverTipValue}</div>
+          <div>{hoverTipValue}</div>
         </div>
       )}
       {variables.map((varName, rowIdx) => {
@@ -1002,7 +1018,7 @@ export function SvgPlot() {
               height={rowHeight}
               fontFamily={FONT_FAMILY}
               onMouseDown={(e) => handleRowMouseDown(e, varName, scale.min, scale.max)}
-              onMouseMove={(e) => handleRowMouseMove(e, varName)}
+              onMouseMove={(e) => handleRowMouseMove(e, varName, scale, series)}
               onMouseLeave={handleRowMouseLeave}
               style={{ cursor: shiftHeld ? 'crosshair' : ctrlHeld ? 'ns-resize' : undefined }}
             >

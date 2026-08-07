@@ -19,3 +19,7 @@ client/dist/
 
 # Local superpowers skill session state (brainstorm server pids/logs/content)
 .superpowers/
+
+# Superpowers design/plan docs — kept locally as design-rationale reference
+# (see CLAUDE.md), not repo content.
+docs/superpowers/

@@ -2,6 +2,9 @@ import type { CurrentUser, Catalog, VariableDataResponse } from './types'
 
 const BASE_URL = 'http://localhost:8000'
 const TOKEN_KEY = 'svidat_token'
+export const ROLE_KEY = 'svidat_role'
+export const USERNAME_KEY = 'svidat_username'
+export const ID_KEY = 'svidat_id'
 
 export function setToken(token: string): void {
   localStorage.setItem(TOKEN_KEY, token)
@@ -15,6 +18,16 @@ export function clearToken(): void {
   localStorage.removeItem(TOKEN_KEY)
 }
 
+// Clears everything AuthContext.login() writes — used both by explicit
+// logout and by apiFetch's 401 handler, so a stale/expired token can't leave
+// role/username/id behind for ProtectedRoute to keep trusting.
+export function clearAuthStorage(): void {
+  clearToken()
+  localStorage.removeItem(ROLE_KEY)
+  localStorage.removeItem(USERNAME_KEY)
+  localStorage.removeItem(ID_KEY)
+}
+
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const token = getToken()
   const headers: Record<string, string> = {
@@ -25,6 +38,13 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
     headers.Authorization = `Bearer ${token}`
   }
   const response = await fetch(`${BASE_URL}${path}`, { ...init, headers })
+  if (response.status === 401) {
+    clearAuthStorage()
+    if (window.location.pathname !== '/login') {
+      window.location.href = '/login'
+    }
+    throw new Error('401: session expired')
+  }
   if (!response.ok) {
     const body = await response.text()
     throw new Error(`${response.status}: ${body}`)

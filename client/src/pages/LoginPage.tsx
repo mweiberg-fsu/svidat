@@ -8,12 +8,14 @@ export function LoginPage() {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [submitting, setSubmitting] = useState(false)
   const auth = useAuth()
   const navigate = useNavigate()
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
     setError(null)
+    setSubmitting(true)
     try {
       const response = await login(username, password)
       setToken(response.access_token)
@@ -23,26 +25,50 @@ export function LoginPage() {
     } catch {
       auth.logout()
       setError('Invalid username or password')
+      setSubmitting(false)
     }
   }
 
   return (
-    <form onSubmit={handleSubmit}>
-      <h1>svidat login</h1>
-      <label>
-        Username
-        <input value={username} onChange={(e) => setUsername(e.target.value)} />
-      </label>
-      <label>
-        Password
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-      </label>
-      {error && <p role="alert">{error}</p>}
-      <button type="submit">Log in</button>
-    </form>
+    <div className="login-page">
+      <div className="login-orb login-orb-a" aria-hidden="true" />
+      <div className="login-orb login-orb-b" aria-hidden="true" />
+
+      <form className="login-card" onSubmit={handleSubmit}>
+        <div className="login-logo">
+          svi<span>dat</span>
+        </div>
+        <p className="login-subtitle">USER LOGIN</p>
+
+        <label className="login-field">
+          <span>Username</span>
+          <input
+            autoFocus
+            autoComplete="username"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+          />
+        </label>
+        <label className="login-field">
+          <span>Password</span>
+          <input
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        </label>
+
+        {error && (
+          <p className="login-error" role="alert">
+            {error}
+          </p>
+        )}
+
+        <button className="login-submit" type="submit" disabled={submitting}>
+          {submitting ? 'Signing in…' : 'Log in'}
+        </button>
+      </form>
+    </div>
   )
 }

@@ -1,10 +1,6 @@
 import { createContext, useContext, useState, type ReactNode } from 'react'
-import { clearToken, getToken, setToken } from '../api/client'
+import { ID_KEY, ROLE_KEY, USERNAME_KEY, clearAuthStorage, getToken, setToken } from '../api/client'
 import type { Role } from '../api/types'
-
-const ROLE_KEY = 'svidat_role'
-const USERNAME_KEY = 'svidat_username'
-const ID_KEY = 'svidat_id'
 
 interface AuthState {
   token: string | null
@@ -43,10 +39,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const logout = () => {
-    clearToken()
-    localStorage.removeItem(ROLE_KEY)
-    localStorage.removeItem(USERNAME_KEY)
-    localStorage.removeItem(ID_KEY)
+    clearAuthStorage()
     setTokenState(null)
     setRole(null)
     setUsername(null)

@@ -57,6 +57,26 @@ describe('Sidebar', () => {
     expect(screen.getByText('Audit History')).toBeInTheDocument()
   })
 
+  it('shows a Documentation link for every role, including user', () => {
+    vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
+    renderSidebar('user')
+    expect(screen.getByText('Documentation')).toBeInTheDocument()
+  })
+
+  it('opens the documentation modal when the link is clicked, and closes it', () => {
+    vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
+    renderSidebar('qca')
+    expect(screen.queryByRole('tab', { name: 'Overview' })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('Documentation'))
+
+    expect(screen.getByRole('tab', { name: 'Overview' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByLabelText('Close'))
+
+    expect(screen.queryByRole('tab', { name: 'Overview' })).not.toBeInTheDocument()
+  })
+
   it('opens the audit history modal when the link is clicked, and closes it', async () => {
     vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
     vi.spyOn(apiClient, 'getMyAuditHistory').mockResolvedValue([])

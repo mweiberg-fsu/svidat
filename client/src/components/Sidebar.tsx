@@ -6,6 +6,7 @@ import { useAvatar } from '../hooks/useAvatar'
 import { PlotPicker } from './PlotPicker'
 import { FlagsPanel } from './FlagsPanel'
 import { AuditHistoryModal } from './AuditHistoryModal'
+import { DocumentationModal } from './DocumentationModal'
 
 const MIN_WIDTH = 200
 const MAX_WIDTH = 400
@@ -22,6 +23,7 @@ export function Sidebar() {
   const [width, setWidth] = useState(DEFAULT_WIDTH)
   const [activeTab, setActiveTab] = useState<SidebarTab>('files')
   const [showAuditHistory, setShowAuditHistory] = useState(false)
+  const [showDocs, setShowDocs] = useState(false)
   const draggingRef = useRef(false)
 
   // Mirrors the old popover's "appears once you resolve a drag" behavior —
@@ -96,6 +98,13 @@ export function Sidebar() {
         >
           Audit History
         </button>
+        <button
+          type="button"
+          className="sidebar-docs-link"
+          onClick={() => setShowDocs(true)}
+        >
+          Documentation
+        </button>
       </div>
       {location.pathname === '/files' && (
         <>
@@ -128,6 +137,7 @@ export function Sidebar() {
       {showAuditHistory && (
         <AuditHistoryModal onClose={() => setShowAuditHistory(false)} />
       )}
+      {showDocs && <DocumentationModal onClose={() => setShowDocs(false)} />}
     </aside>
   )
 }

@@ -284,6 +284,30 @@ describe('EditSessionContext', () => {
     resolveFirstOpen({ status: 'opened' })
   })
 
+  it('intercepts beforeunload only while a session is open', async () => {
+    vi.spyOn(apiClient, 'openSession').mockResolvedValue({ status: 'opened' })
+    vi.spyOn(apiClient, 'closeSession').mockResolvedValue({ status: 'closed' })
+    renderWithRole('qca')
+    fireEvent.click(screen.getByTestId('set-file'))
+
+    // No session open yet — beforeunload is not intercepted (dispatchEvent
+    // returns true when nothing called preventDefault on a cancelable event).
+    expect(window.dispatchEvent(new Event('beforeunload', { cancelable: true }))).toBe(true)
+
+    fireEvent.click(screen.getByText('open'))
+    await waitFor(() => expect(screen.getByText('sessionOpen:true')).toBeInTheDocument())
+
+    // Session open — beforeunload is intercepted (preventDefault called,
+    // dispatchEvent returns false).
+    expect(window.dispatchEvent(new Event('beforeunload', { cancelable: true }))).toBe(false)
+
+    fireEvent.click(screen.getByText('close'))
+    await waitFor(() => expect(screen.getByText('sessionOpen:false')).toBeInTheDocument())
+
+    // Session closed again — no longer intercepted.
+    expect(window.dispatchEvent(new Event('beforeunload', { cancelable: true }))).toBe(true)
+  })
+
   it('shares flagSelection across separate sibling components under the same provider', () => {
     renderSiblingsWithRole('qca')
     expect(screen.getByTestId('flag-display-sibling')).toHaveTextContent('flagSelection:none')

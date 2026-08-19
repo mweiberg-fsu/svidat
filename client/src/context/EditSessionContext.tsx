@@ -59,6 +59,20 @@ export function EditSessionProvider({ children }: { children: ReactNode }) {
     setFlagSelection(null)
   }, [file, variables])
 
+  // Warn before the user loses an open edit session (unsaved temp-file
+  // edits + the DB lock) by closing the tab, refreshing, or navigating away
+  // at the browser level. Browsers ignore any custom message and show their
+  // own generic prompt — returnValue is just the standard trigger.
+  useEffect(() => {
+    if (!sessionOpen) return
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', handler)
+    return () => window.removeEventListener('beforeunload', handler)
+  }, [sessionOpen])
+
   const handleOpenSession = async () => {
     if (!file) return
     if (sessionOpen || openingRef.current) return

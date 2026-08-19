@@ -27,3 +27,6 @@ docs/superpowers/
 
 # Claude Code project instructions — kept locally, not repo content.
 CLAUDE.md
+
+# Local git worktrees used for isolated feature-branch work.
+.worktrees/

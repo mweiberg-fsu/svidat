@@ -92,6 +92,34 @@ describe('Sidebar', () => {
     expect(screen.queryByText('No edits yet.')).not.toBeInTheDocument()
   })
 
+  it('closes the audit history modal when the documentation link is clicked', async () => {
+    vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
+    vi.spyOn(apiClient, 'getMyAuditHistory').mockResolvedValue([])
+    renderSidebar('qca')
+
+    fireEvent.click(screen.getByText('Audit History'))
+    await waitFor(() => expect(screen.getByText('No edits yet.')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByText('Documentation'))
+
+    expect(screen.getByRole('tab', { name: 'Overview' })).toBeInTheDocument()
+    expect(screen.queryByText('No edits yet.')).not.toBeInTheDocument()
+  })
+
+  it('closes the documentation modal when the audit history link is clicked', async () => {
+    vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
+    vi.spyOn(apiClient, 'getMyAuditHistory').mockResolvedValue([])
+    renderSidebar('qca')
+
+    fireEvent.click(screen.getByText('Documentation'))
+    expect(screen.getByRole('tab', { name: 'Overview' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('Audit History'))
+
+    await waitFor(() => expect(screen.getByText('No edits yet.')).toBeInTheDocument())
+    expect(screen.queryByRole('tab', { name: 'Overview' })).not.toBeInTheDocument()
+  })
+
   it('renders no tabs outside /files', async () => {
     vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
     localStorage.clear()

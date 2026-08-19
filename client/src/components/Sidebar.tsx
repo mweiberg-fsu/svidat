@@ -94,14 +94,20 @@ export function Sidebar() {
         <button
           type="button"
           className="sidebar-audit-history-link"
-          onClick={() => setShowAuditHistory(true)}
+          onClick={() => {
+            setShowAuditHistory(true)
+            setShowDocs(false)
+          }}
         >
           Audit History
         </button>
         <button
           type="button"
           className="sidebar-docs-link"
-          onClick={() => setShowDocs(true)}
+          onClick={() => {
+            setShowDocs(true)
+            setShowAuditHistory(false)
+          }}
         >
           Documentation
         </button>

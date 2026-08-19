@@ -3,10 +3,21 @@ import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { Sidebar } from '../components/Sidebar'
 import { AuthProvider } from '../context/AuthContext'
-import { PlotSelectionProvider } from '../context/PlotSelectionContext'
+import { PlotSelectionProvider, usePlotSelection } from '../context/PlotSelectionContext'
 import { EditSessionProvider, useEditSession } from '../context/EditSessionContext'
 import { setToken } from '../api/client'
 import * as apiClient from '../api/client'
+
+function SessionDriver() {
+  const sel = usePlotSelection()
+  const { openSession } = useEditSession()
+  return (
+    <>
+      <button onClick={() => sel.setFile('FILE_A')}>set file</button>
+      <button onClick={() => openSession()}>open session</button>
+    </>
+  )
+}
 
 function renderSidebar(role: string) {
   localStorage.clear()
@@ -294,5 +305,52 @@ describe('Sidebar', () => {
     )
     await waitFor(() => expect(screen.getByText('Admin')).toHaveClass('active'))
     expect(screen.getByText('Plots')).not.toHaveClass('active')
+  })
+
+  it('confirms before navigating when a session is open, and only navigates if confirmed', async () => {
+    vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
+    vi.spyOn(apiClient, 'openSession').mockResolvedValue({ status: 'opened' })
+    localStorage.clear()
+    setToken('tok')
+    localStorage.setItem('svidat_role', 'qca')
+    localStorage.setItem('svidat_username', 'testuser')
+    render(
+      <AuthProvider>
+        <MemoryRouter initialEntries={['/files']}>
+          <PlotSelectionProvider>
+            <EditSessionProvider>
+              <SessionDriver />
+              <Sidebar />
+            </EditSessionProvider>
+          </PlotSelectionProvider>
+        </MemoryRouter>
+      </AuthProvider>
+    )
+    fireEvent.click(screen.getByText('set file'))
+    fireEvent.click(screen.getByText('open session'))
+    await waitFor(() => expect(apiClient.openSession).toHaveBeenCalled())
+
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    fireEvent.click(screen.getByText('Profile'))
+    expect(confirmSpy).toHaveBeenCalledWith(
+      'You have an open edit session. Leave without closing it?'
+    )
+    // Cancelled — still on /files.
+    expect(screen.getByText('Plots')).toHaveClass('active')
+
+    confirmSpy.mockReturnValue(true)
+    fireEvent.click(screen.getByText('Profile'))
+    await waitFor(() => expect(screen.getByText('Profile')).toHaveClass('active'))
+  })
+
+  it('navigates without prompting when no session is open', async () => {
+    vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
+    const confirmSpy = vi.spyOn(window, 'confirm')
+    renderSidebar('qca')
+
+    fireEvent.click(screen.getByText('Plots'))
+
+    expect(confirmSpy).not.toHaveBeenCalled()
+    await waitFor(() => expect(screen.getByText('Plots')).toHaveClass('active'))
   })
 })

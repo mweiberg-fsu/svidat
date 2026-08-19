@@ -16,7 +16,7 @@ type SidebarTab = 'files' | 'flags'
 
 export function Sidebar() {
   const { username, role, id, avatarVersion } = useAuth()
-  const { flagSelection } = useEditSession()
+  const { flagSelection, sessionOpen } = useEditSession()
   const avatarUrl = useAvatar(id, avatarVersion)
   const navigate = useNavigate()
   const location = useLocation()
@@ -31,6 +31,15 @@ export function Sidebar() {
   useEffect(() => {
     if (flagSelection) setActiveTab('flags')
   }, [flagSelection])
+
+  const handleNavClick = (path: string) => {
+    if (sessionOpen && location.pathname !== path) {
+      if (!window.confirm('You have an open edit session. Leave without closing it?')) {
+        return
+      }
+    }
+    navigate(path)
+  }
 
   const handleMouseDown = () => {
     draggingRef.current = true
@@ -67,7 +76,7 @@ export function Sidebar() {
           className={location.pathname === '/files' ? 'active' : undefined}
           onClick={(e) => {
             e.preventDefault()
-            navigate('/files')
+            handleNavClick('/files')
           }}
         >
           Plots
@@ -78,7 +87,7 @@ export function Sidebar() {
             className={location.pathname === '/admin/users' ? 'active' : undefined}
             onClick={(e) => {
               e.preventDefault()
-              navigate('/admin/users')
+              handleNavClick('/admin/users')
             }}
           >
             Admin
@@ -89,7 +98,7 @@ export function Sidebar() {
           className={location.pathname === '/profile' ? 'active' : undefined}
           onClick={(e) => {
             e.preventDefault()
-            navigate('/profile')
+            handleNavClick('/profile')
           }}
         >
           Profile

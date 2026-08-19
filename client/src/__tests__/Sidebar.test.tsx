@@ -232,4 +232,67 @@ describe('Sidebar', () => {
       expect(screen.getByRole('tab', { name: 'Flags' })).toHaveAttribute('aria-selected', 'true')
     )
   })
+
+  it('highlights the Plots link when on /files', async () => {
+    vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
+    localStorage.clear()
+    setToken('tok')
+    localStorage.setItem('svidat_role', 'qca')
+    localStorage.setItem('svidat_username', 'testuser')
+    render(
+      <AuthProvider>
+        <MemoryRouter initialEntries={['/files']}>
+          <PlotSelectionProvider>
+            <EditSessionProvider>
+              <Sidebar />
+            </EditSessionProvider>
+          </PlotSelectionProvider>
+        </MemoryRouter>
+      </AuthProvider>
+    )
+    await waitFor(() => expect(screen.getByText('Plots')).toHaveClass('active'))
+    expect(screen.getByText('Profile')).not.toHaveClass('active')
+  })
+
+  it('highlights the Profile link when on /profile', async () => {
+    vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
+    localStorage.clear()
+    setToken('tok')
+    localStorage.setItem('svidat_role', 'qca')
+    localStorage.setItem('svidat_username', 'testuser')
+    render(
+      <AuthProvider>
+        <MemoryRouter initialEntries={['/profile']}>
+          <PlotSelectionProvider>
+            <EditSessionProvider>
+              <Sidebar />
+            </EditSessionProvider>
+          </PlotSelectionProvider>
+        </MemoryRouter>
+      </AuthProvider>
+    )
+    await waitFor(() => expect(screen.getByText('Profile')).toHaveClass('active'))
+    expect(screen.getByText('Plots')).not.toHaveClass('active')
+  })
+
+  it('highlights the Admin link when on /admin/users', async () => {
+    vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
+    localStorage.clear()
+    setToken('tok')
+    localStorage.setItem('svidat_role', 'admin')
+    localStorage.setItem('svidat_username', 'testuser')
+    render(
+      <AuthProvider>
+        <MemoryRouter initialEntries={['/admin/users']}>
+          <PlotSelectionProvider>
+            <EditSessionProvider>
+              <Sidebar />
+            </EditSessionProvider>
+          </PlotSelectionProvider>
+        </MemoryRouter>
+      </AuthProvider>
+    )
+    await waitFor(() => expect(screen.getByText('Admin')).toHaveClass('active'))
+    expect(screen.getByText('Plots')).not.toHaveClass('active')
+  })
 })

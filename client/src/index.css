@@ -371,6 +371,11 @@ code {
   color: var(--text-h);
 }
 
+.sidebar-links a.active {
+  color: var(--text-h);
+  font-weight: 600;
+}
+
 .sidebar-audit-history-link,
 .sidebar-docs-link {
   background: none;

@@ -64,6 +64,7 @@ export function Sidebar() {
       <div className="sidebar-links">
         <a
           href="/files"
+          className={location.pathname === '/files' ? 'active' : undefined}
           onClick={(e) => {
             e.preventDefault()
             navigate('/files')
@@ -74,6 +75,7 @@ export function Sidebar() {
         {role === 'admin' && (
           <a
             href="/admin/users"
+            className={location.pathname === '/admin/users' ? 'active' : undefined}
             onClick={(e) => {
               e.preventDefault()
               navigate('/admin/users')
@@ -84,6 +86,7 @@ export function Sidebar() {
         )}
         <a
           href="/profile"
+          className={location.pathname === '/profile' ? 'active' : undefined}
           onClick={(e) => {
             e.preventDefault()
             navigate('/profile')

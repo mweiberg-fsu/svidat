@@ -7,7 +7,6 @@ import { EditSessionProvider, useEditSession } from '../context/EditSessionConte
 import { AuthProvider } from '../context/AuthContext'
 import { setToken } from '../api/client'
 import * as apiClient from '../api/client'
-import { FLAG_CODES } from '../constants/flagCodes'
 
 function Setup({ file, variables }: { file: string; variables: string[] }) {
   const sel = usePlotSelection()
@@ -1090,22 +1089,6 @@ describe('SvgPlot', () => {
     expect(Array.from(magentaPaths).map((p) => segmentCount(p.getAttribute('d')))).toEqual([1, 1])
   })
 
-  it('shows a legend entry for a non-dominant flag code present in the row', async () => {
-    const time = hourlyTimes(18)
-    const flags = time.map((_, i) => (i === 5 ? 'K' : 'Z'))
-    vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
-      time,
-      variables: { temperature: { values: time.map((_, i) => i), flags } },
-    })
-
-    const { container } = renderSvgPlot('FILE_A', ['temperature'])
-    await waitFor(() => expect(container.querySelector('svg')).toBeInTheDocument())
-
-    const kDescription = FLAG_CODES.find((f) => f.code === 'K')!.description
-    await waitFor(() =>
-      expect(screen.getByText(new RegExp(`K — ${kDescription}`))).toBeInTheDocument()
-    )
-  })
 
   it('a plain drag past the threshold opens the session when one is not already open', async () => {
     const time = hourlyTimes(18)
@@ -1172,7 +1155,7 @@ describe('SvgPlot', () => {
     expect(openSpy).toHaveBeenCalledTimes(1)
   })
 
-  it('shows a tooltip with date, time, and value when hovering a plot row', async () => {
+  it('shows a tooltip with time, value, and flag when hovering a plot row', async () => {
     const time = hourlyTimes(18)
     vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
       time,
@@ -1186,9 +1169,10 @@ describe('SvgPlot', () => {
     fireEvent.mouseMove(svg, { clientX: pxForIndex(5, 18), clientY: pyForValue(5, 0, 20) })
 
     const tip = screen.getByTestId('hover-tooltip')
-    expect(tip).toHaveTextContent('2025-01-01')
-    expect(tip).toHaveTextContent('05:00:00')
-    expect(tip).toHaveTextContent('5')
+    expect(tip).not.toHaveTextContent('2025-01-01')
+    expect(tip).toHaveTextContent('Time: 05:00:00')
+    expect(tip).toHaveTextContent('temperature: 5.00')
+    expect(tip).toHaveTextContent('Flags: Z — Good data')
   })
 
   it('hides the tooltip on mouse leave', async () => {
@@ -1207,6 +1191,57 @@ describe('SvgPlot', () => {
 
     fireEvent.mouseLeave(svg)
     expect(screen.queryByTestId('hover-tooltip')).not.toBeInTheDocument()
+  })
+
+  it('drags a tab to reorder the plotted variables', async () => {
+    const time = hourlyTimes(4)
+    vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
+      time,
+      variables: {
+        temperature: { values: time.map((_, i) => i), flags: time.map(() => 'Z') },
+        salinity: { values: time.map((_, i) => i * 2), flags: time.map(() => 'Z') },
+      },
+    })
+
+    // The reorder logic reads each row's live on-screen position via
+    // getBoundingClientRect, which jsdom always reports as an all-zero rect
+    // (see the comment near INNER_WIDTH above) — so stub it per row here,
+    // keyed off the `data-variable` attribute set on each row's wrapper div.
+    const rowTop: Record<string, number> = { temperature: 0, salinity: 200 }
+    const rectSpy = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockImplementation(function (this: HTMLElement) {
+        const top = rowTop[this.getAttribute('data-variable') ?? ''] ?? 0
+        return {
+          top,
+          bottom: top + 200,
+          height: 200,
+          left: 0,
+          right: 900,
+          width: 900,
+          x: 0,
+          y: top,
+          toJSON: () => {},
+        } as DOMRect
+      })
+
+    const { container } = renderSvgPlot('FILE_A', ['temperature', 'salinity'])
+    await waitFor(() => expect(container.querySelectorAll('svg').length).toBe(2))
+
+    const tabLabels = () =>
+      Array.from(container.querySelectorAll('[data-testid="plot-tab"]')).map(
+        (el) => el.querySelector('.svg-plot-tab-grip')?.nextSibling?.textContent
+      )
+    expect(tabLabels()).toEqual(['temperature', 'salinity'])
+
+    const tabs = () => container.querySelectorAll('[data-testid="plot-tab"]')
+    fireEvent.mouseDown(tabs()[1], { button: 0, clientY: 300 })
+    fireEvent.mouseMove(window, { clientY: 50 })
+    fireEvent.mouseUp(window)
+
+    await waitFor(() => expect(tabLabels()).toEqual(['salinity', 'temperature']))
+
+    rectSpy.mockRestore()
   })
 
   it('resets the hover tooltip when switching to a dataset with fewer samples', async () => {

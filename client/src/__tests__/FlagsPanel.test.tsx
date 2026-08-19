@@ -109,7 +109,7 @@ describe('FlagsPanel', () => {
     expect(screen.getByText('04:00:00–14:00:00 — 11 points selected')).toBeInTheDocument()
   })
 
-  it('applies a flag code, polls the job, and clears the selection on success', async () => {
+  it('applies a flag code, polls the job, and keeps the selection active on success', async () => {
     const applyFlagSpy = vi.spyOn(apiClient, 'applyFlag').mockResolvedValue({ job_id: 'job-1' })
     vi.spyOn(apiClient, 'jobStatus').mockResolvedValue({
       status: 'done',
@@ -123,8 +123,14 @@ describe('FlagsPanel', () => {
     await waitFor(() =>
       expect(applyFlagSpy).toHaveBeenCalledWith('FILE_A', 'temperature', 4, 14, 'K')
     )
+    // The selection/highlight stays active after a successful apply — only
+    // an explicit "Clear selection" click or a file/variable change resets
+    // it (see EditSessionContext) — so the range label keeps showing.
     await waitFor(
-      () => expect(screen.getByText('Select points on the plot to flag them')).toBeInTheDocument(),
+      () =>
+        expect(
+          screen.getByText('04:00:00–14:00:00 — 11 points selected')
+        ).toBeInTheDocument(),
       { timeout: 2000 }
     )
   })

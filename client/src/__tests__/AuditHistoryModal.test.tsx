@@ -2,6 +2,10 @@ import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { AuditHistoryModal } from '../components/AuditHistoryModal'
+import { PlotSelectionProvider } from '../context/PlotSelectionContext'
+import { EditSessionProvider } from '../context/EditSessionContext'
+import { AuthProvider } from '../context/AuthContext'
+import { setToken } from '../api/client'
 import * as apiClient from '../api/client'
 import type { AuditEntry } from '../api/types'
 
@@ -44,11 +48,23 @@ const entries: AuditEntry[] = [
   },
 ]
 
+// AuditHistoryModal calls notifyFlagged() on a successful revert, which
+// requires EditSessionContext (and its own PlotSelectionContext/AuthContext
+// dependencies) in the tree — same wrapper shape as FlagsPanel's tests.
 function renderModal(onClose = vi.fn()) {
+  setToken('tok')
+  localStorage.setItem('svidat_role', 'qca')
+  localStorage.setItem('svidat_username', 'testuser')
   const utils = render(
-    <MemoryRouter>
-      <AuditHistoryModal onClose={onClose} />
-    </MemoryRouter>
+    <AuthProvider>
+      <MemoryRouter>
+        <PlotSelectionProvider>
+          <EditSessionProvider>
+            <AuditHistoryModal onClose={onClose} />
+          </EditSessionProvider>
+        </PlotSelectionProvider>
+      </MemoryRouter>
+    </AuthProvider>
   )
   return { ...utils, onClose }
 }

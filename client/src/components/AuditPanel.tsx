@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getAuditHistory, revertAuditEntry } from '../api/client'
 import type { AuditEntry } from '../api/types'
+import { useEditSession } from '../context/EditSessionContext'
 
 export function AuditPanel({
   filename,
@@ -9,6 +10,7 @@ export function AuditPanel({
   filename: string
   refreshSignal: number
 }) {
+  const { notifyFlagged } = useEditSession()
   const [entries, setEntries] = useState<AuditEntry[]>([])
   const [status, setStatus] = useState<string | null>(null)
   const [revertingId, setRevertingId] = useState<number | null>(null)
@@ -29,6 +31,7 @@ export function AuditPanel({
     try {
       await revertAuditEntry(id)
       refresh()
+      notifyFlagged()
     } catch (err) {
       setStatus(`Error: ${err instanceof Error ? err.message : String(err)}`)
     } finally {

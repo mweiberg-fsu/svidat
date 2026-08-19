@@ -428,6 +428,43 @@ code {
   padding: 24px 0;
 }
 
+.svg-plot-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  cursor: grab;
+  font-size: 11px;
+  color: var(--text);
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  padding: 3px 10px;
+  user-select: none;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.svg-plot-tab:hover {
+  background: var(--social-bg);
+}
+
+.svg-plot-tab.active {
+  color: var(--text-h);
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+}
+
+.svg-plot-tab.dragging {
+  cursor: grabbing;
+  opacity: 0.6;
+}
+
+.svg-plot-tab-grip {
+  opacity: 0.6;
+  font-size: 10px;
+  line-height: 1;
+}
+
 .plot-view {
   display: flex;
   flex-direction: column;
@@ -484,8 +521,29 @@ code {
   cursor: not-allowed;
 }
 
-.sidebar-flags-panel-clear {
+.sidebar-flags-panel-actions {
+  display: flex;
+  gap: 8px;
   align-self: flex-start;
+}
+
+.sidebar-flags-panel-actions button {
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  background: var(--code-bg);
+  color: var(--text-h);
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.sidebar-flags-panel-actions button:hover:not(:disabled) {
+  background: var(--social-bg);
+}
+
+.sidebar-flags-panel-actions button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 /* Sidebar tabs */

@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from 'react'
 import { getFileMetadata, getVariableData } from '../api/client'
 import { usePlotSelection } from '../context/PlotSelectionContext'
 import type { FileMetadata, VariableDataResponse, VariableSeries } from '../api/types'
@@ -460,8 +466,9 @@ function timeTickIndices(
   return { ticks, stepMs }
 }
 
-// Tracked across mousedown/mousemove/mouseup for one Shift+drag (X-zoom)
-// gesture. `originLeft` is the dragged row's SVG left edge (in viewport
+// Tracked across mousedown/mousemove/mouseup for one Shift+drag or
+// middle-mouse-drag (X-zoom) gesture. `originLeft` is the dragged row's SVG
+// left edge (in viewport
 // coordinates), captured once at mousedown so mousemove/mouseup — attached to
 // `window` so the drag keeps tracking even if the cursor leaves that row —
 // can convert clientX back to the same coordinate space.
@@ -508,9 +515,16 @@ type ViewSnapshot =
   | { kind: 'y'; varName: string; value: [number, number] | null }
 
 export function SvgPlot() {
-  const { file, variables } = usePlotSelection()
-  const { canEdit, sessionOpen, openSession, flagSelection, setFlagSelection, flagAppliedAt } =
-    useEditSession()
+  const { file, variables, setVariables } = usePlotSelection()
+  const {
+    canEdit,
+    sessionOpen,
+    openSession,
+    flagSelection,
+    setFlagSelection,
+    flagAppliedAt,
+    flagsVisible,
+  } = useEditSession()
   const [data, setData] = useState<VariableDataResponse | null>(null)
   const [metadata, setMetadata] = useState<FileMetadata | null>(null)
   const [activeVariable, setActiveVariable] = useState<string | null>(null)
@@ -543,6 +557,84 @@ export function SvgPlot() {
     clientY: number
     idx: number
   } | null>(null)
+  // Pointer-based tab drag (mirrors the xDrag/yDrag pattern below rather
+  // than native HTML5 drag-and-drop, which needs `preventDefault` on both
+  // `dragenter` *and* `dragover` to reliably allow a drop across browsers,
+  // and gives no hook for a custom "following the cursor" animation).
+  const [tabDrag, setTabDrag] = useState<{ varName: string; startY: number; currentY: number } | null>(
+    null
+  )
+  const rowRefs = useRef<Record<string, HTMLDivElement | null>>({})
+  const prevRowTopsRef = useRef<Record<string, number>>({})
+
+  const handleTabMouseDown = (e: ReactMouseEvent, varName: string) => {
+    if (e.button !== 0) return
+    e.preventDefault()
+    e.stopPropagation()
+    setTabDrag({ varName, startY: e.clientY, currentY: e.clientY })
+  }
+
+  // Runs for the duration of one tab-drag gesture. On every mousemove it
+  // measures the other rows' current on-screen centers and re-derives the
+  // dragged variable's target index directly from the cursor position
+  // (rather than accumulating a pixel delta), so the reorder stays correct
+  // regardless of how row heights vary. `variables` is read fresh each time
+  // because `tabDrag` (this effect's only dep) changes on every tick, so the
+  // effect re-mounts with an up-to-date closure — same trick the X/Y-zoom
+  // effects below rely on.
+  useEffect(() => {
+    if (!tabDrag) return
+    const draggedVar = tabDrag.varName
+    const handleMouseMove = (e: MouseEvent) => {
+      setTabDrag((prev) => (prev ? { ...prev, currentY: e.clientY } : prev))
+
+      const others = variables.filter((v) => v !== draggedVar)
+      let targetIdx = 0
+      for (const v of others) {
+        const el = rowRefs.current[v]
+        if (!el) continue
+        const rect = el.getBoundingClientRect()
+        if (e.clientY > rect.top + rect.height / 2) targetIdx++
+      }
+      const next = [...others]
+      next.splice(targetIdx, 0, draggedVar)
+      if (next.join(' ') !== variables.join(' ')) setVariables(next)
+    }
+    const handleMouseUp = () => setTabDrag(null)
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabDrag])
+
+  // FLIP animation: whenever row order changes, slide every row (other than
+  // the one actively being dragged, which already tracks the cursor via its
+  // own transform) from its last-known position to its new one instead of
+  // letting it jump — "First, Last, Invert, Play" against `getBoundingClientRect`.
+  useLayoutEffect(() => {
+    const prevTops = prevRowTopsRef.current
+    const nextTops: Record<string, number> = {}
+    for (const v of variables) {
+      const el = rowRefs.current[v]
+      if (!el) continue
+      nextTops[v] = el.getBoundingClientRect().top
+      if (v === tabDrag?.varName) continue
+      const prevTop = prevTops[v]
+      if (prevTop === undefined) continue
+      const delta = prevTop - nextTops[v]
+      if (delta === 0) continue
+      el.style.transition = 'none'
+      el.style.transform = `translateY(${delta}px)`
+      requestAnimationFrame(() => {
+        el.style.transition = 'transform 150ms ease'
+        el.style.transform = ''
+      })
+    }
+    prevRowTopsRef.current = nextTops
+  }, [variables, tabDrag?.varName])
 
   // Fetches variable data on mount, whenever the selected file/variables
   // change, and after a flag is applied elsewhere (via EditSessionContext's
@@ -652,9 +744,10 @@ export function SvgPlot() {
     }
   }, [])
 
-  // Runs for the duration of one Shift+drag (X-zoom) gesture (mount on
-  // mousedown, unmount on mouseup) — `xRange`/`data` are read from the
-  // closure rather than refs since neither can legitimately change mid-drag.
+  // Runs for the duration of one Shift+drag or middle-mouse-drag (X-zoom)
+  // gesture (mount on mousedown, unmount on mouseup) — `xRange`/`data` are
+  // read from the closure rather than refs since neither can legitimately
+  // change mid-drag.
   useEffect(() => {
     if (!xDrag) return
     const handleMouseMove = (e: MouseEvent) => {
@@ -840,7 +933,7 @@ export function SvgPlot() {
     scaleMax: number
   ) => {
     setHoverTip(null)
-    if (e.shiftKey) {
+    if (e.shiftKey || e.button === 1) {
       e.preventDefault()
       const rect = e.currentTarget.getBoundingClientRect()
       const startPx = e.clientX - rect.left
@@ -937,6 +1030,7 @@ export function SvgPlot() {
 
   const hoverTipSeries = hoverTip ? data.variables[hoverTip.varName] : null
   const hoverTipValue = hoverTip && hoverTipSeries ? hoverTipSeries.values[hoverTip.idx] : null
+  const hoverTipFlag = hoverTip && hoverTipSeries ? (hoverTipSeries.flags?.[hoverTip.idx] ?? null) : null
 
   return (
     <div className="svg-plot" ref={containerRef}>
@@ -958,9 +1052,15 @@ export function SvgPlot() {
             whiteSpace: 'nowrap',
           }}
         >
-          <div>{data.time[hoverTip.idx].slice(0, 10)}</div>
-          <div>{data.time[hoverTip.idx].slice(11, 19)}</div>
-          <div>{hoverTipValue}</div>
+          <div>Time: {data.time[hoverTip.idx].slice(11, 19)}</div>
+          <div>
+            {hoverTip.varName}: {hoverTipValue != null ? hoverTipValue.toFixed(2) : hoverTipValue}
+          </div>
+          {hoverTipFlag && (
+            <div>
+              Flags: {hoverTipFlag} — {FLAG_CODES.find((f) => f.code === hoverTipFlag)?.description ?? hoverTipFlag}
+            </div>
+          )}
         </div>
       )}
       {variables.map((varName, rowIdx) => {
@@ -992,11 +1092,23 @@ export function SvgPlot() {
         const tickLabelColor = isActive ? ACTIVE_COLOR : TICK_LABEL_COLOR
         const lineColor = isActive ? ACTIVE_COLOR : LINE_COLOR
 
+        const isDraggedRow = tabDrag?.varName === varName
+
         return (
           <div
             key={varName}
+            ref={(el) => {
+              rowRefs.current[varName] = el
+            }}
+            data-variable={varName}
             className="svg-plot-row"
-            style={{ position: 'relative' }}
+            style={{
+              position: 'relative',
+              transform: isDraggedRow ? `translateY(${tabDrag!.currentY - tabDrag!.startY}px)` : undefined,
+              transition: isDraggedRow ? 'none' : 'transform 150ms ease',
+              zIndex: isDraggedRow ? 10 : undefined,
+              boxShadow: isDraggedRow ? '0 4px 12px rgba(0, 0, 0, 0.25)' : undefined,
+            }}
             onClick={(e) => {
               if (e.metaKey) {
                 undoOnce()
@@ -1013,6 +1125,18 @@ export function SvgPlot() {
             tabIndex={0}
             aria-pressed={isActive}
           >
+            <div
+              data-testid="plot-tab"
+              className={`svg-plot-tab${isActive ? ' active' : ''}${isDraggedRow ? ' dragging' : ''}`}
+              onMouseDown={(e) => handleTabMouseDown(e, varName)}
+              onClick={(e) => {
+                e.stopPropagation()
+                setActiveVariable(varName)
+              }}
+            >
+              <span className="svg-plot-tab-grip">⠿</span>
+              {varName}
+            </div>
             <svg
               width={plotWidth}
               height={rowHeight}
@@ -1045,22 +1169,6 @@ export function SvgPlot() {
                 {titlePrefix ? `${titlePrefix}: ${varName}` : varName}
               </text>
 
-              {flagMarkers.legendCodes.length > 0 && (
-                <text
-                  x={plotWidth - MARGIN.right}
-                  y={16}
-                  textAnchor="end"
-                  fontSize={11}
-                  fill={tickLabelColor}
-                >
-                  {flagMarkers.legendCodes
-                    .map(
-                      (code) =>
-                        `● ${code} — ${FLAG_CODES.find((f) => f.code === code)?.description ?? code}`
-                    )
-                    .join('   ')}
-                </text>
-              )}
 
               {/* y-axis gridlines + ticks */}
               {yTicks.map((t) => (
@@ -1193,25 +1301,27 @@ export function SvgPlot() {
                   strokeWidth={1}
                 />
 
-                {flagSegments.map((d, i) => (
-                  <path
-                    key={`flag-seg-${i}`}
-                    d={d}
-                    fill="none"
-                    stroke={FLAG_HIGHLIGHT_COLOR}
-                    strokeWidth={1}
-                  />
-                ))}
+                {flagsVisible &&
+                  flagSegments.map((d, i) => (
+                    <path
+                      key={`flag-seg-${i}`}
+                      d={d}
+                      fill="none"
+                      stroke={FLAG_HIGHLIGHT_COLOR}
+                      strokeWidth={1}
+                    />
+                  ))}
 
-                {flagMarkers.markers.map((m) => (
-                  <circle
-                    key={m.idx}
-                    cx={scale.x(m.idx)}
-                    cy={scale.y(series.values[m.idx] as number)}
-                    r={3}
-                    fill={m.color}
-                  />
-                ))}
+                {flagsVisible &&
+                  flagMarkers.markers.map((m) => (
+                    <circle
+                      key={m.idx}
+                      cx={scale.x(m.idx)}
+                      cy={scale.y(series.values[m.idx] as number)}
+                      r={3}
+                      fill={m.color}
+                    />
+                  ))}
 
                 {xDrag && (
                   <rect

@@ -9,7 +9,8 @@ const FLAG_POLL_TIMEOUT_MS = 30000
 
 export function FlagsPanel() {
   const { file } = usePlotSelection()
-  const { editable, flagSelection, setFlagSelection, notifyFlagged } = useEditSession()
+  const { editable, flagSelection, setFlagSelection, notifyFlagged, flagsVisible, toggleFlagsVisible } =
+    useEditSession()
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const isMountedRef = useRef(true)
@@ -45,7 +46,6 @@ export function FlagsPanel() {
         const jobResult = await jobStatus(result.job_id)
         if (!isMountedRef.current) return
         if (jobResult.status === 'done') {
-          setFlagSelection(null)
           notifyFlagged()
           return
         }
@@ -90,13 +90,16 @@ export function FlagsPanel() {
           </button>
         ))}
       </div>
-      <button
-        className="sidebar-flags-panel-clear"
-        onClick={() => setFlagSelection(null)}
-        disabled={disabled}
-      >
-        Clear selection
-      </button>
+      <div className="sidebar-flags-panel-actions">
+        <button
+          className="sidebar-flags-panel-clear"
+          onClick={() => setFlagSelection(null)}
+          disabled={disabled}
+        >
+          Clear selection
+        </button>
+        <button onClick={toggleFlagsVisible}>{flagsVisible ? 'Hide flags' : 'Show flags'}</button>
+      </div>
       {error && <p role="status">Error: {error}</p>}
     </div>
   )

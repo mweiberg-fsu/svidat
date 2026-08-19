@@ -1,8 +1,37 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import { AuditPanel } from '../components/AuditPanel'
+import { PlotSelectionProvider } from '../context/PlotSelectionContext'
+import { EditSessionProvider } from '../context/EditSessionContext'
+import { AuthProvider } from '../context/AuthContext'
+import { setToken } from '../api/client'
 import * as apiClient from '../api/client'
 import type { AuditEntry } from '../api/types'
+
+// AuditPanel calls notifyFlagged() on a successful revert, which requires
+// EditSessionContext (and its own PlotSelectionContext/AuthContext
+// dependencies) in the tree — same wrapper shape as FlagsPanel's tests.
+function wrapPanel(filename: string, refreshSignal: number) {
+  return (
+    <AuthProvider>
+      <MemoryRouter>
+        <PlotSelectionProvider>
+          <EditSessionProvider>
+            <AuditPanel filename={filename} refreshSignal={refreshSignal} />
+          </EditSessionProvider>
+        </PlotSelectionProvider>
+      </MemoryRouter>
+    </AuthProvider>
+  )
+}
+
+function renderPanel(filename: string, refreshSignal: number) {
+  setToken('tok')
+  localStorage.setItem('svidat_role', 'qca')
+  localStorage.setItem('svidat_username', 'testuser')
+  return render(wrapPanel(filename, refreshSignal))
+}
 
 const entries: AuditEntry[] = [
   {
@@ -27,7 +56,7 @@ describe('AuditPanel', () => {
     vi.spyOn(apiClient, 'getAuditHistory').mockResolvedValue(entries)
     const revertSpy = vi.spyOn(apiClient, 'revertAuditEntry').mockResolvedValue({ status: 'reverted' })
 
-    render(<AuditPanel filename="shipx_2026-08-30" refreshSignal={0} />)
+    renderPanel('shipx_2026-08-30', 0)
 
     await waitFor(() => expect(screen.getByText(/temperature/)).toBeInTheDocument())
 
@@ -38,7 +67,7 @@ describe('AuditPanel', () => {
   it('disables revert button for already-reverted entries', async () => {
     vi.spyOn(apiClient, 'getAuditHistory').mockResolvedValue([{ ...entries[0], reverted: true }])
 
-    render(<AuditPanel filename="shipx_2026-08-30" refreshSignal={0} />)
+    renderPanel('shipx_2026-08-30', 0)
 
     await waitFor(() => expect(screen.getByText('Reverted')).toBeInTheDocument())
   })
@@ -46,11 +75,11 @@ describe('AuditPanel', () => {
   it('refetches audit history when refreshSignal changes', async () => {
     const historySpy = vi.spyOn(apiClient, 'getAuditHistory').mockResolvedValue(entries)
 
-    const { rerender } = render(<AuditPanel filename="shipx_2026-08-30" refreshSignal={0} />)
+    const { rerender } = renderPanel('shipx_2026-08-30', 0)
 
     await waitFor(() => expect(historySpy).toHaveBeenCalledTimes(1))
 
-    rerender(<AuditPanel filename="shipx_2026-08-30" refreshSignal={1} />)
+    rerender(wrapPanel('shipx_2026-08-30', 1))
 
     await waitFor(() => expect(historySpy).toHaveBeenCalledTimes(2))
   })
@@ -69,7 +98,7 @@ describe('AuditPanel', () => {
     }
     vi.spyOn(apiClient, 'getAuditHistory').mockResolvedValue([flagEntry])
 
-    render(<AuditPanel filename="shipx_2026-08-27" refreshSignal={0} />)
+    renderPanel('shipx_2026-08-27', 0)
 
     await waitFor(() => expect(screen.getByText('Revert')).toBeInTheDocument())
   })

@@ -22,6 +22,8 @@ interface EditSessionState {
   setFlagSelection: (selection: FlagSelection | null) => void
   flagAppliedAt: number
   notifyFlagged: () => void
+  flagsVisible: boolean
+  toggleFlagsVisible: () => void
 }
 
 const EditSessionContext = createContext<EditSessionState | undefined>(undefined)
@@ -34,6 +36,7 @@ export function EditSessionProvider({ children }: { children: ReactNode }) {
   const [sessionError, setSessionError] = useState<string | null>(null)
   const [flagSelection, setFlagSelection] = useState<FlagSelection | null>(null)
   const [flagAppliedAt, setFlagAppliedAt] = useState(0)
+  const [flagsVisible, setFlagsVisible] = useState(true)
 
   const canEdit = role === 'admin' || role === 'qca'
   const editable = sessionOpen && canEdit
@@ -86,6 +89,7 @@ export function EditSessionProvider({ children }: { children: ReactNode }) {
   }
 
   const notifyFlagged = () => setFlagAppliedAt((v) => v + 1)
+  const toggleFlagsVisible = () => setFlagsVisible((v) => !v)
 
   return (
     <EditSessionContext.Provider
@@ -100,6 +104,8 @@ export function EditSessionProvider({ children }: { children: ReactNode }) {
         setFlagSelection,
         flagAppliedAt,
         notifyFlagged,
+        flagsVisible,
+        toggleFlagsVisible,
       }}
     >
       {children}

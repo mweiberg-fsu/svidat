@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 
 import { useNavigate } from 'react-router-dom'
 import { getMyAuditHistory, revertAuditEntry } from '../api/client'
 import type { AuditEntry } from '../api/types'
+import { useEditSession } from '../context/EditSessionContext'
 
 const DEFAULT_WIDTH = 600
 const DEFAULT_HEIGHT = 420
@@ -10,6 +11,7 @@ const MIN_HEIGHT = 240
 
 export function AuditHistoryModal({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate()
+  const { notifyFlagged } = useEditSession()
   const [entries, setEntries] = useState<AuditEntry[]>([])
   const [status, setStatus] = useState<string | null>(null)
   const [revertingId, setRevertingId] = useState<number | null>(null)
@@ -37,6 +39,7 @@ export function AuditHistoryModal({ onClose }: { onClose: () => void }) {
     try {
       await revertAuditEntry(id)
       refresh()
+      notifyFlagged()
     } catch (err) {
       setStatus(`Error: ${err instanceof Error ? err.message : String(err)}`)
     } finally {

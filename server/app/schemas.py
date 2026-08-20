@@ -53,3 +53,11 @@ class PublishRequest(BaseModel):
 
 class OAuthLoginRequest(BaseModel):
     id_token: str
+
+
+class OAuthSettingsOut(BaseModel):
+    allowed_domains: List[str]
+
+
+class OAuthSettingsUpdate(BaseModel):
+    allowed_domains: List[str]

@@ -5,7 +5,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from app.database import Base, engine, run_migrations
-from app.routers import audit, auth, edit, files, session, users, workflow
+from app.routers import admin, audit, auth, edit, files, session, users, workflow
 
 Base.metadata.create_all(bind=engine)
 run_migrations()
@@ -42,6 +42,7 @@ app.add_middleware(
 app.add_middleware(BodySizeLimitMiddleware)
 
 app.include_router(auth.router)
+app.include_router(admin.router)
 app.include_router(users.router)
 app.include_router(files.router)
 app.include_router(session.router)

@@ -3,7 +3,7 @@ def test_login_success(client, make_user):
     resp = client.post("/auth/login", data={"username": "frank", "password": "hunter22"})
     assert resp.status_code == 200
     body = resp.json()
-    assert body["role"] == "qca"
+    assert body["roles"] == ["qca"]
     assert body["token_type"] == "bearer"
     assert body["access_token"]
 
@@ -31,7 +31,7 @@ def test_oauth_google_creates_new_user(client, db_session):
         resp = client.post("/auth/oauth/google", json={"id_token": "fake"})
     assert resp.status_code == 200
     body = resp.json()
-    assert body["role"] == "user"
+    assert body["roles"] == []
     assert body["token_type"] == "bearer"
     assert body["access_token"]
 
@@ -46,7 +46,7 @@ def test_oauth_google_existing_user_keeps_their_role(client, make_user):
     with patch("app.routers.auth.verify_google_id_token", return_value="existing@example.com"):
         resp = client.post("/auth/oauth/google", json={"id_token": "fake"})
     assert resp.status_code == 200
-    assert resp.json()["role"] == "qca"
+    assert resp.json()["roles"] == ["qca"]
 
 
 def test_oauth_google_invalid_token_rejected(client):
@@ -93,7 +93,7 @@ def test_oauth_login_matches_existing_user_case_insensitively(client, make_user,
     with patch("app.routers.auth.verify_google_id_token", return_value="jane.doe@fsu.edu"):
         resp = client.post("/auth/oauth/google", json={"id_token": "fake"})
     assert resp.status_code == 200
-    assert resp.json()["role"] == "qca"
+    assert resp.json()["roles"] == ["qca"]
 
     matches = (
         db_session.query(User)

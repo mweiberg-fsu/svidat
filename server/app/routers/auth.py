@@ -6,7 +6,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
-from app.models import Role, User
+from app.models import User
 from app.oauth_providers import verify_google_id_token, verify_microsoft_id_token
 from app.oauth_settings import is_domain_allowed
 from app.schemas import OAuthLoginRequest
@@ -26,7 +26,11 @@ def login(
             detail="invalid username or password",
         )
     token = create_access_token(user.username)
-    return {"access_token": token, "token_type": "bearer", "role": user.role.value}
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "roles": [r.value for r in user.roles],
+    }
 
 
 def _oauth_login(db: Session, email: str, provider: str) -> dict:
@@ -40,14 +44,17 @@ def _oauth_login(db: Session, email: str, provider: str) -> dict:
         user = User(
             username=email.lower(),
             password_hash=hash_password(secrets.token_urlsafe(32)),
-            role=Role.user,
             auth_provider=provider,
         )
         db.add(user)
         db.commit()
         db.refresh(user)
     token = create_access_token(user.username)
-    return {"access_token": token, "token_type": "bearer", "role": user.role.value}
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "roles": [r.value for r in user.roles],
+    }
 
 
 @router.post("/oauth/google")

@@ -29,7 +29,7 @@ def get_current_user(
 
 def require_role(*roles: Role):
     def checker(user: User = Depends(get_current_user)) -> User:
-        if user.role not in roles:
+        if not any(r in user.roles for r in roles):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN, detail="insufficient role"
             )

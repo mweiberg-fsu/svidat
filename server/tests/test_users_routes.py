@@ -1,8 +1,5 @@
-from app.models import Role
-
-
 def test_admin_can_create_and_list_users(client, auth_header):
-    headers = auth_header("admin1", Role.admin)
+    headers = auth_header("admin1", is_admin=True)
 
     resp = client.post(
         "/users", json={"username": "newqca", "password": "pw12345", "role": "qca"}, headers=headers
@@ -17,7 +14,7 @@ def test_admin_can_create_and_list_users(client, auth_header):
 
 
 def test_non_admin_cannot_create_user(client, auth_header):
-    headers = auth_header("regular1", Role.user)
+    headers = auth_header("regular1")
     resp = client.post(
         "/users", json={"username": "x", "password": "pw12345", "role": "user"}, headers=headers
     )
@@ -25,14 +22,14 @@ def test_non_admin_cannot_create_user(client, auth_header):
 
 
 def test_duplicate_username_conflict(client, auth_header):
-    headers = auth_header("admin2", Role.admin)
+    headers = auth_header("admin2", is_admin=True)
     client.post("/users", json={"username": "dupe", "password": "pw12345", "role": "user"}, headers=headers)
     resp = client.post("/users", json={"username": "dupe", "password": "pw12345", "role": "user"}, headers=headers)
     assert resp.status_code == 409
 
 
 def test_admin_can_delete_user(client, auth_header):
-    headers = auth_header("admin3", Role.admin)
+    headers = auth_header("admin3", is_admin=True)
     create_resp = client.post(
         "/users", json={"username": "todelete", "password": "pw12345", "role": "user"}, headers=headers
     )
@@ -46,7 +43,7 @@ def test_admin_can_delete_user(client, auth_header):
 
 
 def test_get_me_returns_current_user(client, auth_header):
-    headers = auth_header("meuser1", Role.qca)
+    headers = auth_header("meuser1", is_qca=True)
     resp = client.get("/users/me", headers=headers)
     assert resp.status_code == 200
     body = resp.json()
@@ -56,7 +53,7 @@ def test_get_me_returns_current_user(client, auth_header):
 
 
 def test_avatar_upload_and_fetch_roundtrip(client, auth_header):
-    headers = auth_header("avatareditor1", Role.qca)
+    headers = auth_header("avatareditor1", is_qca=True)
     me = client.get("/users/me", headers=headers).json()
 
     png_bytes = b"\x89PNG\r\n\x1a\n" + b"0" * 100
@@ -73,7 +70,7 @@ def test_avatar_upload_and_fetch_roundtrip(client, auth_header):
 
 
 def test_avatar_upload_rejects_bad_content_type(client, auth_header):
-    headers = auth_header("avatareditor2", Role.qca)
+    headers = auth_header("avatareditor2", is_qca=True)
     resp = client.post(
         "/users/me/avatar",
         files={"file": ("evil.txt", b"not an image", "text/plain")},
@@ -83,7 +80,7 @@ def test_avatar_upload_rejects_bad_content_type(client, auth_header):
 
 
 def test_avatar_upload_rejects_oversized_file(client, auth_header):
-    headers = auth_header("avatareditor3", Role.qca)
+    headers = auth_header("avatareditor3", is_qca=True)
     big = b"0" * (2 * 1024 * 1024 + 1)
     resp = client.post(
         "/users/me/avatar",
@@ -94,14 +91,14 @@ def test_avatar_upload_rejects_oversized_file(client, auth_header):
 
 
 def test_avatar_fetch_404_before_upload(client, auth_header):
-    headers = auth_header("avatareditor4", Role.qca)
+    headers = auth_header("avatareditor4", is_qca=True)
     me = client.get("/users/me", headers=headers).json()
     resp = client.get(f"/users/{me['id']}/avatar", headers=headers)
     assert resp.status_code == 404
 
 
 def test_avatar_reupload_replaces_old_file(client, auth_header):
-    headers = auth_header("avatareditor5", Role.qca)
+    headers = auth_header("avatareditor5", is_qca=True)
     me = client.get("/users/me", headers=headers).json()
 
     client.post(

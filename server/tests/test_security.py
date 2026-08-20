@@ -21,10 +21,10 @@ def test_hash_and_verify_password():
 
 
 def test_create_and_decode_token():
-    token = create_access_token("alice", "qca")
+    token = create_access_token("alice")
     payload = decode_access_token(token)
     assert payload["sub"] == "alice"
-    assert payload["role"] == "qca"
+    assert "role" not in payload
 
 
 def test_decode_invalid_token_raises():

@@ -1,8 +1,5 @@
-from app.models import Role
-
-
 def test_login_success(client, make_user):
-    make_user("frank", Role.qca, password="hunter22")
+    make_user("frank", is_qca=True, password="hunter22")
     resp = client.post("/auth/login", data={"username": "frank", "password": "hunter22"})
     assert resp.status_code == 200
     body = resp.json()
@@ -12,7 +9,7 @@ def test_login_success(client, make_user):
 
 
 def test_login_wrong_password(client, make_user):
-    make_user("gail", Role.user, password="correcthorse")
+    make_user("gail", password="correcthorse")
     resp = client.post("/auth/login", data={"username": "gail", "password": "wrong"})
     assert resp.status_code == 401
 
@@ -26,7 +23,7 @@ from unittest.mock import patch
 
 from sqlalchemy import func
 
-from app.models import OAuthSettings, Role, User
+from app.models import OAuthSettings, User
 
 
 def test_oauth_google_creates_new_user(client, db_session):
@@ -41,11 +38,11 @@ def test_oauth_google_creates_new_user(client, db_session):
     user = db_session.query(User).filter(User.username == "new@example.com").first()
     assert user is not None
     assert user.auth_provider == "google"
-    assert user.role == Role.user
+    assert user.roles == []
 
 
 def test_oauth_google_existing_user_keeps_their_role(client, make_user):
-    make_user("existing@example.com", Role.qca)
+    make_user("existing@example.com", is_qca=True)
     with patch("app.routers.auth.verify_google_id_token", return_value="existing@example.com"):
         resp = client.post("/auth/oauth/google", json={"id_token": "fake"})
     assert resp.status_code == 200
@@ -83,7 +80,7 @@ def test_oauth_new_user_allowed_when_domain_matches(client, db_session):
 
 
 def test_oauth_domain_restriction_not_enforced_on_existing_user(client, make_user, db_session):
-    make_user("old@random.com", Role.user)
+    make_user("old@random.com")
     db_session.add(OAuthSettings(allowed_domains="fsu.edu"))
     db_session.commit()
     with patch("app.routers.auth.verify_google_id_token", return_value="old@random.com"):
@@ -92,7 +89,7 @@ def test_oauth_domain_restriction_not_enforced_on_existing_user(client, make_use
 
 
 def test_oauth_login_matches_existing_user_case_insensitively(client, make_user, db_session):
-    make_user("Jane.Doe@FSU.edu", Role.qca)
+    make_user("Jane.Doe@FSU.edu", is_qca=True)
     with patch("app.routers.auth.verify_google_id_token", return_value="jane.doe@fsu.edu"):
         resp = client.post("/auth/oauth/google", json={"id_token": "fake"})
     assert resp.status_code == 200

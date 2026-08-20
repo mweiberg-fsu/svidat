@@ -1,9 +1,6 @@
-from app.models import Role
-
-
 def test_history_lists_edits_in_order(client, auth_header, synthetic_nc):
     synthetic_nc("shipx_2026-08-21")
-    headers = auth_header("audituser1", Role.qca)
+    headers = auth_header("audituser1", is_qca=True)
     client.post("/session/shipx_2026-08-21/open", params={"source": "raw"}, headers=headers)
     client.post(
         "/edit/point",
@@ -27,7 +24,7 @@ def test_history_lists_edits_in_order(client, auth_header, synthetic_nc):
 
 def test_history_visible_to_non_admin_with_usernames(client, auth_header, synthetic_nc):
     synthetic_nc("shipx_2026-08-26")
-    editor_headers = auth_header("audituser7", Role.qca)
+    editor_headers = auth_header("audituser7", is_qca=True)
     client.post("/session/shipx_2026-08-26/open", params={"source": "raw"}, headers=editor_headers)
     client.post(
         "/edit/point",
@@ -35,7 +32,7 @@ def test_history_visible_to_non_admin_with_usernames(client, auth_header, synthe
         headers=editor_headers,
     )
 
-    viewer_headers = auth_header("audituser8", Role.user)
+    viewer_headers = auth_header("audituser8")
     resp = client.get("/audit/shipx_2026-08-26", headers=viewer_headers)
     assert resp.status_code == 200
     entries = resp.json()
@@ -46,8 +43,8 @@ def test_history_visible_to_non_admin_with_usernames(client, auth_header, synthe
 def test_my_history_returns_only_my_entries_newest_first(client, auth_header, synthetic_nc):
     synthetic_nc("shipx_2026-09-01")
     synthetic_nc("shipx_2026-09-02")
-    mine = auth_header("audituser9", Role.qca)
-    other = auth_header("audituser10", Role.qca)
+    mine = auth_header("audituser9", is_qca=True)
+    other = auth_header("audituser10", is_qca=True)
 
     client.post("/session/shipx_2026-09-01/open", params={"source": "raw"}, headers=mine)
     client.post(
@@ -82,7 +79,7 @@ def test_my_history_returns_only_my_entries_newest_first(client, auth_header, sy
 
 
 def test_my_history_empty_for_a_user_with_no_edits(client, auth_header):
-    headers = auth_header("audituser11", Role.user)
+    headers = auth_header("audituser11")
     resp = client.get("/audit", headers=headers)
     assert resp.status_code == 200
     assert resp.json() == []
@@ -91,7 +88,7 @@ def test_my_history_empty_for_a_user_with_no_edits(client, auth_header):
 def test_audit_and_audit_filename_routes_do_not_collide(client, auth_header, synthetic_nc):
     synthetic_nc("audit")  # a file literally named "audit" — the trickiest
     # possible collision case between GET /audit and GET /audit/{filename}.
-    headers = auth_header("audituser12", Role.qca)
+    headers = auth_header("audituser12", is_qca=True)
     client.post("/session/audit/open", params={"source": "raw"}, headers=headers)
     client.post(
         "/edit/point",
@@ -111,7 +108,7 @@ def test_audit_and_audit_filename_routes_do_not_collide(client, auth_header, syn
 
 def test_revert_point_edit_restores_value(client, auth_header, synthetic_nc):
     synthetic_nc("shipx_2026-08-22")
-    headers = auth_header("audituser2", Role.qca)
+    headers = auth_header("audituser2", is_qca=True)
     client.post("/session/shipx_2026-08-22/open", params={"source": "raw"}, headers=headers)
     edit_resp = client.post(
         "/edit/point",
@@ -133,7 +130,7 @@ def test_revert_point_edit_restores_value(client, auth_header, synthetic_nc):
 
 def test_revert_already_reverted_returns_409(client, auth_header, synthetic_nc):
     synthetic_nc("shipx_2026-08-23")
-    headers = auth_header("audituser3", Role.qca)
+    headers = auth_header("audituser3", is_qca=True)
     client.post("/session/shipx_2026-08-23/open", params={"source": "raw"}, headers=headers)
     edit_resp = client.post(
         "/edit/point",
@@ -151,7 +148,7 @@ def test_revert_bulk_edit_restores_values(client, auth_header, synthetic_nc):
     import time
 
     synthetic_nc("shipx_2026-08-24")
-    headers = auth_header("audituser4", Role.qca)
+    headers = auth_header("audituser4", is_qca=True)
     client.post("/session/shipx_2026-08-24/open", params={"source": "raw"}, headers=headers)
     bulk_resp = client.post(
         "/edit/bulk",
@@ -190,7 +187,7 @@ def test_revert_bulk_edit_restores_values(client, auth_header, synthetic_nc):
 
 def test_revert_without_open_session_returns_404(client, auth_header, synthetic_nc):
     synthetic_nc("shipx_2026-08-25")
-    headers = auth_header("audituser5", Role.qca)
+    headers = auth_header("audituser5", is_qca=True)
     client.post("/session/shipx_2026-08-25/open", params={"source": "raw"}, headers=headers)
     edit_resp = client.post(
         "/edit/point",
@@ -205,7 +202,7 @@ def test_revert_without_open_session_returns_404(client, auth_header, synthetic_
 
 
 def test_revert_missing_entry_returns_409(client, auth_header):
-    headers = auth_header("audituser6", Role.qca)
+    headers = auth_header("audituser6", is_qca=True)
     resp = client.post("/audit/999999/revert", headers=headers)
     assert resp.status_code == 409
 
@@ -214,7 +211,7 @@ def test_revert_flag_edit_restores_values(client, auth_header, synthetic_nc_with
     import time
 
     synthetic_nc_with_qc("shipx_2026-08-31b")
-    headers = auth_header("audituser13", Role.qca)
+    headers = auth_header("audituser13", is_qca=True)
     client.post("/session/shipx_2026-08-31b/open", params={"source": "raw"}, headers=headers)
     flag_resp = client.post(
         "/edit/flag",
@@ -262,7 +259,7 @@ def test_revert_flag_edit_already_reverted_returns_409(client, auth_header, synt
     import time
 
     synthetic_nc_with_qc("shipx_2026-09-03")
-    headers = auth_header("audituser14", Role.qca)
+    headers = auth_header("audituser14", is_qca=True)
     client.post("/session/shipx_2026-09-03/open", params={"source": "raw"}, headers=headers)
     flag_resp = client.post(
         "/edit/flag",

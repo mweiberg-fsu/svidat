@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 
 from app.database import Base, SessionLocal, engine
 from app.main import app
-from app.models import OAuthSettings, Role, User
+from app.models import OAuthSettings, User
 from app.security import hash_password
 
 Base.metadata.create_all(bind=engine)
@@ -49,8 +49,13 @@ def client():
 
 @pytest.fixture
 def make_user(db_session):
-    def _make(username: str, role: Role, password: str = "pass1234"):
-        user = User(username=username, password_hash=hash_password(password), role=role)
+    def _make(username: str, password: str = "pass1234", is_admin: bool = False, is_qca: bool = False):
+        user = User(
+            username=username,
+            password_hash=hash_password(password),
+            is_admin=is_admin,
+            is_qca=is_qca,
+        )
         db_session.add(user)
         db_session.commit()
         db_session.refresh(user)
@@ -61,8 +66,8 @@ def make_user(db_session):
 
 @pytest.fixture
 def auth_header(client, make_user):
-    def _login(username: str, role: Role, password: str = "pass1234"):
-        make_user(username, role, password)
+    def _login(username: str, password: str = "pass1234", is_admin: bool = False, is_qca: bool = False):
+        make_user(username, password, is_admin, is_qca)
         resp = client.post("/auth/login", data={"username": username, "password": password})
         assert resp.status_code == 200, resp.text
         token = resp.json()["access_token"]

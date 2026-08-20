@@ -25,7 +25,7 @@ def login(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="invalid username or password",
         )
-    token = create_access_token(user.username, user.role.value)
+    token = create_access_token(user.username)
     return {"access_token": token, "token_type": "bearer", "role": user.role.value}
 
 
@@ -46,7 +46,7 @@ def _oauth_login(db: Session, email: str, provider: str) -> dict:
         db.add(user)
         db.commit()
         db.refresh(user)
-    token = create_access_token(user.username, user.role.value)
+    token = create_access_token(user.username)
     return {"access_token": token, "token_type": "bearer", "role": user.role.value}
 
 

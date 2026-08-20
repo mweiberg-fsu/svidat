@@ -1,11 +1,11 @@
 import time
 
-from app.models import AuditLog, Role
+from app.models import AuditLog
 
 
 def test_point_edit_writes_value_and_logs_audit(client, auth_header, synthetic_nc):
     synthetic_nc("shipx_2026-08-13")
-    headers = auth_header("pointeditor1", Role.qca)
+    headers = auth_header("pointeditor1", is_qca=True)
     client.post("/session/shipx_2026-08-13/open", params={"source": "raw"}, headers=headers)
 
     resp = client.post(
@@ -22,7 +22,7 @@ def test_point_edit_writes_value_and_logs_audit(client, auth_header, synthetic_n
 
 def test_point_edit_requires_open_session(client, auth_header, synthetic_nc):
     synthetic_nc("shipx_2026-08-11")
-    headers = auth_header("pointeditor2", Role.qca)
+    headers = auth_header("pointeditor2", is_qca=True)
     resp = client.post(
         "/edit/point",
         json={"filename": "shipx_2026-08-11", "var_name": "temperature", "indices": [0], "value": 1.0},
@@ -33,7 +33,7 @@ def test_point_edit_requires_open_session(client, auth_header, synthetic_nc):
 
 def test_regular_user_cannot_point_edit(client, auth_header, synthetic_nc):
     synthetic_nc("shipx_2026-08-12")
-    headers = auth_header("viewer5", Role.user)
+    headers = auth_header("viewer5")
     resp = client.post(
         "/edit/point",
         json={"filename": "shipx_2026-08-12", "var_name": "temperature", "indices": [0], "value": 1.0},
@@ -44,7 +44,7 @@ def test_regular_user_cannot_point_edit(client, auth_header, synthetic_nc):
 
 def test_point_edit_invalid_var_name_returns_400(client, auth_header, synthetic_nc):
     synthetic_nc("shipx_2026-08-12b")
-    headers = auth_header("pointeditor3", Role.qca)
+    headers = auth_header("pointeditor3", is_qca=True)
     client.post("/session/shipx_2026-08-12b/open", params={"source": "raw"}, headers=headers)
     resp = client.post(
         "/edit/point",
@@ -57,7 +57,7 @@ def test_point_edit_invalid_var_name_returns_400(client, auth_header, synthetic_
 
 def test_point_edit_out_of_range_index_returns_400(client, auth_header, synthetic_nc):
     synthetic_nc("shipx_2026-08-12c")
-    headers = auth_header("pointeditor4", Role.qca)
+    headers = auth_header("pointeditor4", is_qca=True)
     client.post("/session/shipx_2026-08-12c/open", params={"source": "raw"}, headers=headers)
     resp = client.post(
         "/edit/point",
@@ -79,7 +79,7 @@ def _wait_for_job(client, headers, job_id, timeout=2.0):
 
 def test_bulk_edit_applies_op_and_logs_audit(client, auth_header, synthetic_nc):
     synthetic_nc("shipx_2026-08-14b")
-    headers = auth_header("bulkeditor1", Role.qca)
+    headers = auth_header("bulkeditor1", is_qca=True)
     client.post("/session/shipx_2026-08-14b/open", params={"source": "raw"}, headers=headers)
 
     resp = client.post(
@@ -111,7 +111,7 @@ def test_bulk_edit_applies_op_and_logs_audit(client, auth_header, synthetic_nc):
 def test_bulk_edit_invalid_op_fails_job_with_no_audit_row(client, auth_header, synthetic_nc, db_session):
     filename = "shipx_2026-08-14d"
     synthetic_nc(filename)
-    headers = auth_header("bulkeditor3", Role.qca)
+    headers = auth_header("bulkeditor3", is_qca=True)
     client.post(f"/session/{filename}/open", params={"source": "raw"}, headers=headers)
 
     resp = client.post(
@@ -139,7 +139,7 @@ def test_bulk_edit_invalid_op_fails_job_with_no_audit_row(client, auth_header, s
 
 def test_bulk_edit_requires_open_session(client, auth_header, synthetic_nc):
     synthetic_nc("shipx_2026-08-14c")
-    headers = auth_header("bulkeditor2", Role.qca)
+    headers = auth_header("bulkeditor2", is_qca=True)
     resp = client.post(
         "/edit/bulk",
         json={
@@ -156,7 +156,7 @@ def test_bulk_edit_requires_open_session(client, auth_header, synthetic_nc):
 
 def test_flag_edit_writes_flag_and_logs_audit(client, auth_header, synthetic_nc_with_qc):
     synthetic_nc_with_qc("shipx_2026-08-27")
-    headers = auth_header("flageditor1", Role.qca)
+    headers = auth_header("flageditor1", is_qca=True)
     client.post("/session/shipx_2026-08-27/open", params={"source": "raw"}, headers=headers)
 
     resp = client.post(
@@ -190,7 +190,7 @@ def test_flag_edit_writes_flag_and_logs_audit(client, auth_header, synthetic_nc_
 
 def test_flag_edit_requires_open_session(client, auth_header, synthetic_nc_with_qc):
     synthetic_nc_with_qc("shipx_2026-08-28")
-    headers = auth_header("flageditor2", Role.qca)
+    headers = auth_header("flageditor2", is_qca=True)
     resp = client.post(
         "/edit/flag",
         json={
@@ -207,7 +207,7 @@ def test_flag_edit_requires_open_session(client, auth_header, synthetic_nc_with_
 
 def test_regular_user_cannot_flag_edit(client, auth_header, synthetic_nc_with_qc):
     synthetic_nc_with_qc("shipx_2026-08-29")
-    headers = auth_header("viewer6", Role.user)
+    headers = auth_header("viewer6")
     resp = client.post(
         "/edit/flag",
         json={
@@ -224,7 +224,7 @@ def test_regular_user_cannot_flag_edit(client, auth_header, synthetic_nc_with_qc
 
 def test_flag_edit_invalid_code_fails_job(client, auth_header, synthetic_nc_with_qc):
     synthetic_nc_with_qc("shipx_2026-08-30")
-    headers = auth_header("flageditor3", Role.qca)
+    headers = auth_header("flageditor3", is_qca=True)
     client.post("/session/shipx_2026-08-30/open", params={"source": "raw"}, headers=headers)
     resp = client.post(
         "/edit/flag",

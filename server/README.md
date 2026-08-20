@@ -39,6 +39,30 @@ There is no seeded admin user yet — create the first one directly:
 validation, auth, roles, session locking, point/bulk edit, background jobs,
 save/publish, and audit history/revert.
 
+## Google / Microsoft OAuth login
+
+Set two env vars (via `.env` or the shell) to enable the OAuth sign-in
+endpoints:
+
+    GOOGLE_CLIENT_ID=<google oauth client id>
+    MICROSOFT_CLIENT_ID=<microsoft entra app (client) id>
+
+Both are public client IDs, not secrets — verification happens against each
+provider's own public keys (`app/oauth_providers.py`), so no client secret
+is needed server-side.
+
+- `POST /auth/oauth/google` / `POST /auth/oauth/microsoft` — body
+  `{"id_token": "..."}`, same response shape as `/auth/login`. A first-time
+  sign-in for a given email auto-creates a `role=user` account (`auth_provider`
+  set to `google`/`microsoft`, unusable random password) unless the email's
+  domain is excluded by the allowlist below; an existing account (matched
+  case-insensitively by username/email) always logs in regardless of the
+  current allowlist state.
+- `GET`/`PUT /admin/oauth-settings` — admin-only; manages the email-domain
+  allowlist (`{"allowed_domains": ["fsu.edu", ...]}`) that gates new-account
+  auto-creation. An empty list means any Google/Microsoft account may sign
+  in and auto-create an account.
+
 ## Architecture notes
 
 - Roles: `admin` (full access, manages users), `qca` (edit/save/publish),

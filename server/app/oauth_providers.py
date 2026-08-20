@@ -2,7 +2,6 @@ import httpx
 from google.auth.transport import requests as google_requests
 from google.oauth2 import id_token as google_id_token
 from jose import jwt as jose_jwt
-from jose.exceptions import JOSEError
 
 from app.config import settings
 
@@ -11,9 +10,12 @@ MICROSOFT_ISSUER_PREFIX = "https://login.microsoftonline.com/"
 
 
 def verify_google_id_token(token: str) -> str:
-    payload = google_id_token.verify_oauth2_token(
-        token, google_requests.Request(), settings.google_client_id
-    )
+    try:
+        payload = google_id_token.verify_oauth2_token(
+            token, google_requests.Request(), settings.google_client_id
+        )
+    except Exception as exc:
+        raise ValueError(f"invalid google id token: {exc}") from exc
     email = payload.get("email")
     if not email:
         raise ValueError("google id token missing email claim")
@@ -40,8 +42,8 @@ def verify_microsoft_id_token(token: str) -> str:
             audience=settings.microsoft_client_id,
             options={"verify_iss": False},
         )
-    except JOSEError as exc:
-        raise ValueError("invalid microsoft id token") from exc
+    except Exception as exc:
+        raise ValueError(f"invalid microsoft id token: {exc}") from exc
 
     issuer = payload.get("iss", "")
     if not issuer.startswith(MICROSOFT_ISSUER_PREFIX):

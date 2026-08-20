@@ -1,4 +1,6 @@
+import httpx
 import pytest
+from google.auth.exceptions import TransportError
 
 from app.oauth_providers import verify_google_id_token, verify_microsoft_id_token
 
@@ -28,6 +30,15 @@ def test_verify_google_id_token_raises_when_no_email(monkeypatch):
     )
     with pytest.raises(ValueError):
         verify_google_id_token("token-without-email")
+
+
+def test_verify_google_id_token_raises_on_transport_error(monkeypatch):
+    def fake_verify(token, request, client_id):
+        raise TransportError("could not reach Google certs endpoint")
+
+    monkeypatch.setattr("app.oauth_providers.google_id_token.verify_oauth2_token", fake_verify)
+    with pytest.raises(ValueError):
+        verify_google_id_token("any-token")
 
 
 def test_verify_microsoft_id_token_returns_email(monkeypatch):
@@ -76,3 +87,15 @@ def test_verify_microsoft_id_token_raises_on_bad_issuer(monkeypatch):
     )
     with pytest.raises(ValueError):
         verify_microsoft_id_token("bad-issuer-token")
+
+
+def test_verify_microsoft_id_token_raises_on_jwks_fetch_error(monkeypatch):
+    def fake_get_jwks():
+        raise httpx.ConnectError("could not reach Microsoft JWKS endpoint")
+
+    monkeypatch.setattr("app.oauth_providers._get_microsoft_jwks", fake_get_jwks)
+    monkeypatch.setattr(
+        "app.oauth_providers.jose_jwt.get_unverified_header", lambda token: {"kid": "key-1"}
+    )
+    with pytest.raises(ValueError):
+        verify_microsoft_id_token("any-token")

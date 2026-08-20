@@ -1,5 +1,11 @@
 import { useEffect, useState } from 'react'
-import { createUser, deleteUser, listUsers } from '../api/client'
+import {
+  createUser,
+  deleteUser,
+  getOAuthSettings,
+  listUsers,
+  updateOAuthSettings,
+} from '../api/client'
 
 interface UserRow {
   id: number
@@ -15,6 +21,10 @@ export function AdminUsersPage() {
   const [status, setStatus] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
 
+  const [allowedDomains, setAllowedDomains] = useState<string[]>([])
+  const [domainInput, setDomainInput] = useState('')
+  const [oauthStatus, setOauthStatus] = useState<string | null>(null)
+
   const refresh = () => {
     listUsers()
       .then(setUsers)
@@ -24,6 +34,14 @@ export function AdminUsersPage() {
   }
 
   useEffect(refresh, [])
+
+  useEffect(() => {
+    getOAuthSettings()
+      .then((s) => setAllowedDomains(s.allowed_domains))
+      .catch((err) => {
+        setOauthStatus(`Error: ${err instanceof Error ? err.message : String(err)}`)
+      })
+  }, [])
 
   const handleCreate = async () => {
     setSubmitting(true)
@@ -51,6 +69,27 @@ export function AdminUsersPage() {
     } finally {
       setSubmitting(false)
     }
+  }
+
+  const saveDomains = async (next: string[]) => {
+    try {
+      const saved = await updateOAuthSettings(next)
+      setAllowedDomains(saved.allowed_domains)
+      setOauthStatus('Domain list updated')
+    } catch (err) {
+      setOauthStatus(`Error: ${err instanceof Error ? err.message : String(err)}`)
+    }
+  }
+
+  const handleAddDomain = () => {
+    const domain = domainInput.trim().toLowerCase()
+    if (!domain) return
+    setDomainInput('')
+    saveDomains([...new Set([...allowedDomains, domain])])
+  }
+
+  const handleRemoveDomain = (domain: string) => {
+    saveDomains(allowedDomains.filter((d) => d !== domain))
   }
 
   return (
@@ -93,6 +132,28 @@ export function AdminUsersPage() {
       </button>
 
       {status && <p role="status">{status}</p>}
+
+      <h2>OAuth allowed email domains</h2>
+      <p>Empty list = any Google/Microsoft account may sign in and auto-create an account.</p>
+      <ul>
+        {allowedDomains.map((d) => (
+          <li key={d}>
+            {d}
+            <button onClick={() => handleRemoveDomain(d)}>Remove</button>
+          </li>
+        ))}
+      </ul>
+      <label>
+        New domain
+        <input
+          value={domainInput}
+          onChange={(e) => setDomainInput(e.target.value)}
+          placeholder="fsu.edu"
+        />
+      </label>
+      <button onClick={handleAddDomain}>Add domain</button>
+
+      {oauthStatus && <p role="status">{oauthStatus}</p>}
     </div>
   )
 }

@@ -49,3 +49,7 @@ class SaveRequest(BaseModel):
 
 class PublishRequest(BaseModel):
     filename: str
+
+
+class OAuthLoginRequest(BaseModel):
+    id_token: str

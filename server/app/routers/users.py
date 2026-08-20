@@ -131,6 +131,10 @@ def update_user_roles(
     db: Session = Depends(get_db),
     _: User = Depends(require_role(Role.admin)),
 ):
+    # No self-lockout guard, intentionally — losing the last admin just means
+    # repeating the DB-script bootstrap in server/README.md. delete_user
+    # below has the same unguarded gap (and is strictly worse: outright
+    # removal vs. just losing the role).
     user = db.query(User).filter(User.id == user_id).first()
     if user is None:
         raise HTTPException(

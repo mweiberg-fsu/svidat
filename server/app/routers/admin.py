@@ -25,7 +25,13 @@ def update_oauth_settings(
     _: User = Depends(require_role(Role.admin)),
 ):
     row = get_or_create_settings(db)
-    row.allowed_domains = ",".join(d.strip().lower() for d in payload.allowed_domains if d.strip())
+    flattened = [
+        part.strip().lower()
+        for entry in payload.allowed_domains
+        for part in entry.split(",")
+        if part.strip()
+    ]
+    row.allowed_domains = ",".join(flattened)
     db.commit()
     db.refresh(row)
     return {"allowed_domains": domains_list(row)}

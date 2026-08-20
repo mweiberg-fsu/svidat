@@ -37,3 +37,14 @@ def test_update_oauth_settings_requires_admin(client, auth_header):
     headers = auth_header("oauthqca2", Role.qca)
     resp = client.put("/admin/oauth-settings", headers=headers, json={"allowed_domains": []})
     assert resp.status_code == 403
+
+
+def test_update_oauth_settings_normalizes_input(client, auth_header):
+    headers = auth_header("oauthadmin3", Role.admin)
+    resp = client.put(
+        "/admin/oauth-settings",
+        headers=headers,
+        json={"allowed_domains": ["  FSU.edu  ", "", "NOAA.gov, extra.org"]},
+    )
+    assert resp.status_code == 200
+    assert resp.json() == {"allowed_domains": ["fsu.edu", "noaa.gov", "extra.org"]}

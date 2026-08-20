@@ -95,9 +95,9 @@ def test_user_avatar_path_column_defaults_to_none():
 
 def test_audit_log_new_value_str(db_session, make_user):
     from datetime import datetime
-    from app.models import AuditLog, Role
+    from app.models import AuditLog
 
-    user = make_user("flagger1", Role.qca)
+    user = make_user("flagger1", is_qca=True)
     log = AuditLog(
         filename="shipx_2026-07-30",
         user_id=user.id,

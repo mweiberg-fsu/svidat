@@ -63,6 +63,8 @@ export async function login(username: string, password: string) {
   return response.json()
 }
 
+// Raw fetch, deliberately not apiFetch: used only for pre-login OAuth calls,
+// where there's no token yet and a 401 must not trigger apiFetch's redirect-to-login.
 async function postJson(path: string, body: unknown) {
   const response = await fetch(`${BASE_URL}${path}`, {
     method: 'POST',

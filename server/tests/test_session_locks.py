@@ -87,3 +87,10 @@ def test_failed_draft_open_does_not_strand_lock(client, auth_header, synthetic_n
         headers=headers_b,
     )
     assert resp.status_code == 200
+
+
+def test_admin_alone_cannot_open_session(client, auth_header, synthetic_nc):
+    filename = synthetic_nc("shipx_2026-08-10")
+    headers = auth_header("adminonly_session1", is_admin=True)
+    resp = client.post(f"/session/{filename}/open", headers=headers)
+    assert resp.status_code == 403

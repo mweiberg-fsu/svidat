@@ -19,7 +19,7 @@ router = APIRouter(prefix="/edit", tags=["edit"])
 def point_edit(
     payload: PointEditRequest,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role(Role.admin, Role.qca)),
+    user: User = Depends(require_role(Role.qca)),
 ):
     try:
         path = storage.temp_path(user.username, payload.filename)
@@ -59,7 +59,7 @@ def point_edit(
 def bulk_edit(
     payload: BulkEditRequest,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role(Role.admin, Role.qca)),
+    user: User = Depends(require_role(Role.qca)),
 ):
     try:
         path = storage.temp_path(user.username, payload.filename)
@@ -105,7 +105,7 @@ def bulk_edit(
 
 
 @router.get("/jobs/{job_id}")
-def job_status(job_id: str, _: User = Depends(require_role(Role.admin, Role.qca))):
+def job_status(job_id: str, _: User = Depends(require_role(Role.qca))):
     job = jobs.get_job(job_id)
     if job is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="job not found")
@@ -116,7 +116,7 @@ def job_status(job_id: str, _: User = Depends(require_role(Role.admin, Role.qca)
 def flag_edit(
     payload: FlagEditRequest,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role(Role.admin, Role.qca)),
+    user: User = Depends(require_role(Role.qca)),
 ):
     try:
         path = storage.temp_path(user.username, payload.filename)

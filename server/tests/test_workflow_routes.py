@@ -90,3 +90,9 @@ def test_publish_with_stale_temp_but_no_active_lock_is_rejected(client, auth_hea
 
     resp = client.post("/publish", json={"filename": "shipx_2026-08-21b"}, headers=headers_b)
     assert resp.status_code == 200
+
+
+def test_admin_alone_cannot_save(client, auth_header):
+    headers = auth_header("adminonly_workflow1", is_admin=True)
+    resp = client.post("/save", headers=headers, json={"filename": "shipx_2026-08-10"})
+    assert resp.status_code == 403

@@ -19,7 +19,7 @@ def open_session(
     source_username: Optional[str] = None,
     force: bool = False,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role(Role.admin, Role.qca)),
+    user: User = Depends(require_role(Role.qca)),
 ):
     try:
         dst = storage.temp_path(user.username, filename)
@@ -72,7 +72,7 @@ def open_session(
 def close_session(
     filename: str,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role(Role.admin, Role.qca)),
+    user: User = Depends(require_role(Role.qca)),
 ):
     lock = (
         db.query(Lock)

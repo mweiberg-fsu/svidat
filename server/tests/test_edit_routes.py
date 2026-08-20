@@ -242,3 +242,13 @@ def test_flag_edit_invalid_code_fails_job(client, auth_header, synthetic_nc_with
     result = _wait_for_job(client, headers, job_id)
     assert result["status"] == "failed"
     assert "Q" in result["error"]
+
+
+def test_admin_alone_cannot_point_edit(client, auth_header):
+    headers = auth_header("adminonly_edit1", is_admin=True)
+    resp = client.post(
+        "/edit/point",
+        headers=headers,
+        json={"filename": "shipx_2026-08-10", "var_name": "temperature", "indices": [0], "value": 1.0},
+    )
+    assert resp.status_code == 403

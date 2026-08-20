@@ -288,3 +288,9 @@ def test_revert_flag_edit_already_reverted_returns_409(client, auth_header, synt
     client.post(f"/audit/{audit_id}/revert", headers=headers)
     resp = client.post(f"/audit/{audit_id}/revert", headers=headers)
     assert resp.status_code == 409
+
+
+def test_admin_alone_cannot_revert(client, auth_header):
+    headers = auth_header("adminonly_audit1", is_admin=True)
+    resp = client.post("/audit/1/revert", headers=headers)
+    assert resp.status_code == 403

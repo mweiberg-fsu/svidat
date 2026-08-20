@@ -55,3 +55,7 @@ export interface VariableDataResponse {
   time: string[]
   variables: Record<string, VariableSeries>
 }
+
+export interface OAuthSettings {
+  allowed_domains: string[]
+}

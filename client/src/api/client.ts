@@ -1,4 +1,4 @@
-import type { CurrentUser, Catalog, VariableDataResponse } from './types'
+import type { CurrentUser, Catalog, OAuthSettings, VariableDataResponse } from './types'
 
 const BASE_URL = 'http://localhost:8000'
 const TOKEN_KEY = 'svidat_token'
@@ -63,6 +63,24 @@ export async function login(username: string, password: string) {
   return response.json()
 }
 
+async function postJson(path: string, body: unknown) {
+  const response = await fetch(`${BASE_URL}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!response.ok) {
+    throw new Error(`${response.status}: ${await response.text()}`)
+  }
+  return response.json()
+}
+
+export const loginWithGoogle = (idToken: string) =>
+  postJson('/auth/oauth/google', { id_token: idToken })
+
+export const loginWithMicrosoft = (idToken: string) =>
+  postJson('/auth/oauth/microsoft', { id_token: idToken })
+
 export const listRawFiles = () => apiFetch('/files/raw').then((r) => r.json())
 export const listDrafts = (username?: string) => {
   const params = username ? `?${new URLSearchParams({ username }).toString()}` : ''
@@ -120,6 +138,15 @@ export const createUser = (username: string, password: string, role: string) =>
   )
 export const deleteUser = (userId: number) =>
   apiFetch(`/users/${encodeURIComponent(String(userId))}`, { method: 'DELETE' })
+
+export const getOAuthSettings = (): Promise<OAuthSettings> =>
+  apiFetch('/admin/oauth-settings').then((r) => r.json())
+
+export const updateOAuthSettings = (allowedDomains: string[]): Promise<OAuthSettings> =>
+  apiFetch('/admin/oauth-settings', {
+    method: 'PUT',
+    body: JSON.stringify({ allowed_domains: allowedDomains }),
+  }).then((r) => r.json())
 
 export const getCurrentUser = (): Promise<CurrentUser> =>
   apiFetch('/users/me').then((r) => r.json())

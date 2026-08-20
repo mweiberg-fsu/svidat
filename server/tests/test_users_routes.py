@@ -48,7 +48,7 @@ def test_get_me_returns_current_user(client, auth_header):
     assert resp.status_code == 200
     body = resp.json()
     assert body["username"] == "meuser1"
-    assert body["role"] == "qca"
+    assert body["roles"] == ["qca"]
     assert body["id"] > 0
 
 
@@ -121,3 +121,41 @@ def test_avatar_reupload_replaces_old_file(client, auth_header):
 
     fetch_resp = client.get(f"/users/{me['id']}/avatar", headers=headers)
     assert fetch_resp.content == b"second" * 20
+
+
+def test_update_user_roles_requires_admin(client, auth_header, make_user):
+    target = make_user("roletarget1")
+    headers = auth_header("qcaonly_roles1", is_qca=True)
+    resp = client.patch(
+        f"/users/{target.id}/roles", headers=headers, json={"roles": ["qca"]}
+    )
+    assert resp.status_code == 403
+
+
+def test_update_user_roles_sets_flags_and_returns_updated_roles(client, auth_header, make_user):
+    target = make_user("roletarget2")
+    headers = auth_header("admin_updater1", is_admin=True)
+    resp = client.patch(
+        f"/users/{target.id}/roles", headers=headers, json={"roles": ["admin", "qca"]}
+    )
+    assert resp.status_code == 200
+    assert sorted(resp.json()["roles"]) == ["admin", "qca"]
+
+    # round-trip via list_users
+    listing = client.get("/users", headers=headers)
+    updated = next(u for u in listing.json() if u["id"] == target.id)
+    assert sorted(updated["roles"]) == ["admin", "qca"]
+
+
+def test_update_user_roles_can_clear_all_roles(client, auth_header, make_user):
+    target = make_user("roletarget3", is_admin=True, is_qca=True)
+    headers = auth_header("admin_updater2", is_admin=True)
+    resp = client.patch(f"/users/{target.id}/roles", headers=headers, json={"roles": []})
+    assert resp.status_code == 200
+    assert resp.json()["roles"] == []
+
+
+def test_update_user_roles_404_for_missing_user(client, auth_header):
+    headers = auth_header("admin_updater3", is_admin=True)
+    resp = client.patch("/users/999999/roles", headers=headers, json={"roles": ["qca"]})
+    assert resp.status_code == 404

@@ -9,7 +9,7 @@ from app import netcdf_ops, storage
 from app.database import get_db
 from app.deps import get_current_user
 from app.file_locks import file_write_lock
-from app.models import Lock, Role, User
+from app.models import Lock, User
 
 router = APIRouter(prefix="/files", tags=["files"])
 
@@ -29,7 +29,7 @@ def list_drafts(
     username: Optional[str] = None, user: User = Depends(get_current_user)
 ):
     target = username or user.username
-    if target != user.username and user.role not in (Role.admin, Role.qca):
+    if target != user.username and not (user.is_admin or user.is_qca):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="cannot view another user's drafts",

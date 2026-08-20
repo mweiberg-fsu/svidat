@@ -10,7 +10,7 @@ from app.database import get_db
 from app.deps import get_current_user, require_role
 from app.file_locks import file_write_lock
 from app.models import Role, User
-from app.schemas import UserCreate, UserOut
+from app.schemas import UserCreate, UserOut, UserRolesUpdate
 from app.security import hash_password
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -119,6 +119,25 @@ def create_user(
         is_qca="qca" in payload.roles,
     )
     db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@router.patch("/{user_id}/roles", response_model=UserOut)
+def update_user_roles(
+    user_id: int,
+    payload: UserRolesUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role(Role.admin)),
+):
+    user = db.query(User).filter(User.id == user_id).first()
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="user not found"
+        )
+    user.is_admin = "admin" in payload.roles
+    user.is_qca = "qca" in payload.roles
     db.commit()
     db.refresh(user)
     return user

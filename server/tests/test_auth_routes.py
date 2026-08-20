@@ -24,6 +24,8 @@ def test_login_unknown_user(client):
 
 from unittest.mock import patch
 
+from sqlalchemy import func
+
 from app.models import OAuthSettings, Role, User
 
 
@@ -87,3 +89,18 @@ def test_oauth_domain_restriction_not_enforced_on_existing_user(client, make_use
     with patch("app.routers.auth.verify_google_id_token", return_value="old@random.com"):
         resp = client.post("/auth/oauth/google", json={"id_token": "fake"})
     assert resp.status_code == 200
+
+
+def test_oauth_login_matches_existing_user_case_insensitively(client, make_user, db_session):
+    make_user("Jane.Doe@FSU.edu", Role.qca)
+    with patch("app.routers.auth.verify_google_id_token", return_value="jane.doe@fsu.edu"):
+        resp = client.post("/auth/oauth/google", json={"id_token": "fake"})
+    assert resp.status_code == 200
+    assert resp.json()["role"] == "qca"
+
+    matches = (
+        db_session.query(User)
+        .filter(func.lower(User.username) == "jane.doe@fsu.edu")
+        .all()
+    )
+    assert len(matches) == 1

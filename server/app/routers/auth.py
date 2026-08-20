@@ -2,6 +2,7 @@ import secrets
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordRequestForm
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -29,7 +30,7 @@ def login(
 
 
 def _oauth_login(db: Session, email: str, provider: str) -> dict:
-    user = db.query(User).filter(User.username == email).first()
+    user = db.query(User).filter(func.lower(User.username) == email.lower()).first()
     if user is None:
         if not is_domain_allowed(db, email):
             raise HTTPException(
@@ -37,7 +38,7 @@ def _oauth_login(db: Session, email: str, provider: str) -> dict:
                 detail="this email domain isn't authorized to sign in",
             )
         user = User(
-            username=email,
+            username=email.lower(),
             password_hash=hash_password(secrets.token_urlsafe(32)),
             role=Role.user,
             auth_provider=provider,

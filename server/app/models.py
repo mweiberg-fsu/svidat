@@ -1,5 +1,6 @@
 import enum
 from datetime import datetime
+from typing import List
 
 from sqlalchemy import (
     Boolean,
@@ -28,13 +29,29 @@ class User(Base):
     id = Column(Integer, primary_key=True)
     username = Column(String, unique=True, nullable=False, index=True)
     password_hash = Column(String, nullable=False)
+    # Deprecated: superseded by is_admin/is_qca below. Kept (rather than
+    # dropped, which would need a SQLite table rebuild) so existing rows with
+    # a legacy 'role' value keep deserializing correctly, and so plain
+    # INSERTs that don't set it explicitly still satisfy NOT NULL via this
+    # column's own default. Not read anywhere for authorization anymore.
     role = Column(Enum(Role), nullable=False, default=Role.user)
     avatar_path = Column(String, nullable=True)
     auth_provider = Column(String, nullable=False, default="local")
+    is_admin = Column(Boolean, nullable=False, default=False)
+    is_qca = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     audit_entries = relationship("AuditLog", back_populates="user")
     locks = relationship("Lock", back_populates="user")
+
+    @property
+    def roles(self) -> List[Role]:
+        result = []
+        if self.is_admin:
+            result.append(Role.admin)
+        if self.is_qca:
+            result.append(Role.qca)
+        return result
 
 
 class Lock(Base):

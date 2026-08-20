@@ -9,6 +9,8 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 480
     database_url: str = "sqlite:///./svidat.db"
+    google_client_id: str = ""
+    microsoft_client_id: str = ""
 
 
 settings = Settings()

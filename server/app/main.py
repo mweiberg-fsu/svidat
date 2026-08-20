@@ -4,10 +4,11 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
-from app.database import Base, engine
+from app.database import Base, engine, run_migrations
 from app.routers import audit, auth, edit, files, session, users, workflow
 
 Base.metadata.create_all(bind=engine)
+run_migrations()
 
 app = FastAPI(title="svidat")
 

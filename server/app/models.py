@@ -30,6 +30,7 @@ class User(Base):
     password_hash = Column(String, nullable=False)
     role = Column(Enum(Role), nullable=False, default=Role.user)
     avatar_path = Column(String, nullable=True)
+    auth_provider = Column(String, nullable=False, default="local")
     created_at = Column(DateTime, default=datetime.utcnow)
 
     audit_entries = relationship("AuditLog", back_populates="user")
@@ -65,3 +66,10 @@ class AuditLog(Base):
     timestamp = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="audit_entries")
+
+
+class OAuthSettings(Base):
+    __tablename__ = "oauth_settings"
+
+    id = Column(Integer, primary_key=True)
+    allowed_domains = Column(String, nullable=True)

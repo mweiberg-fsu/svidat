@@ -20,16 +20,23 @@ declare global {
   }
 }
 
+let scriptPromise: Promise<void> | null = null
+
 function loadGoogleScript(): Promise<void> {
   if (window.google?.accounts?.id) return Promise.resolve()
-  return new Promise((resolve, reject) => {
+  if (scriptPromise) return scriptPromise
+  scriptPromise = new Promise((resolve, reject) => {
     const script = document.createElement('script')
     script.src = 'https://accounts.google.com/gsi/client'
     script.async = true
     script.onload = () => resolve()
-    script.onerror = () => reject(new Error('failed to load Google sign-in script'))
+    script.onerror = () => {
+      scriptPromise = null // allow a retry on next call instead of permanently poisoning the module
+      reject(new Error('failed to load Google sign-in script'))
+    }
     document.head.appendChild(script)
   })
+  return scriptPromise
 }
 
 export async function renderGoogleButton(

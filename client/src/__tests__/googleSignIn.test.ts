@@ -40,4 +40,25 @@ describe('renderGoogleButton', () => {
 
     expect(onError).toHaveBeenCalledWith('Google sign-in unavailable')
   })
+
+  it('loads the SDK script, then initializes and renders once it loads', async () => {
+    const initialize = vi.fn()
+    const renderButton = vi.fn()
+    const script = document.createElement('script')
+    vi.spyOn(document, 'createElement').mockReturnValue(script)
+    vi.spyOn(document.head, 'appendChild').mockImplementation((node) => {
+      queueMicrotask(() => {
+        window.google = { accounts: { id: { initialize, renderButton } } }
+        script.dispatchEvent(new Event('load'))
+      })
+      return node
+    })
+
+    const container = document.createElement('div')
+    const onToken = vi.fn()
+    await renderGoogleButton(container, { clientId: 'cid-123', onToken, onError: vi.fn() })
+
+    expect(initialize).toHaveBeenCalledWith(expect.objectContaining({ client_id: 'cid-123' }))
+    expect(renderButton).toHaveBeenCalledWith(container, expect.any(Object))
+  })
 })

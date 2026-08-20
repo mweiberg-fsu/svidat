@@ -1,9 +1,9 @@
-export type Role = 'admin' | 'qca' | 'user'
+export type Role = 'admin' | 'qca'
 
 export interface LoginResponse {
   access_token: string
   token_type: string
-  role: Role
+  roles: Role[]
 }
 
 export interface VariableMetadata {
@@ -41,7 +41,7 @@ export interface JobStatusResponse {
 export interface CurrentUser {
   id: number
   username: string
-  role: Role
+  roles: Role[]
 }
 
 export type Catalog = Record<string, Record<string, string[]>>

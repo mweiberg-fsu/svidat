@@ -134,10 +134,15 @@ export const revertAuditEntry = (auditId: number) =>
   apiFetch(`/audit/${auditId}/revert`, { method: 'POST' }).then((r) => r.json())
 export const getMyAuditHistory = () => apiFetch('/audit').then((r) => r.json())
 export const listUsers = () => apiFetch('/users').then((r) => r.json())
-export const createUser = (username: string, password: string, role: string) =>
-  apiFetch('/users', { method: 'POST', body: JSON.stringify({ username, password, role }) }).then(
+export const createUser = (username: string, password: string, roles: string[]) =>
+  apiFetch('/users', { method: 'POST', body: JSON.stringify({ username, password, roles }) }).then(
     (r) => r.json()
   )
+export const updateUserRoles = (userId: number, roles: string[]) =>
+  apiFetch(`/users/${encodeURIComponent(String(userId))}/roles`, {
+    method: 'PATCH',
+    body: JSON.stringify({ roles }),
+  }).then((r) => r.json())
 export const deleteUser = (userId: number) =>
   apiFetch(`/users/${encodeURIComponent(String(userId))}`, { method: 'DELETE' })
 

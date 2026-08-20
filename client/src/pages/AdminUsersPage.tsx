@@ -24,6 +24,7 @@ export function AdminUsersPage() {
   const [allowedDomains, setAllowedDomains] = useState<string[]>([])
   const [domainInput, setDomainInput] = useState('')
   const [oauthStatus, setOauthStatus] = useState<string | null>(null)
+  const [oauthSubmitting, setOauthSubmitting] = useState(false)
 
   const refresh = () => {
     listUsers()
@@ -72,12 +73,16 @@ export function AdminUsersPage() {
   }
 
   const saveDomains = async (next: string[]) => {
+    setOauthStatus(null)
+    setOauthSubmitting(true)
     try {
       const saved = await updateOAuthSettings(next)
       setAllowedDomains(saved.allowed_domains)
       setOauthStatus('Domain list updated')
     } catch (err) {
       setOauthStatus(`Error: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setOauthSubmitting(false)
     }
   }
 
@@ -139,7 +144,9 @@ export function AdminUsersPage() {
         {allowedDomains.map((d) => (
           <li key={d}>
             {d}
-            <button onClick={() => handleRemoveDomain(d)}>Remove</button>
+            <button onClick={() => handleRemoveDomain(d)} disabled={oauthSubmitting}>
+              Remove
+            </button>
           </li>
         ))}
       </ul>
@@ -149,9 +156,12 @@ export function AdminUsersPage() {
           value={domainInput}
           onChange={(e) => setDomainInput(e.target.value)}
           placeholder="fsu.edu"
+          disabled={oauthSubmitting}
         />
       </label>
-      <button onClick={handleAddDomain}>Add domain</button>
+      <button onClick={handleAddDomain} disabled={oauthSubmitting}>
+        Add domain
+      </button>
 
       {oauthStatus && <p role="status">{oauthStatus}</p>}
     </div>

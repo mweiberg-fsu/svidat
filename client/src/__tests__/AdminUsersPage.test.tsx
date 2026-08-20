@@ -40,4 +40,30 @@ describe('AdminUsersPage OAuth domain allowlist', () => {
 
     await waitFor(() => expect(client.updateOAuthSettings).toHaveBeenCalledWith([]))
   })
+
+  it('disables add/remove controls while a domain update is in flight', async () => {
+    let resolveUpdate: (value: { allowed_domains: string[] }) => void
+    const pending = new Promise<{ allowed_domains: string[] }>((resolve) => {
+      resolveUpdate = resolve
+    })
+    vi.spyOn(client, 'updateOAuthSettings').mockReturnValue(pending)
+
+    render(<AdminUsersPage />)
+    await screen.findByText('fsu.edu')
+
+    fireEvent.change(screen.getByPlaceholderText('fsu.edu'), { target: { value: 'noaa.gov' } })
+    fireEvent.click(screen.getByText('Add domain'))
+
+    await waitFor(() => expect(screen.getByText('Add domain')).toBeDisabled())
+    expect(screen.getByPlaceholderText('fsu.edu')).toBeDisabled()
+    expect(screen.getByText('Remove')).toBeDisabled()
+
+    // a second click while in flight must not fire a second request
+    fireEvent.click(screen.getByText('Add domain'))
+    expect(client.updateOAuthSettings).toHaveBeenCalledTimes(1)
+
+    resolveUpdate!({ allowed_domains: ['fsu.edu', 'noaa.gov'] })
+
+    await waitFor(() => expect(screen.getByText('Add domain')).not.toBeDisabled())
+  })
 })

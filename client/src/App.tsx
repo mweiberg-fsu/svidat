@@ -15,7 +15,7 @@ export default function App() {
           <Route
             path="/files"
             element={
-              <ProtectedRoute roles={['admin', 'qca', 'user']}>
+              <ProtectedRoute>
                 <FilesPage />
               </ProtectedRoute>
             }
@@ -23,7 +23,7 @@ export default function App() {
           <Route
             path="/profile"
             element={
-              <ProtectedRoute roles={['admin', 'qca', 'user']}>
+              <ProtectedRoute>
                 <ProfilePage />
               </ProtectedRoute>
             }
@@ -31,7 +31,7 @@ export default function App() {
           <Route
             path="/admin/users"
             element={
-              <ProtectedRoute roles={['admin']}>
+              <ProtectedRoute requiredRoles={['admin']}>
                 <AdminUsersPage />
               </ProtectedRoute>
             }

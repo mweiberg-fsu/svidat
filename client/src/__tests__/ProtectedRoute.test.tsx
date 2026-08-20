@@ -5,7 +5,7 @@ import { ProtectedRoute } from '../components/ProtectedRoute'
 import { AuthProvider } from '../context/AuthContext'
 import { setToken, clearToken } from '../api/client'
 
-function renderProtected(initialEntries: string[]) {
+function renderProtected(initialEntries: string[], requiredRoles?: ('admin' | 'qca')[]) {
   return render(
     <AuthProvider>
       <MemoryRouter initialEntries={initialEntries}>
@@ -14,7 +14,7 @@ function renderProtected(initialEntries: string[]) {
           <Route
             path="/private"
             element={
-              <ProtectedRoute roles={['admin', 'qca', 'user']}>
+              <ProtectedRoute requiredRoles={requiredRoles}>
                 <div>private content</div>
               </ProtectedRoute>
             }
@@ -36,33 +36,31 @@ describe('ProtectedRoute', () => {
     expect(screen.getByText('login page')).toBeInTheDocument()
   })
 
-  it('renders children when authenticated with an allowed role', () => {
+  it('renders children for a view-only account (no roles) when no requiredRoles are given', () => {
     setToken('abc123')
-    localStorage.setItem('svidat_role', 'qca')
+    localStorage.setItem('svidat_role', JSON.stringify([]))
     renderProtected(['/private'])
     expect(screen.getByText('private content')).toBeInTheDocument()
   })
 
-  it('redirects when authenticated but role not allowed', () => {
+  it('renders children when authenticated with a required role', () => {
     setToken('abc123')
-    localStorage.setItem('svidat_role', 'user')
-    render(
-      <AuthProvider>
-        <MemoryRouter initialEntries={['/private']}>
-          <Routes>
-            <Route path="/login" element={<div>login page</div>} />
-            <Route
-              path="/private"
-              element={
-                <ProtectedRoute roles={['admin', 'qca']}>
-                  <div>private content</div>
-                </ProtectedRoute>
-              }
-            />
-          </Routes>
-        </MemoryRouter>
-      </AuthProvider>
-    )
+    localStorage.setItem('svidat_role', JSON.stringify(['qca']))
+    renderProtected(['/private'], ['admin', 'qca'])
+    expect(screen.getByText('private content')).toBeInTheDocument()
+  })
+
+  it('redirects when authenticated but missing every required role', () => {
+    setToken('abc123')
+    localStorage.setItem('svidat_role', JSON.stringify([]))
+    renderProtected(['/private'], ['admin'])
+    expect(screen.getByText('login page')).toBeInTheDocument()
+  })
+
+  it('redirects when authenticated with some roles but not the required one', () => {
+    setToken('abc123')
+    localStorage.setItem('svidat_role', JSON.stringify(['qca']))
+    renderProtected(['/private'], ['admin'])
     expect(screen.getByText('login page')).toBeInTheDocument()
   })
 })

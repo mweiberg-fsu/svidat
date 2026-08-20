@@ -9,16 +9,16 @@ import type { Role } from '../api/types'
 
 export function ProtectedRoute({
   children,
-  roles,
+  requiredRoles,
 }: {
   children: ReactNode
-  roles: Role[]
+  requiredRoles?: Role[]
 }) {
-  const { token, role } = useAuth()
-  if (!token || !role) {
+  const { token, roles } = useAuth()
+  if (!token) {
     return <Navigate to="/login" replace />
   }
-  if (!roles.includes(role)) {
+  if (requiredRoles && requiredRoles.length > 0 && !requiredRoles.some((r) => roles.includes(r))) {
     return <Navigate to="/login" replace />
   }
   return (

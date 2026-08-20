@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 
 from app.database import Base, SessionLocal, engine
 from app.main import app
-from app.models import Role, User
+from app.models import OAuthSettings, Role, User
 from app.security import hash_password
 
 Base.metadata.create_all(bind=engine)
@@ -30,6 +30,16 @@ def db_session():
         yield session
     finally:
         session.close()
+
+
+@pytest.fixture(autouse=True)
+def _clean_oauth_settings(db_session):
+    # db_session shares one persistent SQLite file across the whole test run
+    # with no per-test rollback, so oauth_settings rows would otherwise leak
+    # between tests (and files) and break "first row" get_or_create semantics.
+    db_session.query(OAuthSettings).delete()
+    db_session.commit()
+    yield
 
 
 @pytest.fixture

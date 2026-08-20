@@ -1,17 +1,5 @@
-import pytest
-
 from app.models import OAuthSettings
 from app.oauth_settings import domains_list, get_or_create_settings, is_domain_allowed
-
-
-@pytest.fixture(autouse=True)
-def _clean_oauth_settings(db_session):
-    # The db_session fixture shares one persistent SQLite file across the whole
-    # test run with no per-test rollback, so oauth_settings rows would otherwise
-    # leak between tests (and break the "first row" get_or_create semantics).
-    db_session.query(OAuthSettings).delete()
-    db_session.commit()
-    yield
 
 
 def test_get_or_create_settings_creates_row_when_missing(db_session):

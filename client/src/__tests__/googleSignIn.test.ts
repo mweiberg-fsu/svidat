@@ -23,6 +23,22 @@ describe('renderGoogleButton', () => {
     expect(onToken).toHaveBeenCalledWith('signed-id-token')
   })
 
+  it('clears the container before re-rendering, so a second call does not stack buttons', async () => {
+    const initialize = vi.fn()
+    // Mimic the real SDK: renderButton appends a child rather than replacing the container's contents.
+    const renderButton = vi.fn((parent: HTMLElement) => {
+      parent.appendChild(document.createElement('div'))
+    })
+    window.google = { accounts: { id: { initialize, renderButton } } }
+
+    const container = document.createElement('div')
+    await renderGoogleButton(container, { clientId: 'cid-123', onToken: vi.fn(), onError: vi.fn() })
+    await renderGoogleButton(container, { clientId: 'cid-123', onToken: vi.fn(), onError: vi.fn() })
+
+    expect(renderButton).toHaveBeenCalledTimes(2)
+    expect(container.children.length).toBe(1)
+  })
+
   it('calls onError when the SDK script fails to load', async () => {
     const script = document.createElement('script')
     vi.spyOn(document, 'createElement').mockReturnValue(script)

@@ -53,5 +53,9 @@ export async function renderGoogleButton(
     client_id: options.clientId,
     callback: (response) => options.onToken(response.credential),
   })
+  // Google's renderButton() appends rather than replaces, so a second call against the same
+  // container (e.g. React StrictMode's double-invoked effect) would stack duplicate buttons.
+  // Clear the container first to make this function idempotent for callers.
+  container.innerHTML = ''
   window.google!.accounts.id.renderButton(container, { theme: 'outline', size: 'large' })
 }

@@ -115,7 +115,8 @@ def create_user(
     user = User(
         username=payload.username,
         password_hash=hash_password(payload.password),
-        role=payload.role,
+        is_admin="admin" in payload.roles,
+        is_qca="qca" in payload.roles,
     )
     db.add(user)
     db.commit()

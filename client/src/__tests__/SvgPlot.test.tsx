@@ -24,7 +24,7 @@ function Setup({ file, variables }: { file: string; variables: string[] }) {
 
 function renderSvgPlot(file: string, variables: string[]) {
   setToken('tok')
-  localStorage.setItem('svidat_role', 'qca')
+  localStorage.setItem('svidat_role', JSON.stringify(['qca']))
   localStorage.setItem('svidat_username', 'testuser')
   const utils = render(
     <AuthProvider>
@@ -169,7 +169,7 @@ describe('SvgPlot', () => {
 
   it('shows the empty state with no file/variables selected', () => {
     setToken('tok')
-    localStorage.setItem('svidat_role', 'qca')
+    localStorage.setItem('svidat_role', JSON.stringify(['qca']))
     localStorage.setItem('svidat_username', 'testuser')
     render(
       <AuthProvider>
@@ -307,7 +307,7 @@ describe('SvgPlot', () => {
     }
 
     setToken('tok')
-    localStorage.setItem('svidat_role', 'qca')
+    localStorage.setItem('svidat_role', JSON.stringify(['qca']))
     localStorage.setItem('svidat_username', 'testuser')
 
     const { container } = render(
@@ -450,7 +450,7 @@ describe('SvgPlot', () => {
     }
 
     setToken('tok')
-    localStorage.setItem('svidat_role', 'qca')
+    localStorage.setItem('svidat_role', JSON.stringify(['qca']))
     localStorage.setItem('svidat_username', 'testuser')
 
     const { container } = render(
@@ -673,7 +673,7 @@ describe('SvgPlot', () => {
     })
     vi.spyOn(apiClient, 'openSession').mockResolvedValue({ status: 'opened' })
     setToken('tok')
-    localStorage.setItem('svidat_role', 'qca')
+    localStorage.setItem('svidat_role', JSON.stringify(['qca']))
     localStorage.setItem('svidat_username', 'testuser')
 
     const { container } = render(
@@ -714,7 +714,7 @@ describe('SvgPlot', () => {
     })
     vi.spyOn(apiClient, 'openSession').mockResolvedValue({ status: 'opened' })
     setToken('tok')
-    localStorage.setItem('svidat_role', 'qca')
+    localStorage.setItem('svidat_role', JSON.stringify(['qca']))
     localStorage.setItem('svidat_username', 'testuser')
 
     const { container } = render(
@@ -761,7 +761,7 @@ describe('SvgPlot', () => {
     })
     vi.spyOn(apiClient, 'openSession').mockResolvedValue({ status: 'opened' })
     setToken('tok')
-    localStorage.setItem('svidat_role', 'qca')
+    localStorage.setItem('svidat_role', JSON.stringify(['qca']))
     localStorage.setItem('svidat_username', 'testuser')
 
     const { container } = render(
@@ -800,7 +800,7 @@ describe('SvgPlot', () => {
       variables: { temperature: { values: time.map((_, i) => i), flags: time.map(() => 'Z') } },
     })
     setToken('tok')
-    localStorage.setItem('svidat_role', 'qca')
+    localStorage.setItem('svidat_role', JSON.stringify(['qca']))
     localStorage.setItem('svidat_username', 'testuser')
 
     const { container } = render(
@@ -835,7 +835,7 @@ describe('SvgPlot', () => {
     })
     vi.spyOn(apiClient, 'openSession').mockRejectedValue(new Error('locked'))
     setToken('tok')
-    localStorage.setItem('svidat_role', 'qca')
+    localStorage.setItem('svidat_role', JSON.stringify(['qca']))
     localStorage.setItem('svidat_username', 'testuser')
 
     const { container } = render(
@@ -871,7 +871,7 @@ describe('SvgPlot', () => {
       variables: { temperature: { values: time.map((_, i) => i), flags: time.map(() => 'Z') } },
     })
     setToken('tok')
-    localStorage.setItem('svidat_role', 'qca')
+    localStorage.setItem('svidat_role', JSON.stringify(['qca']))
     localStorage.setItem('svidat_username', 'testuser')
 
     const { container } = render(
@@ -913,7 +913,7 @@ describe('SvgPlot', () => {
       variables: { temperature: { values: time.map((_, i) => i), flags: time.map(() => 'Z') } },
     })
     setToken('tok')
-    localStorage.setItem('svidat_role', 'user')
+    localStorage.setItem('svidat_role', JSON.stringify([]))
     localStorage.setItem('svidat_username', 'testuser')
 
     const { container } = render(
@@ -948,7 +948,7 @@ describe('SvgPlot', () => {
     })
     vi.spyOn(apiClient, 'openSession').mockResolvedValue({ status: 'opened' })
     setToken('tok')
-    localStorage.setItem('svidat_role', 'qca')
+    localStorage.setItem('svidat_role', JSON.stringify(['qca']))
     localStorage.setItem('svidat_username', 'testuser')
 
     function SelectionReadout() {
@@ -996,7 +996,7 @@ describe('SvgPlot', () => {
       variables: { temperature: { values: time.map((_, i) => i), flags: time.map(() => 'Z') } },
     })
     setToken('tok')
-    localStorage.setItem('svidat_role', 'qca')
+    localStorage.setItem('svidat_role', JSON.stringify(['qca']))
     localStorage.setItem('svidat_username', 'testuser')
 
     function NotifyButton() {
@@ -1283,7 +1283,7 @@ describe('SvgPlot', () => {
     }
 
     setToken('tok')
-    localStorage.setItem('svidat_role', 'qca')
+    localStorage.setItem('svidat_role', JSON.stringify(['qca']))
     localStorage.setItem('svidat_username', 'testuser')
 
     const { container } = render(

@@ -29,7 +29,7 @@ function OpenSessionButton() {
 function renderFilesPage(role: string = 'qca') {
   localStorage.clear()
   setToken('tok')
-  localStorage.setItem('svidat_role', role)
+  localStorage.setItem('svidat_role', JSON.stringify(role === 'user' ? [] : [role]))
   localStorage.setItem('svidat_username', 'testuser')
   return render(
     <AuthProvider>
@@ -47,7 +47,7 @@ function renderFilesPage(role: string = 'qca') {
 function renderFilesPageWithFile(role: string, file: string) {
   localStorage.clear()
   setToken('tok')
-  localStorage.setItem('svidat_role', role)
+  localStorage.setItem('svidat_role', JSON.stringify(role === 'user' ? [] : [role]))
   localStorage.setItem('svidat_username', 'testuser')
   const utils = render(
     <AuthProvider>
@@ -157,7 +157,7 @@ describe('FilesPage', () => {
 
     localStorage.clear()
     setToken('tok')
-    localStorage.setItem('svidat_role', 'qca')
+    localStorage.setItem('svidat_role', JSON.stringify(['qca']))
     localStorage.setItem('svidat_username', 'testuser')
 
     function NotifyButton() {

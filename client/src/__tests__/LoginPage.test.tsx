@@ -36,9 +36,9 @@ describe('LoginPage OAuth buttons', () => {
     vi.spyOn(client, 'loginWithMicrosoft').mockResolvedValue({
       access_token: 'tok',
       token_type: 'bearer',
-      role: 'user',
+      roles: [],
     })
-    vi.spyOn(client, 'getCurrentUser').mockResolvedValue({ id: 1, username: 'a@b.com', role: 'user' })
+    vi.spyOn(client, 'getCurrentUser').mockResolvedValue({ id: 1, username: 'a@b.com', roles: [] })
 
     renderLoginPage()
     fireEvent.click(screen.getByText('Sign in with Microsoft'))

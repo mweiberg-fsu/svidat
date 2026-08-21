@@ -53,7 +53,7 @@ const entries: AuditEntry[] = [
 // dependencies) in the tree — same wrapper shape as FlagsPanel's tests.
 function renderModal(onClose = vi.fn()) {
   setToken('tok')
-  localStorage.setItem('svidat_role', 'qca')
+  localStorage.setItem('svidat_role', JSON.stringify(['qca']))
   localStorage.setItem('svidat_username', 'testuser')
   const utils = render(
     <AuthProvider>

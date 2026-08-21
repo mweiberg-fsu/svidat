@@ -80,7 +80,7 @@ function FlagDisplaySibling() {
 function renderWithRole(role: string) {
   localStorage.clear()
   setToken('tok')
-  localStorage.setItem('svidat_role', role)
+  localStorage.setItem('svidat_role', JSON.stringify(role === 'user' ? [] : [role]))
   localStorage.setItem('svidat_username', 'testuser')
   return render(
     <AuthProvider>
@@ -100,7 +100,7 @@ function renderWithRole(role: string) {
 function renderSiblingsWithRole(role: string) {
   localStorage.clear()
   setToken('tok')
-  localStorage.setItem('svidat_role', role)
+  localStorage.setItem('svidat_role', JSON.stringify(role === 'user' ? [] : [role]))
   localStorage.setItem('svidat_username', 'testuser')
   return render(
     <AuthProvider>

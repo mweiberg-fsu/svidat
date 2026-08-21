@@ -39,7 +39,7 @@ function Driver() {
 function renderPanel(role: string = 'qca') {
   localStorage.clear()
   setToken('tok')
-  localStorage.setItem('svidat_role', role)
+  localStorage.setItem('svidat_role', JSON.stringify(role === 'user' ? [] : [role]))
   localStorage.setItem('svidat_username', 'testuser')
   return render(
     <AuthProvider>

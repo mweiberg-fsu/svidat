@@ -28,7 +28,7 @@ function wrapPanel(filename: string, refreshSignal: number) {
 
 function renderPanel(filename: string, refreshSignal: number) {
   setToken('tok')
-  localStorage.setItem('svidat_role', 'qca')
+  localStorage.setItem('svidat_role', JSON.stringify(['qca']))
   localStorage.setItem('svidat_username', 'testuser')
   return render(wrapPanel(filename, refreshSignal))
 }

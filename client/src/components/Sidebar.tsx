@@ -15,7 +15,7 @@ const DEFAULT_WIDTH = 250
 type SidebarTab = 'files' | 'flags'
 
 export function Sidebar() {
-  const { username, role, id, avatarVersion } = useAuth()
+  const { username, roles, id, avatarVersion } = useAuth()
   const { flagSelection, sessionOpen } = useEditSession()
   const avatarUrl = useAvatar(id, avatarVersion)
   const navigate = useNavigate()
@@ -81,7 +81,7 @@ export function Sidebar() {
         >
           Plots
         </a>
-        {role === 'admin' && (
+        {roles.includes('admin') && (
           <a
             href="/admin/users"
             className={location.pathname === '/admin/users' ? 'active' : undefined}

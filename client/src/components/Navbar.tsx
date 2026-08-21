@@ -4,7 +4,7 @@ import { useAvatar } from '../hooks/useAvatar'
 import { useAuth } from '../context/AuthContext'
 
 export function Navbar() {
-  const { username, role, id, avatarVersion, logout } = useAuth()
+  const { username, roles, id, avatarVersion, logout } = useAuth()
   const [open, setOpen] = useState(false)
   const avatarUrl = useAvatar(id, avatarVersion)
   const navigate = useNavigate()
@@ -52,13 +52,13 @@ export function Navbar() {
               )}
               <div>
                 <div className="navbar-dropdown-name">{username}</div>
-                <div className="navbar-dropdown-role">{role}</div>
+                <div className="navbar-dropdown-role">{roles.length ? roles.join(', ') : 'view only'}</div>
               </div>
             </div>
             <button className="navbar-dropdown-item" onClick={() => goTo('/profile')}>
               Profile
             </button>
-            {role === 'admin' && (
+            {roles.includes('admin') && (
               <button className="navbar-dropdown-item" onClick={() => goTo('/admin/users')}>
                 Admin
               </button>

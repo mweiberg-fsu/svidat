@@ -133,6 +133,11 @@ describe('EditSessionContext', () => {
     expect(screen.getByText('canEdit:false')).toBeInTheDocument()
   })
 
+  it('canEdit is false for an admin-only account (no qca)', () => {
+    renderWithRole('admin')
+    expect(screen.getByText('canEdit:false')).toBeInTheDocument()
+  })
+
   it('opening a session sets sessionOpen and editable (for an eligible role)', async () => {
     vi.spyOn(apiClient, 'openSession').mockResolvedValue({ status: 'opened' })
     renderWithRole('qca')

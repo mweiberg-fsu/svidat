@@ -95,9 +95,9 @@ def test_user_avatar_path_column_defaults_to_none():
 
 def test_audit_log_new_value_str(db_session, make_user):
     from datetime import datetime
-    from app.models import AuditLog, Role
+    from app.models import AuditLog
 
-    user = make_user("flagger1", Role.qca)
+    user = make_user("flagger1", is_qca=True)
     log = AuditLog(
         filename="shipx_2026-07-30",
         user_id=user.id,
@@ -110,3 +110,26 @@ def test_audit_log_new_value_str(db_session, make_user):
     db_session.commit()
     db_session.refresh(log)
     assert log.new_value_str == "K"
+
+
+def test_user_roles_property_empty_by_default(db_session):
+    user = User(username="rolesnone", password_hash="hashed")
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
+    assert user.roles == []
+
+
+def test_user_roles_property_admin_only():
+    user = User(username="rolesadmin", password_hash="hashed", is_admin=True, is_qca=False)
+    assert user.roles == [Role.admin]
+
+
+def test_user_roles_property_qca_only():
+    user = User(username="rolesqca", password_hash="hashed", is_admin=False, is_qca=True)
+    assert user.roles == [Role.qca]
+
+
+def test_user_roles_property_both():
+    user = User(username="rolesboth", password_hash="hashed", is_admin=True, is_qca=True)
+    assert user.roles == [Role.admin, Role.qca]

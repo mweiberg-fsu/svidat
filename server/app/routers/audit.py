@@ -68,7 +68,7 @@ def history(
 def revert(
     audit_id: int,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role(Role.admin, Role.qca)),
+    user: User = Depends(require_role(Role.qca)),
 ):
     entry = db.query(AuditLog).filter(AuditLog.id == audit_id).first()
     if entry is None:

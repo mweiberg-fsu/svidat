@@ -10,7 +10,7 @@ describe('ProfilePage', () => {
     localStorage.clear()
     localStorage.setItem('svidat_id', '1')
     localStorage.setItem('svidat_username', 'testuser')
-    localStorage.setItem('svidat_role', 'qca')
+    localStorage.setItem('svidat_role', JSON.stringify(['qca']))
     vi.restoreAllMocks()
   })
 
@@ -56,7 +56,7 @@ describe('ProfilePage', () => {
     )
   })
 
-  it('shows My drafts section for qca/admin roles', async () => {
+  it('shows My drafts section for qca role', async () => {
     vi.spyOn(apiClient, 'fetchAvatarBlobUrl').mockResolvedValue(null)
     vi.spyOn(apiClient, 'listDrafts').mockResolvedValue(['shipx_2026-07-30'])
     render(
@@ -74,8 +74,22 @@ describe('ProfilePage', () => {
     )
   })
 
-  it('hides My drafts section for user role', async () => {
-    localStorage.setItem('svidat_role', 'user')
+  it('hides My drafts section for admin-only role (no qca)', async () => {
+    localStorage.setItem('svidat_role', JSON.stringify(['admin']))
+    vi.spyOn(apiClient, 'fetchAvatarBlobUrl').mockResolvedValue(null)
+    render(
+      <AuthProvider>
+        <MemoryRouter>
+          <ProfilePage />
+        </MemoryRouter>
+      </AuthProvider>
+    )
+    await waitFor(() => expect(screen.getByText('Profile')).toBeInTheDocument())
+    expect(screen.queryByText('My drafts')).not.toBeInTheDocument()
+  })
+
+  it('hides My drafts section for view-only role (no roles)', async () => {
+    localStorage.setItem('svidat_role', JSON.stringify([]))
     vi.spyOn(apiClient, 'fetchAvatarBlobUrl').mockResolvedValue(null)
     render(
       <AuthProvider>

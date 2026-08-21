@@ -4,22 +4,31 @@ import type { Role } from '../api/types'
 
 interface AuthState {
   token: string | null
-  role: Role | null
+  roles: Role[]
   username: string | null
   id: number | null
   avatarVersion: number
-  login: (token: string, role: Role, username: string, id: number) => void
+  login: (token: string, roles: Role[], username: string, id: number) => void
   logout: () => void
   bumpAvatarVersion: () => void
 }
 
 const AuthContext = createContext<AuthState | undefined>(undefined)
 
+function readStoredRoles(): Role[] {
+  const raw = localStorage.getItem(ROLE_KEY)
+  if (!raw) return []
+  try {
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setTokenState] = useState<string | null>(getToken())
-  const [role, setRole] = useState<Role | null>(
-    (localStorage.getItem(ROLE_KEY) as Role | null) ?? null
-  )
+  const [roles, setRoles] = useState<Role[]>(readStoredRoles())
   const [username, setUsername] = useState<string | null>(localStorage.getItem(USERNAME_KEY))
   const [id, setId] = useState<number | null>(() => {
     const stored = localStorage.getItem(ID_KEY)
@@ -27,13 +36,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   })
   const [avatarVersion, setAvatarVersion] = useState(0)
 
-  const login = (newToken: string, newRole: Role, newUsername: string, newId: number) => {
+  const login = (newToken: string, newRoles: Role[], newUsername: string, newId: number) => {
     setToken(newToken)
-    localStorage.setItem(ROLE_KEY, newRole)
+    localStorage.setItem(ROLE_KEY, JSON.stringify(newRoles))
     localStorage.setItem(USERNAME_KEY, newUsername)
     localStorage.setItem(ID_KEY, String(newId))
     setTokenState(newToken)
-    setRole(newRole)
+    setRoles(newRoles)
     setUsername(newUsername)
     setId(newId)
   }
@@ -41,7 +50,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     clearAuthStorage()
     setTokenState(null)
-    setRole(null)
+    setRoles([])
     setUsername(null)
     setId(null)
   }
@@ -50,7 +59,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ token, role, username, id, avatarVersion, login, logout, bumpAvatarVersion }}
+      value={{ token, roles, username, id, avatarVersion, login, logout, bumpAvatarVersion }}
     >
       {children}
     </AuthContext.Provider>

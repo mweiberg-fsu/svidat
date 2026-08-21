@@ -1,10 +1,9 @@
-from app.models import Role
 from app import storage
 
 
 def test_list_raw_files(client, auth_header, synthetic_nc):
     synthetic_nc("shipx_2026-07-30")
-    headers = auth_header("viewer1", Role.user)
+    headers = auth_header("viewer1")
     resp = client.get("/files/raw", headers=headers)
     assert resp.status_code == 200
     assert "shipx_2026-07-30" in resp.json()
@@ -12,7 +11,7 @@ def test_list_raw_files(client, auth_header, synthetic_nc):
 
 def test_file_metadata(client, auth_header, synthetic_nc):
     synthetic_nc("shipx_2026-07-31")
-    headers = auth_header("viewer2", Role.user)
+    headers = auth_header("viewer2")
     resp = client.get("/files/shipx_2026-07-31/metadata", headers=headers)
     assert resp.status_code == 200
     body = resp.json()
@@ -21,13 +20,13 @@ def test_file_metadata(client, auth_header, synthetic_nc):
 
 
 def test_metadata_404_for_missing_file(client, auth_header):
-    headers = auth_header("viewer3", Role.user)
+    headers = auth_header("viewer3")
     resp = client.get("/files/does-not-exist/metadata", headers=headers)
     assert resp.status_code == 404
 
 
 def test_list_own_drafts_only_for_regular_user(client, auth_header):
-    headers_owner = auth_header("owner1", Role.qca)
+    headers_owner = auth_header("owner1", is_qca=True)
     draft = storage.draft_path("owner1", "shipx_2026-08-01")
     draft.parent.mkdir(parents=True, exist_ok=True)
     draft.write_bytes(b"fake")
@@ -36,25 +35,25 @@ def test_list_own_drafts_only_for_regular_user(client, auth_header):
     assert resp.status_code == 200
     assert "shipx_2026-08-01" in resp.json()
 
-    headers_other = auth_header("other1", Role.user)
+    headers_other = auth_header("other1")
     resp = client.get("/files/drafts", params={"username": "owner1"}, headers=headers_other)
     assert resp.status_code == 403
 
 
 def test_admin_can_list_others_drafts(client, auth_header):
-    headers_owner = auth_header("owner2", Role.qca)
+    headers_owner = auth_header("owner2", is_qca=True)
     draft = storage.draft_path("owner2", "shipx_2026-08-02")
     draft.parent.mkdir(parents=True, exist_ok=True)
     draft.write_bytes(b"fake")
 
-    headers_admin = auth_header("admin4", Role.admin)
+    headers_admin = auth_header("admin4", is_admin=True)
     resp = client.get("/files/drafts", params={"username": "owner2"}, headers=headers_admin)
     assert resp.status_code == 200
     assert "shipx_2026-08-02" in resp.json()
 
 
 def test_metadata_400_for_invalid_filename(client, auth_header):
-    headers = auth_header("viewer4", Role.user)
+    headers = auth_header("viewer4")
     # "%2e" is a percent-encoded "." so it survives as a literal path segment
     # (unlike a bare "." which the client normalizes away before sending),
     # letting it reach storage.raw_path() and trip validate_segment().
@@ -64,7 +63,7 @@ def test_metadata_400_for_invalid_filename(client, auth_header):
 
 
 def test_list_drafts_400_for_invalid_username(client, auth_header):
-    headers_admin = auth_header("admin5", Role.admin)
+    headers_admin = auth_header("admin5", is_admin=True)
     resp = client.get("/files/drafts", params={"username": ".."}, headers=headers_admin)
     assert resp.status_code == 400
     assert "invalid username" in resp.json()["detail"]
@@ -75,7 +74,7 @@ def test_catalog_groups_by_ship_and_year(client, auth_header, synthetic_nc):
     synthetic_nc("KAQP_20250102v20001")
     synthetic_nc("KAQP_20260115v20001")
     synthetic_nc("WTDF_20250601v20001")
-    headers = auth_header("cataloguser1", Role.user)
+    headers = auth_header("cataloguser1")
 
     resp = client.get("/files/catalog", headers=headers)
     assert resp.status_code == 200
@@ -89,7 +88,7 @@ def test_catalog_groups_by_ship_and_year(client, auth_header, synthetic_nc):
 def test_catalog_skips_non_matching_filenames(client, auth_header, synthetic_nc):
     synthetic_nc("KAQP_20250201v20001")
     synthetic_nc("not_a_ship_pattern_file")
-    headers = auth_header("cataloguser2", Role.user)
+    headers = auth_header("cataloguser2")
 
     resp = client.get("/files/catalog", headers=headers)
     body = resp.json()
@@ -101,8 +100,12 @@ def test_catalog_skips_non_matching_filenames(client, auth_header, synthetic_nc)
 
 def test_catalog_accessible_to_all_roles(client, auth_header, synthetic_nc):
     synthetic_nc("KAQP_20250301v20001")
-    for username, role in [("cataloguser3", Role.admin), ("cataloguser4", Role.qca), ("cataloguser5", Role.user)]:
-        headers = auth_header(username, role)
+    for username, kwargs in [
+        ("cataloguser3", {"is_admin": True}),
+        ("cataloguser4", {"is_qca": True}),
+        ("cataloguser5", {}),
+    ]:
+        headers = auth_header(username, **kwargs)
         resp = client.get("/files/catalog", headers=headers)
         assert resp.status_code == 200
 
@@ -112,7 +115,7 @@ def test_catalog_empty_when_no_raw_dir(client, auth_header, tmp_path, monkeypatc
 
     empty_dir = tmp_path / "empty_data_dir"
     monkeypatch.setattr(storage_module.settings, "data_dir", str(empty_dir))
-    headers = auth_header("cataloguser6", Role.user)
+    headers = auth_header("cataloguser6")
 
     resp = client.get("/files/catalog", headers=headers)
     assert resp.status_code == 200
@@ -121,7 +124,7 @@ def test_catalog_empty_when_no_raw_dir(client, auth_header, tmp_path, monkeypatc
 
 def test_file_data_returns_values_and_flags(client, auth_header, synthetic_nc_with_qc):
     synthetic_nc_with_qc("shipx_2026-08-20")
-    headers = auth_header("dataviewer1", Role.user)
+    headers = auth_header("dataviewer1")
     resp = client.get(
         "/files/shipx_2026-08-20/data",
         params={"vars": "temperature,salinity"},
@@ -136,7 +139,7 @@ def test_file_data_returns_values_and_flags(client, auth_header, synthetic_nc_wi
 
 def test_file_data_unknown_variable_returns_400(client, auth_header, synthetic_nc_with_qc):
     synthetic_nc_with_qc("shipx_2026-08-21")
-    headers = auth_header("dataviewer2", Role.user)
+    headers = auth_header("dataviewer2")
     resp = client.get(
         "/files/shipx_2026-08-21/data",
         params={"vars": "not_a_variable"},
@@ -146,7 +149,7 @@ def test_file_data_unknown_variable_returns_400(client, auth_header, synthetic_n
 
 
 def test_file_data_missing_file_returns_404(client, auth_header):
-    headers = auth_header("dataviewer3", Role.user)
+    headers = auth_header("dataviewer3")
     resp = client.get(
         "/files/does_not_exist_2026/data", params={"vars": "temperature"}, headers=headers
     )
@@ -161,7 +164,7 @@ def test_file_data_does_not_leak_another_users_open_session(
 
     # User A opens an edit session and edits their temp copy — index 0
     # changes from the raw fixture's 10.0 to 999.0.
-    headers_a = auth_header("isoeditorA", Role.qca)
+    headers_a = auth_header("isoeditorA", is_qca=True)
     client.post(f"/session/{filename}/open", params={"source": "raw"}, headers=headers_a)
     edit_resp = client.post(
         "/edit/point",
@@ -171,7 +174,7 @@ def test_file_data_does_not_leak_another_users_open_session(
     assert edit_resp.status_code == 200, edit_resp.text
 
     # User B has no lock/session on this file at all.
-    headers_b = auth_header("isoviewerB", Role.user)
+    headers_b = auth_header("isoviewerB")
     resp = client.get(
         f"/files/{filename}/data", params={"vars": "temperature"}, headers=headers_b
     )

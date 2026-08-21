@@ -22,7 +22,7 @@ function SessionDriver() {
 function renderSidebar(role: string) {
   localStorage.clear()
   setToken('tok')
-  localStorage.setItem('svidat_role', role)
+  localStorage.setItem('svidat_role', JSON.stringify(role === 'user' ? [] : [role]))
   localStorage.setItem('svidat_username', 'testuser')
   return render(
     <AuthProvider>
@@ -135,7 +135,7 @@ describe('Sidebar', () => {
     vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
     localStorage.clear()
     setToken('tok')
-    localStorage.setItem('svidat_role', 'qca')
+    localStorage.setItem('svidat_role', JSON.stringify(['qca']))
     localStorage.setItem('svidat_username', 'testuser')
     render(
       <AuthProvider>
@@ -156,7 +156,7 @@ describe('Sidebar', () => {
     vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
     localStorage.clear()
     setToken('tok')
-    localStorage.setItem('svidat_role', 'qca')
+    localStorage.setItem('svidat_role', JSON.stringify(['qca']))
     localStorage.setItem('svidat_username', 'testuser')
     render(
       <AuthProvider>
@@ -181,7 +181,7 @@ describe('Sidebar', () => {
     vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
     localStorage.clear()
     setToken('tok')
-    localStorage.setItem('svidat_role', 'qca')
+    localStorage.setItem('svidat_role', JSON.stringify(['qca']))
     localStorage.setItem('svidat_username', 'testuser')
     render(
       <AuthProvider>
@@ -207,7 +207,7 @@ describe('Sidebar', () => {
     vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
     localStorage.clear()
     setToken('tok')
-    localStorage.setItem('svidat_role', 'qca')
+    localStorage.setItem('svidat_role', JSON.stringify(['qca']))
     localStorage.setItem('svidat_username', 'testuser')
 
     function SelectDriver() {
@@ -248,7 +248,7 @@ describe('Sidebar', () => {
     vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
     localStorage.clear()
     setToken('tok')
-    localStorage.setItem('svidat_role', 'qca')
+    localStorage.setItem('svidat_role', JSON.stringify(['qca']))
     localStorage.setItem('svidat_username', 'testuser')
     render(
       <AuthProvider>
@@ -269,7 +269,7 @@ describe('Sidebar', () => {
     vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
     localStorage.clear()
     setToken('tok')
-    localStorage.setItem('svidat_role', 'qca')
+    localStorage.setItem('svidat_role', JSON.stringify(['qca']))
     localStorage.setItem('svidat_username', 'testuser')
     render(
       <AuthProvider>
@@ -290,7 +290,7 @@ describe('Sidebar', () => {
     vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
     localStorage.clear()
     setToken('tok')
-    localStorage.setItem('svidat_role', 'admin')
+    localStorage.setItem('svidat_role', JSON.stringify(['admin']))
     localStorage.setItem('svidat_username', 'testuser')
     render(
       <AuthProvider>
@@ -312,7 +312,7 @@ describe('Sidebar', () => {
     vi.spyOn(apiClient, 'openSession').mockResolvedValue({ status: 'opened' })
     localStorage.clear()
     setToken('tok')
-    localStorage.setItem('svidat_role', 'qca')
+    localStorage.setItem('svidat_role', JSON.stringify(['qca']))
     localStorage.setItem('svidat_username', 'testuser')
     render(
       <AuthProvider>

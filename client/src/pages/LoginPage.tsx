@@ -10,7 +10,7 @@ import {
 import { useAuth } from '../context/AuthContext'
 import { renderGoogleButton } from '../auth/googleSignIn'
 import { signInWithMicrosoft } from '../auth/microsoftSignIn'
-import type { LoginResponse, Role } from '../api/types'
+import type { LoginResponse } from '../api/types'
 
 export function LoginPage() {
   const [username, setUsername] = useState('')
@@ -37,7 +37,7 @@ export function LoginPage() {
   const finishLogin = async (response: LoginResponse) => {
     setToken(response.access_token)
     const me = await getCurrentUser()
-    auth.login(response.access_token, response.role as Role, me.username, me.id)
+    auth.login(response.access_token, response.roles, me.username, me.id)
     navigate('/files')
   }
 

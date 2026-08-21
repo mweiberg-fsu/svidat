@@ -29,7 +29,7 @@ interface EditSessionState {
 const EditSessionContext = createContext<EditSessionState | undefined>(undefined)
 
 export function EditSessionProvider({ children }: { children: ReactNode }) {
-  const { role } = useAuth()
+  const { roles } = useAuth()
   const { file, variables } = usePlotSelection()
   const [searchParams] = useSearchParams()
   const [sessionOpen, setSessionOpen] = useState(false)
@@ -38,7 +38,7 @@ export function EditSessionProvider({ children }: { children: ReactNode }) {
   const [flagAppliedAt, setFlagAppliedAt] = useState(0)
   const [flagsVisible, setFlagsVisible] = useState(true)
 
-  const canEdit = role === 'admin' || role === 'qca'
+  const canEdit = roles.includes('qca')
   const editable = sessionOpen && canEdit
 
   const openingRef = useRef(false)

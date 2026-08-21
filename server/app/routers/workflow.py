@@ -16,7 +16,7 @@ router = APIRouter(tags=["workflow"])
 def save(
     payload: SaveRequest,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role(Role.admin, Role.qca)),
+    user: User = Depends(require_role(Role.qca)),
 ):
     try:
         temp = storage.temp_path(user.username, payload.filename)
@@ -39,7 +39,7 @@ def save(
 def publish(
     payload: PublishRequest,
     db: Session = Depends(get_db),
-    user: User = Depends(require_role(Role.admin, Role.qca)),
+    user: User = Depends(require_role(Role.qca)),
 ):
     try:
         temp = storage.temp_path(user.username, payload.filename)

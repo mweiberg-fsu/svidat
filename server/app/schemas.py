@@ -1,23 +1,46 @@
 from typing import List
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from app.models import Role
+
+ALLOWED_ROLE_VALUES = {"admin", "qca"}
+
+
+def _validate_role_values(v: List[str]) -> List[str]:
+    invalid = set(v) - ALLOWED_ROLE_VALUES
+    if invalid:
+        raise ValueError(f"invalid role(s): {sorted(invalid)}")
+    return v
 
 
 class UserCreate(BaseModel):
     username: str
     password: str
-    role: Role
+    roles: List[str] = []
+
+    @field_validator("roles")
+    @classmethod
+    def validate_roles(cls, v: List[str]) -> List[str]:
+        return _validate_role_values(v)
 
 
 class UserOut(BaseModel):
     id: int
     username: str
-    role: Role
+    roles: List[Role]
 
     class Config:
         from_attributes = True
+
+
+class UserRolesUpdate(BaseModel):
+    roles: List[str]
+
+    @field_validator("roles")
+    @classmethod
+    def validate_roles(cls, v: List[str]) -> List[str]:
+        return _validate_role_values(v)
 
 
 class PointEditRequest(BaseModel):

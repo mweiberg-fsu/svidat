@@ -5,7 +5,7 @@ import { useAvatar } from '../hooks/useAvatar'
 import { useAuth } from '../context/AuthContext'
 
 export function ProfilePage() {
-  const { id, username, role, avatarVersion, bumpAvatarVersion } = useAuth()
+  const { id, username, roles, avatarVersion, bumpAvatarVersion } = useAuth()
   const avatarUrl = useAvatar(id, avatarVersion)
   const [status, setStatus] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
@@ -14,12 +14,12 @@ export function ProfilePage() {
   const navigate = useNavigate()
 
   useEffect(() => {
-    if (role === 'admin' || role === 'qca') {
+    if (roles.includes('qca')) {
       listDrafts()
         .then(setDrafts)
         .catch((err) => setDraftsError(err instanceof Error ? err.message : String(err)))
     }
-  }, [role])
+  }, [roles])
 
   const handleFileChange = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -50,7 +50,7 @@ export function ProfilePage() {
           <b>Username:</b> {username}
         </p>
         <p className="profile-row">
-          <b>Role:</b> {role}
+          <b>Roles:</b> {roles.length ? roles.join(', ') : 'view only'}
         </p>
         <label className="profile-upload-label">
           Upload photo
@@ -63,7 +63,7 @@ export function ProfilePage() {
         </label>
         {status && <p role="status" className="profile-status">{status}</p>}
       </div>
-      {(role === 'admin' || role === 'qca') && (
+      {roles.includes('qca') && (
         <section className="profile-drafts">
           <h2>My drafts</h2>
           {draftsError && <p role="status">Error: {draftsError}</p>}

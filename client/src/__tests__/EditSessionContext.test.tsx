@@ -80,7 +80,7 @@ function FlagDisplaySibling() {
 function renderWithRole(role: string) {
   localStorage.clear()
   setToken('tok')
-  localStorage.setItem('svidat_role', role)
+  localStorage.setItem('svidat_role', JSON.stringify(role === 'user' ? [] : [role]))
   localStorage.setItem('svidat_username', 'testuser')
   return render(
     <AuthProvider>
@@ -100,7 +100,7 @@ function renderWithRole(role: string) {
 function renderSiblingsWithRole(role: string) {
   localStorage.clear()
   setToken('tok')
-  localStorage.setItem('svidat_role', role)
+  localStorage.setItem('svidat_role', JSON.stringify(role === 'user' ? [] : [role]))
   localStorage.setItem('svidat_username', 'testuser')
   return render(
     <AuthProvider>
@@ -130,6 +130,11 @@ describe('EditSessionContext', () => {
 
   it('canEdit is false for the user role', () => {
     renderWithRole('user')
+    expect(screen.getByText('canEdit:false')).toBeInTheDocument()
+  })
+
+  it('canEdit is false for an admin-only account (no qca)', () => {
+    renderWithRole('admin')
     expect(screen.getByText('canEdit:false')).toBeInTheDocument()
   })
 

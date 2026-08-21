@@ -1,9 +1,9 @@
-from app.models import OAuthSettings, Role, User
+from app.models import OAuthSettings, User
 from app.security import hash_password
 
 
 def test_new_user_defaults_to_local_auth_provider(db_session):
-    user = User(username="plain", password_hash=hash_password("x"), role=Role.user)
+    user = User(username="plain", password_hash=hash_password("x"))
     db_session.add(user)
     db_session.commit()
     db_session.refresh(user)

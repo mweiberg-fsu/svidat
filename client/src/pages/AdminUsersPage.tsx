@@ -5,21 +5,28 @@ import {
   getOAuthSettings,
   listUsers,
   updateOAuthSettings,
+  updateUserRoles,
 } from '../api/client'
 
 interface UserRow {
   id: number
   username: string
-  role: string
+  roles: string[]
 }
+
+const ROLE_OPTIONS = ['admin', 'qca'] as const
 
 export function AdminUsersPage() {
   const [users, setUsers] = useState<UserRow[]>([])
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
-  const [role, setRole] = useState('user')
+  const [newRoles, setNewRoles] = useState<string[]>([])
   const [status, setStatus] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
+
+  const [editingId, setEditingId] = useState<number | null>(null)
+  const [editRoles, setEditRoles] = useState<string[]>([])
+  const [editSubmitting, setEditSubmitting] = useState(false)
 
   const [allowedDomains, setAllowedDomains] = useState<string[]>([])
   const [domainInput, setDomainInput] = useState('')
@@ -44,12 +51,17 @@ export function AdminUsersPage() {
       })
   }, [])
 
+  const toggleNewRole = (role: string) => {
+    setNewRoles((prev) => (prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role]))
+  }
+
   const handleCreate = async () => {
     setSubmitting(true)
     try {
-      await createUser(username, password, role)
+      await createUser(username, password, newRoles)
       setUsername('')
       setPassword('')
+      setNewRoles([])
       setStatus('User created')
       refresh()
     } catch (err) {
@@ -69,6 +81,34 @@ export function AdminUsersPage() {
       setStatus(`Error: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  const startEdit = (user: UserRow) => {
+    setEditingId(user.id)
+    setEditRoles(user.roles)
+  }
+
+  const cancelEdit = () => {
+    setEditingId(null)
+    setEditRoles([])
+  }
+
+  const toggleEditRole = (role: string) => {
+    setEditRoles((prev) => (prev.includes(role) ? prev.filter((r) => r !== role) : [...prev, role]))
+  }
+
+  const saveEdit = async (userId: number) => {
+    setEditSubmitting(true)
+    try {
+      const updated = await updateUserRoles(userId, editRoles)
+      setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, roles: updated.roles } : u)))
+      setEditingId(null)
+      setEditRoles([])
+    } catch (err) {
+      setStatus(`Error: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setEditSubmitting(false)
     }
   }
 
@@ -103,10 +143,38 @@ export function AdminUsersPage() {
       <ul>
         {users.map((u) => (
           <li key={u.id}>
-            {u.username} ({u.role})
-            <button onClick={() => handleDelete(u.id)} disabled={submitting}>
-              Delete
-            </button>
+            {editingId === u.id ? (
+              <>
+                {u.username}
+                {ROLE_OPTIONS.map((r) => (
+                  <label key={r}>
+                    <input
+                      type="checkbox"
+                      checked={editRoles.includes(r)}
+                      onChange={() => toggleEditRole(r)}
+                      disabled={editSubmitting}
+                    />
+                    {r}
+                  </label>
+                ))}
+                <button onClick={() => saveEdit(u.id)} disabled={editSubmitting}>
+                  Save
+                </button>
+                <button onClick={cancelEdit} disabled={editSubmitting}>
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <>
+                {u.username} ({u.roles.length ? u.roles.join(', ') : 'view only'})
+                <button onClick={() => startEdit(u)} disabled={submitting}>
+                  Edit
+                </button>
+                <button onClick={() => handleDelete(u.id)} disabled={submitting}>
+                  Delete
+                </button>
+              </>
+            )}
           </li>
         ))}
       </ul>
@@ -124,14 +192,16 @@ export function AdminUsersPage() {
           onChange={(e) => setPassword(e.target.value)}
         />
       </label>
-      <label>
-        Role
-        <select value={role} onChange={(e) => setRole(e.target.value)}>
-          <option value="user">user</option>
-          <option value="qca">qca</option>
-          <option value="admin">admin</option>
-        </select>
-      </label>
+      {ROLE_OPTIONS.map((r) => (
+        <label key={r}>
+          <input
+            type="checkbox"
+            checked={newRoles.includes(r)}
+            onChange={() => toggleNewRole(r)}
+          />
+          {r}
+        </label>
+      ))}
       <button onClick={handleCreate} disabled={submitting}>
         Create user
       </button>

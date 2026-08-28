@@ -64,19 +64,6 @@ interface Scale {
   y: (v: number) => number
 }
 
-// Auto-fit [min, max] over a values array's [startIdx, endIdx] window,
-// ignoring nulls. Falls back to [0, 1] when the window has no numeric
-// values, matching buildScale's prior inline behavior. Shared by buildScale
-// (per-row auto-fit) and the bulk Y-zoom sync (SvgPlot's Ctrl+drag handler),
-// which both need "what would this row's range be without an override."
-function rawMinMax(values: (number | null)[], startIdx: number, endIdx: number): [number, number] {
-  const windowValues = values.slice(startIdx, endIdx + 1)
-  const numeric = windowValues.filter((v): v is number => v !== null)
-  const min = numeric.length ? Math.min(...numeric) : 0
-  const max = numeric.length ? Math.max(...numeric) : 1
-  return [min, max]
-}
-
 // Y auto-fits to whatever's visible in [startIdx, endIdx] — X maps that same
 // window onto the full plot width, so zooming in only changes which slice of
 // `values`/`i` the scale covers, not the plot's pixel dimensions. `yOverride`
@@ -102,7 +89,16 @@ function buildScale(
   const innerHeight = height - MARGIN.top - MARGIN.bottom
   const span = endIdx - startIdx || 1
 
-  const [rawMin, rawMax] = yOverride ?? rawMinMax(values, startIdx, endIdx)
+  let rawMin: number
+  let rawMax: number
+  if (yOverride) {
+    ;[rawMin, rawMax] = yOverride
+  } else {
+    const windowValues = values.slice(startIdx, endIdx + 1)
+    const numeric = windowValues.filter((v): v is number => v !== null)
+    rawMin = numeric.length ? Math.min(...numeric) : 0
+    rawMax = numeric.length ? Math.max(...numeric) : 1
+  }
 
   const { ticks: yTicks, min, max } = niceTicks(rawMin, rawMax, Y_TICK_COUNT)
   const range = max - min || 1
@@ -565,22 +561,9 @@ export function SvgPlot() {
   // than native HTML5 drag-and-drop, which needs `preventDefault` on both
   // `dragenter` *and* `dragover` to reliably allow a drop across browsers,
   // and gives no hook for a custom "following the cursor" animation).
-  //
-  // The dragged row tracks the cursor via `position: fixed` (left/width/top
-  // captured at grab time, top updated every move) rather than a translateY
-  // delta off its starting layout position. A delta-off-start approach jumps
-  // the instant the row's array index changes mid-drag, since its untransformed
-  // flow position moves by a row height while the delta stays anchored to the
-  // original position. Fixed positioning is decoupled from flow entirely, so
-  // there's nothing to jump — and it drops the row out of flow, letting the
-  // other rows' existing FLIP animation (below) close the gap on its own.
-  const [tabDrag, setTabDrag] = useState<{
-    varName: string
-    currentY: number
-    grabOffsetY: number
-    left: number
-    width: number
-  } | null>(null)
+  const [tabDrag, setTabDrag] = useState<{ varName: string; startY: number; currentY: number } | null>(
+    null
+  )
   const rowRefs = useRef<Record<string, HTMLDivElement | null>>({})
   const prevRowTopsRef = useRef<Record<string, number>>({})
 
@@ -588,14 +571,7 @@ export function SvgPlot() {
     if (e.button !== 0) return
     e.preventDefault()
     e.stopPropagation()
-    const rect = rowRefs.current[varName]?.getBoundingClientRect()
-    setTabDrag({
-      varName,
-      currentY: e.clientY,
-      grabOffsetY: rect ? e.clientY - rect.top : 0,
-      left: rect?.left ?? 0,
-      width: rect?.width ?? 0,
-    })
+    setTabDrag({ varName, startY: e.clientY, currentY: e.clientY })
   }
 
   // Runs for the duration of one tab-drag gesture. On every mousemove it
@@ -1055,7 +1031,6 @@ export function SvgPlot() {
   const hoverTipSeries = hoverTip ? data.variables[hoverTip.varName] : null
   const hoverTipValue = hoverTip && hoverTipSeries ? hoverTipSeries.values[hoverTip.idx] : null
   const hoverTipFlag = hoverTip && hoverTipSeries ? (hoverTipSeries.flags?.[hoverTip.idx] ?? null) : null
-  const draggedIdx = tabDrag ? variables.indexOf(tabDrag.varName) : -1
 
   return (
     <div className="svg-plot" ref={containerRef}>
@@ -1118,13 +1093,6 @@ export function SvgPlot() {
         const lineColor = isActive ? ACTIVE_COLOR : LINE_COLOR
 
         const isDraggedRow = tabDrag?.varName === varName
-        // Highlights the slot the dragged row would land in: the row
-        // immediately after it (or, when dragged to the very end, the row
-        // immediately before it) gets an accent edge as a drop-target cue.
-        const isDropBefore = draggedIdx !== -1 && rowIdx === draggedIdx + 1
-        const isDropAfter =
-          draggedIdx !== -1 && draggedIdx === variables.length - 1 && rowIdx === draggedIdx - 1
-        const dropTargetClass = isDropBefore ? ' drop-target-before' : isDropAfter ? ' drop-target-after' : ''
 
         return (
           <div
@@ -1133,17 +1101,13 @@ export function SvgPlot() {
               rowRefs.current[varName] = el
             }}
             data-variable={varName}
-            className={`svg-plot-row${isDraggedRow ? ' dragging' : ''}${dropTargetClass}`}
+            className="svg-plot-row"
             style={{
-              position: isDraggedRow ? 'fixed' : 'relative',
-              top: isDraggedRow ? tabDrag!.currentY - tabDrag!.grabOffsetY : undefined,
-              left: isDraggedRow ? tabDrag!.left : undefined,
-              width: isDraggedRow ? tabDrag!.width : undefined,
-              transform: undefined,
+              position: 'relative',
+              transform: isDraggedRow ? `translateY(${tabDrag!.currentY - tabDrag!.startY}px)` : undefined,
               transition: isDraggedRow ? 'none' : 'transform 150ms ease',
               zIndex: isDraggedRow ? 10 : undefined,
-              boxShadow: isDraggedRow ? '0 8px 20px rgba(0, 0, 0, 0.3)' : undefined,
-              pointerEvents: isDraggedRow ? 'none' : undefined,
+              boxShadow: isDraggedRow ? '0 4px 12px rgba(0, 0, 0, 0.25)' : undefined,
             }}
             onClick={(e) => {
               if (e.metaKey) {

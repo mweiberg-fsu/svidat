@@ -472,6 +472,37 @@ code {
   line-height: 1;
 }
 
+.svg-plot-row.dragging .svg-plot-tab {
+  pointer-events: auto;
+}
+
+.svg-plot-row.drop-target-before,
+.svg-plot-row.drop-target-after {
+  position: relative;
+}
+
+.svg-plot-row.drop-target-before::before,
+.svg-plot-row.drop-target-after::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--accent);
+  box-shadow: 0 0 8px var(--accent-border);
+  pointer-events: none;
+  z-index: 5;
+}
+
+.svg-plot-row.drop-target-before::before {
+  top: -2px;
+}
+
+.svg-plot-row.drop-target-after::after {
+  bottom: -2px;
+}
+
 .plot-view {
   display: flex;
   flex-direction: column;
@@ -968,4 +999,73 @@ code {
 .login-submit:disabled {
   opacity: 0.7;
   cursor: not-allowed;
+}
+
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 4px 0;
+  color: var(--text);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.login-divider::before,
+.login-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+.login-oauth {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.login-oauth-google {
+  display: flex;
+  justify-content: center;
+}
+
+.login-oauth-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--code-bg);
+  color: var(--text-h);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, transform 0.15s;
+}
+
+.login-oauth-btn:hover:not(:disabled) {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+  transform: translateY(-1px);
+}
+
+.login-oauth-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.login-oauth-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+.login-oauth-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
 }

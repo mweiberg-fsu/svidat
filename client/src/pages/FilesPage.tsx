@@ -42,7 +42,6 @@ export function FilesPage() {
     <div>
       {file && canEdit && (
         <div>
-          {!sessionOpen && <p>Drag on a plot to start editing.</p>}
           {sessionOpen && <button onClick={closeSession}>Close session</button>}
           {sessionError && <p role="alert">{sessionError}</p>}
         </div>

@@ -117,14 +117,35 @@ export function LoginPage() {
         </button>
 
         {(googleClientId || microsoftClientId) && (
-          <div className="login-oauth">
-            {googleClientId && <div ref={googleButtonRef} />}
-            {microsoftClientId && (
-              <button type="button" onClick={handleMicrosoftSignIn} disabled={submitting}>
-                Sign in with Microsoft
-              </button>
-            )}
-          </div>
+          <>
+            <div className="login-divider">
+              <span>or continue with</span>
+            </div>
+            <div className="login-oauth">
+              {googleClientId && <div className="login-oauth-google" ref={googleButtonRef} />}
+              {microsoftClientId && (
+                <button
+                  className="login-oauth-btn"
+                  type="button"
+                  onClick={handleMicrosoftSignIn}
+                  disabled={submitting}
+                >
+                  <svg
+                    className="login-oauth-icon"
+                    viewBox="0 0 21 21"
+                    aria-hidden="true"
+                    focusable="false"
+                  >
+                    <rect x="1" y="1" width="9" height="9" fill="#f25022" />
+                    <rect x="11" y="1" width="9" height="9" fill="#7fba00" />
+                    <rect x="1" y="11" width="9" height="9" fill="#00a4ef" />
+                    <rect x="11" y="11" width="9" height="9" fill="#ffb900" />
+                  </svg>
+                  Sign in with Microsoft
+                </button>
+              )}
+            </div>
+          </>
         )}
       </form>
     </div>

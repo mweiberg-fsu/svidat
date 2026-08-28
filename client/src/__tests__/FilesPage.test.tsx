@@ -78,29 +78,6 @@ describe('FilesPage', () => {
     ).toBeInTheDocument()
   })
 
-  it('shows the drag-to-edit hint for qca once a file is selected', async () => {
-    vi.spyOn(apiClient, 'getFileMetadata').mockResolvedValue({
-      variables: {},
-      dimensions: {},
-      global_attrs: {},
-    })
-    renderFilesPageWithFile('qca', 'FILE_A')
-    await waitFor(() =>
-      expect(screen.getByText('Drag on a plot to start editing.')).toBeInTheDocument()
-    )
-  })
-
-  it('hides the drag-to-edit hint for user role', async () => {
-    vi.spyOn(apiClient, 'getFileMetadata').mockResolvedValue({
-      variables: {},
-      dimensions: {},
-      global_attrs: {},
-    })
-    renderFilesPageWithFile('user', 'FILE_A')
-    await waitFor(() => expect(apiClient.getFileMetadata).toHaveBeenCalledWith('FILE_A'))
-    expect(screen.queryByText('Drag on a plot to start editing.')).not.toBeInTheDocument()
-  })
-
   it('opens a session and shows the edit form and audit panel', async () => {
     vi.spyOn(apiClient, 'getFileMetadata').mockResolvedValue({
       variables: { temperature: { dims: ['time'], shape: [10], dtype: 'f4', attrs: {} } },
@@ -111,9 +88,7 @@ describe('FilesPage', () => {
     vi.spyOn(apiClient, 'getAuditHistory').mockResolvedValue([])
 
     renderFilesPageWithFile('qca', 'FILE_A')
-    await waitFor(() =>
-      expect(screen.getByText('Drag on a plot to start editing.')).toBeInTheDocument()
-    )
+    await waitFor(() => expect(apiClient.getFileMetadata).toHaveBeenCalledWith('FILE_A'))
 
     fireEvent.click(screen.getByTestId('open-session'))
 
@@ -133,16 +108,12 @@ describe('FilesPage', () => {
     vi.spyOn(apiClient, 'getAuditHistory').mockResolvedValue([])
 
     renderFilesPageWithFile('qca', 'FILE_A')
-    await waitFor(() =>
-      expect(screen.getByText('Drag on a plot to start editing.')).toBeInTheDocument()
-    )
+    await waitFor(() => expect(apiClient.getFileMetadata).toHaveBeenCalledWith('FILE_A'))
     fireEvent.click(screen.getByTestId('open-session'))
     await waitFor(() => expect(screen.getByText('Close session')).toBeInTheDocument())
 
     fireEvent.click(screen.getByText('Close session'))
-    await waitFor(() =>
-      expect(screen.getByText('Drag on a plot to start editing.')).toBeInTheDocument()
-    )
+    await waitFor(() => expect(screen.queryByText('Close session')).not.toBeInTheDocument())
     expect(screen.queryByText('Edit')).not.toBeInTheDocument()
   })
 
@@ -180,9 +151,7 @@ describe('FilesPage', () => {
       </AuthProvider>
     )
     fireEvent.click(screen.getByTestId('set-file'))
-    await waitFor(() =>
-      expect(screen.getByText('Drag on a plot to start editing.')).toBeInTheDocument()
-    )
+    await waitFor(() => expect(apiClient.getFileMetadata).toHaveBeenCalledWith('FILE_A'))
     fireEvent.click(screen.getByTestId('open-session'))
     await waitFor(() => expect(screen.getByText('Audit history')).toBeInTheDocument())
     await waitFor(() => expect(getAuditHistorySpy).toHaveBeenCalledTimes(1))

@@ -95,7 +95,15 @@ try:
     if db.query(User).filter(User.username == username).first():
         print(f"User '{username}' already exists, skipping.")
     else:
-        db.add(User(username=username, password_hash=hash_password(password), role=Role.admin))
+        db.add(
+            User(
+                username=username,
+                password_hash=hash_password(password),
+                role=Role.admin,
+                is_admin=True,
+                is_qca=True,
+            )
+        )
         db.commit()
         print(f"Created admin user '{username}'.")
 finally:

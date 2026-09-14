@@ -14,10 +14,16 @@ import * as apiClient from '../api/client'
 // sets the selection, covered in its own test file).
 function Driver() {
   const sel = usePlotSelection()
-  const { openSession, setFlagSelection } = useEditSession()
+  const { openSession, setFlagSelection, flagsVisible, bulkEdit, flagAppliedAt } = useEditSession()
   return (
     <div>
+      <span data-testid="flags-visible">{String(flagsVisible)}</span>
+      <span data-testid="bulk-edit">{String(bulkEdit)}</span>
+      <span data-testid="flag-applied-at">{flagAppliedAt}</span>
       <button onClick={() => sel.setFile('FILE_A')}>set file</button>
+      <button onClick={() => sel.setVariables(['temperature', 'humidity', 'salinity'])}>
+        set variables
+      </button>
       <button onClick={() => openSession()}>open session</button>
       <button
         onClick={() =>
@@ -55,7 +61,7 @@ function renderPanel(role: string = 'qca') {
   )
 }
 
-async function selectAndMakeEditable() {
+async function selectAndMakeEditable(beforeSelect?: () => void) {
   renderPanel()
   fireEvent.click(screen.getByText('set file'))
   vi.spyOn(apiClient, 'openSession').mockResolvedValue({ status: 'opened' })
@@ -63,6 +69,10 @@ async function selectAndMakeEditable() {
   await waitFor(() =>
     expect(screen.getByText('Select points on the plot to flag them')).toBeInTheDocument()
   )
+  // setVariables resets flagSelection (EditSessionContext resets on
+  // [file, variables] change), so any variable-list setup must happen
+  // before the selection is made, not after.
+  beforeSelect?.()
   fireEvent.click(screen.getByText('select'))
 }
 
@@ -161,5 +171,112 @@ describe('FlagsPanel', () => {
 
     expect(screen.getByText('Select points on the plot to flag them')).toBeInTheDocument()
     expect(applyFlagSpy).not.toHaveBeenCalled()
+  })
+
+  it('renders the mode row: Show flags checked by default, Bulk edit unchecked and disabled until editable', () => {
+    renderPanel()
+    const showFlags = screen.getByLabelText('Show flags') as HTMLInputElement
+    const bulkEdit = screen.getByLabelText('Bulk edit') as HTMLInputElement
+    expect(showFlags.checked).toBe(true)
+    expect(bulkEdit.checked).toBe(false)
+    expect(bulkEdit).toBeDisabled()
+  })
+
+  it('clicking "Show flags" toggles flagsVisible', () => {
+    renderPanel()
+    expect(screen.getByTestId('flags-visible')).toHaveTextContent('true')
+
+    fireEvent.click(screen.getByLabelText('Show flags'))
+    expect(screen.getByTestId('flags-visible')).toHaveTextContent('false')
+
+    fireEvent.click(screen.getByLabelText('Show flags'))
+    expect(screen.getByTestId('flags-visible')).toHaveTextContent('true')
+  })
+
+  it('enables "Bulk edit" once editable, and toggling it flips bulkEdit and shows the variable count', async () => {
+    await selectAndMakeEditable(() => fireEvent.click(screen.getByText('set variables')))
+
+    const bulkEdit = screen.getByLabelText(/^Bulk edit/) as HTMLInputElement
+    expect(bulkEdit).not.toBeDisabled()
+    expect(bulkEdit.checked).toBe(false)
+    expect(screen.getByTestId('bulk-edit')).toHaveTextContent('false')
+
+    fireEvent.click(bulkEdit)
+    expect(screen.getByTestId('bulk-edit')).toHaveTextContent('true')
+    expect(screen.getByText('Bulk edit (3 vars)')).toBeInTheDocument()
+  })
+
+  it('with bulk edit off, applying a code still calls applyFlag only for the selected variable', async () => {
+    const applyFlagSpy = vi.spyOn(apiClient, 'applyFlag').mockResolvedValue({ job_id: 'job-1' })
+    vi.spyOn(apiClient, 'jobStatus').mockResolvedValue({
+      status: 'done',
+      error: null,
+      result: { audit_id: 1 },
+    })
+    await selectAndMakeEditable(() => fireEvent.click(screen.getByText('set variables')))
+
+    fireEvent.click(screen.getByText('K-Suspect/Caution'))
+
+    await waitFor(() => expect(applyFlagSpy).toHaveBeenCalledTimes(1))
+    expect(applyFlagSpy).toHaveBeenCalledWith('FILE_A', 'temperature', 4, 14, 'K')
+  })
+
+  it('with bulk edit on, applying a code calls applyFlag once per selected variable with the same range', async () => {
+    const applyFlagSpy = vi.spyOn(apiClient, 'applyFlag').mockResolvedValue({ job_id: 'job-1' })
+    vi.spyOn(apiClient, 'jobStatus').mockResolvedValue({
+      status: 'done',
+      error: null,
+      result: { audit_id: 1 },
+    })
+    await selectAndMakeEditable(() => fireEvent.click(screen.getByText('set variables')))
+    fireEvent.click(screen.getByLabelText(/^Bulk edit/))
+
+    fireEvent.click(screen.getByText('K-Suspect/Caution'))
+
+    await waitFor(() => expect(applyFlagSpy).toHaveBeenCalledTimes(3))
+    expect(applyFlagSpy).toHaveBeenCalledWith('FILE_A', 'temperature', 4, 14, 'K')
+    expect(applyFlagSpy).toHaveBeenCalledWith('FILE_A', 'humidity', 4, 14, 'K')
+    expect(applyFlagSpy).toHaveBeenCalledWith('FILE_A', 'salinity', 4, 14, 'K')
+    // notifyFlagged fires once for the whole batch, not once per variable.
+    await waitFor(() => expect(screen.getByTestId('flag-applied-at')).toHaveTextContent('1'))
+  })
+
+  it('with bulk edit on but no variables selected, falls back to the selection\'s own variable', async () => {
+    const applyFlagSpy = vi.spyOn(apiClient, 'applyFlag').mockResolvedValue({ job_id: 'job-1' })
+    vi.spyOn(apiClient, 'jobStatus').mockResolvedValue({
+      status: 'done',
+      error: null,
+      result: { audit_id: 1 },
+    })
+    await selectAndMakeEditable()
+    fireEvent.click(screen.getByLabelText(/^Bulk edit/))
+
+    fireEvent.click(screen.getByText('K-Suspect/Caution'))
+
+    await waitFor(() => expect(applyFlagSpy).toHaveBeenCalledTimes(1))
+    expect(applyFlagSpy).toHaveBeenCalledWith('FILE_A', 'temperature', 4, 14, 'K')
+  })
+
+  it('with bulk edit on, a partial failure reports the failing variables and still notifies for the successes', async () => {
+    vi.spyOn(apiClient, 'applyFlag').mockImplementation((_file, varName) =>
+      Promise.resolve({ job_id: `job-${varName}` })
+    )
+    vi.spyOn(apiClient, 'jobStatus').mockImplementation((jobId: string) => {
+      if (jobId === 'job-humidity') {
+        return Promise.resolve({ status: 'failed', error: 'var not found', result: null })
+      }
+      return Promise.resolve({ status: 'done', error: null, result: { audit_id: 1 } })
+    })
+    await selectAndMakeEditable(() => fireEvent.click(screen.getByText('set variables')))
+    fireEvent.click(screen.getByLabelText(/^Bulk edit/))
+
+    fireEvent.click(screen.getByText('K-Suspect/Caution'))
+
+    await waitFor(() =>
+      expect(screen.getByRole('status').textContent).toContain('Flagged 2 of 3')
+    )
+    expect(screen.getByRole('status').textContent).toContain('humidity: var not found')
+    // The two successful variables (temperature, salinity) still count.
+    expect(screen.getByTestId('flag-applied-at')).toHaveTextContent('1')
   })
 })

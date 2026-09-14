@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { getMyAuditHistory, revertAuditEntry } from '../api/client'
+import { getAuditHistory, revertAuditEntry } from '../api/client'
 import type { AuditEntry } from '../api/types'
 import { useEditSession } from '../context/EditSessionContext'
+import { usePlotSelection } from '../context/PlotSelectionContext'
 
 const DEFAULT_WIDTH = 600
 const DEFAULT_HEIGHT = 420
@@ -10,8 +10,8 @@ const MIN_WIDTH = 360
 const MIN_HEIGHT = 240
 
 export function AuditHistoryModal({ onClose }: { onClose: () => void }) {
-  const navigate = useNavigate()
-  const { notifyFlagged } = useEditSession()
+  const { file } = usePlotSelection()
+  const { notifyFlagged, sessionOpenedAt } = useEditSession()
   const [entries, setEntries] = useState<AuditEntry[]>([])
   const [status, setStatus] = useState<string | null>(null)
   const [revertingId, setRevertingId] = useState<number | null>(null)
@@ -25,14 +25,18 @@ export function AuditHistoryModal({ onClose }: { onClose: () => void }) {
 
   const refresh = () => {
     setStatus(null)
-    getMyAuditHistory()
+    if (!file) {
+      setEntries([])
+      return
+    }
+    getAuditHistory(file, sessionOpenedAt ?? undefined)
       .then(setEntries)
       .catch((err) => {
         setStatus(`Error: ${err instanceof Error ? err.message : String(err)}`)
       })
   }
 
-  useEffect(refresh, [])
+  useEffect(refresh, [file, sessionOpenedAt])
 
   const handleRevert = async (id: number) => {
     setRevertingId(id)
@@ -115,39 +119,36 @@ export function AuditHistoryModal({ onClose }: { onClose: () => void }) {
         </button>
       </div>
       <div className="audit-history-modal-body">
-        <ul>
-          {entries.map((e) => (
-            <li key={e.id}>
-              <span className="audit-history-entry-details">
-                {e.timestamp} —{' '}
-                <a
-                  href={`/files?file=${encodeURIComponent(e.filename ?? '')}`}
-                  onClick={(ev) => {
-                    ev.preventDefault()
-                    navigate(`/files?file=${encodeURIComponent(e.filename ?? '')}`)
-                  }}
-                >
-                  {e.filename}
-                </a>{' '}
-                — {e.action} {e.var_name ?? ''} {e.old_value ?? ''} → {e.new_value ?? ''}
-              </span>
-              {e.action !== 'point_edit' && e.action !== 'bulk_edit' && e.action !== 'flag_edit'
-                ? null
-                : e.reverted ? (
-                    <span className="audit-history-reverted-label">Reverted</span>
-                  ) : (
-                    <button
-                      className="audit-history-revert-btn"
-                      onClick={() => handleRevert(e.id)}
-                      disabled={revertingId === e.id}
-                    >
-                      Revert
-                    </button>
-                  )}
-            </li>
-          ))}
-        </ul>
-        {entries.length === 0 && !status && <p>No edits yet.</p>}
+        {!file ? (
+          <p>Select a file to view its audit history.</p>
+        ) : (
+          <>
+            <ul>
+              {entries.map((e) => (
+                <li key={e.id}>
+                  <span className="audit-history-entry-details">
+                    {e.timestamp} — {e.username ?? `user #${e.user_id}`} — {e.action}{' '}
+                    {e.var_name ?? ''} {e.old_value ?? ''} → {e.new_value ?? ''}
+                  </span>
+                  {e.action !== 'point_edit' && e.action !== 'bulk_edit' && e.action !== 'flag_edit'
+                    ? null
+                    : e.reverted ? (
+                        <span className="audit-history-reverted-label">Reverted</span>
+                      ) : (
+                        <button
+                          className="audit-history-revert-btn"
+                          onClick={() => handleRevert(e.id)}
+                          disabled={revertingId === e.id}
+                        >
+                          Revert
+                        </button>
+                      )}
+                </li>
+              ))}
+            </ul>
+            {entries.length === 0 && !status && <p>No edits yet.</p>}
+          </>
+        )}
         {status && <p role="status">{status}</p>}
       </div>
       <div className="audit-history-modal-resize-handle" onMouseDown={handleResizeMouseDown} />

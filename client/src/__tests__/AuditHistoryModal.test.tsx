@@ -3,7 +3,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { AuditHistoryModal } from '../components/AuditHistoryModal'
 import { PlotSelectionProvider } from '../context/PlotSelectionContext'
-import { EditSessionProvider } from '../context/EditSessionContext'
+import { EditSessionProvider, useEditSession } from '../context/EditSessionContext'
 import { AuthProvider } from '../context/AuthContext'
 import { setToken } from '../api/client'
 import * as apiClient from '../api/client'
@@ -24,7 +24,7 @@ const entries: AuditEntry[] = [
   },
   {
     id: 2,
-    filename: 'shipx_2026-07-30',
+    filename: 'shipx_2026-08-01',
     user_id: 1,
     username: 'testuser',
     action: 'bulk_edit',
@@ -36,7 +36,7 @@ const entries: AuditEntry[] = [
   },
   {
     id: 3,
-    filename: 'shipx_2026-08-27',
+    filename: 'shipx_2026-08-01',
     user_id: 1,
     username: 'testuser',
     action: 'flag_edit',
@@ -48,18 +48,30 @@ const entries: AuditEntry[] = [
   },
 ]
 
+// Opens an edit session from inside the provider tree — AuditHistoryModal
+// scopes its fetch to sessionOpenedAt once one is open, same as AuditPanel.
+function Driver() {
+  const { openSession } = useEditSession()
+  return (
+    <button onClick={() => openSession()}>open session</button>
+  )
+}
+
 // AuditHistoryModal calls notifyFlagged() on a successful revert, which
 // requires EditSessionContext (and its own PlotSelectionContext/AuthContext
 // dependencies) in the tree — same wrapper shape as FlagsPanel's tests.
-function renderModal(onClose = vi.fn()) {
+// `route` puts a file (and optionally other params) in the URL, since
+// PlotSelectionContext derives `file` from search params.
+function renderModal(route = '/', onClose = vi.fn()) {
   setToken('tok')
   localStorage.setItem('svidat_role', JSON.stringify(['qca']))
   localStorage.setItem('svidat_username', 'testuser')
   const utils = render(
     <AuthProvider>
-      <MemoryRouter>
+      <MemoryRouter initialEntries={[route]}>
         <PlotSelectionProvider>
           <EditSessionProvider>
+            <Driver />
             <AuditHistoryModal onClose={onClose} />
           </EditSessionProvider>
         </PlotSelectionProvider>
@@ -74,46 +86,80 @@ describe('AuditHistoryModal', () => {
     vi.restoreAllMocks()
   })
 
-  it("fetches and lists the current user's audit entries with filename links", async () => {
-    vi.spyOn(apiClient, 'getMyAuditHistory').mockResolvedValue(entries)
-    renderModal()
+  it('shows a prompt and does not fetch when no file is selected', async () => {
+    const historySpy = vi.spyOn(apiClient, 'getAuditHistory')
+    renderModal('/')
 
-    await waitFor(() => expect(screen.getByText('shipx_2026-08-01')).toBeInTheDocument())
-    expect(screen.getByText('shipx_2026-08-01').closest('a')).toHaveAttribute(
-      'href',
-      '/files?file=shipx_2026-08-01'
+    expect(
+      screen.getByText('Select a file to view its audit history.')
+    ).toBeInTheDocument()
+    expect(historySpy).not.toHaveBeenCalled()
+  })
+
+  it('fetches entries scoped to the selected file with no session filter when no session is open', async () => {
+    const historySpy = vi.spyOn(apiClient, 'getAuditHistory').mockResolvedValue(entries)
+    renderModal('/files?file=shipx_2026-08-01')
+
+    await waitFor(() =>
+      expect(historySpy).toHaveBeenCalledWith('shipx_2026-08-01', undefined)
     )
-    expect(screen.getByText('shipx_2026-07-30')).toBeInTheDocument()
+    expect(screen.getByText(/salinity/)).toBeInTheDocument()
+  })
+
+  it('fetches entries scoped to the session once one is open', async () => {
+    vi.spyOn(apiClient, 'openSession').mockResolvedValue({
+      temp_path: '/tmp/x',
+      acquired_at: '2026-09-14T10:00:00',
+    })
+    const historySpy = vi.spyOn(apiClient, 'getAuditHistory').mockResolvedValue(entries)
+    renderModal('/files?file=shipx_2026-08-01')
+    await waitFor(() =>
+      expect(historySpy).toHaveBeenCalledWith('shipx_2026-08-01', undefined)
+    )
+
+    fireEvent.click(screen.getByText('open session'))
+
+    await waitFor(() =>
+      expect(historySpy).toHaveBeenCalledWith('shipx_2026-08-01', '2026-09-14T10:00:00')
+    )
+  })
+
+  it('no longer shows a filename link on each row (scope is implied by the single active file)', async () => {
+    vi.spyOn(apiClient, 'getAuditHistory').mockResolvedValue(entries)
+    renderModal('/files?file=shipx_2026-08-01')
+
+    await waitFor(() => expect(screen.getByText(/salinity/)).toBeInTheDocument())
+    expect(screen.queryByText('shipx_2026-08-01')).not.toBeInTheDocument()
   })
 
   it('shows Revert for a non-reverted point_edit and Reverted for an already-reverted entry', async () => {
-    vi.spyOn(apiClient, 'getMyAuditHistory').mockResolvedValue(entries)
-    renderModal()
+    vi.spyOn(apiClient, 'getAuditHistory').mockResolvedValue(entries)
+    renderModal('/files?file=shipx_2026-08-01')
 
     await waitFor(() => expect(screen.getAllByText('Revert')[0]).toBeInTheDocument())
     expect(screen.getByText('Reverted')).toBeInTheDocument()
   })
 
   it('shows Revert for a non-reverted flag_edit entry', async () => {
-    vi.spyOn(apiClient, 'getMyAuditHistory').mockResolvedValue(entries)
-    renderModal()
+    vi.spyOn(apiClient, 'getAuditHistory').mockResolvedValue(entries)
+    renderModal('/files?file=shipx_2026-08-01')
 
     await waitFor(() => expect(screen.getAllByText('Revert')).toHaveLength(2))
   })
 
-  it('shows an empty-state message when there are no entries', async () => {
-    vi.spyOn(apiClient, 'getMyAuditHistory').mockResolvedValue([])
-    renderModal()
+  it('shows an empty-state message when a file is selected but has no entries', async () => {
+    vi.spyOn(apiClient, 'getAuditHistory').mockResolvedValue([])
+    renderModal('/files?file=shipx_2026-08-01')
 
     await waitFor(() => expect(screen.getByText('No edits yet.')).toBeInTheDocument())
   })
 
   it('reverts an entry and refetches on success', async () => {
-    const getSpy = vi.spyOn(apiClient, 'getMyAuditHistory').mockResolvedValue(entries)
+    const getSpy = vi.spyOn(apiClient, 'getAuditHistory').mockResolvedValue(entries)
     const revertSpy = vi
       .spyOn(apiClient, 'revertAuditEntry')
       .mockResolvedValue({ status: 'reverted' })
-    renderModal()
+    renderModal('/files?file=shipx_2026-08-01')
     await waitFor(() => expect(screen.getAllByText('Revert')[0]).toBeInTheDocument())
 
     fireEvent.click(screen.getAllByText('Revert')[0])
@@ -123,11 +169,11 @@ describe('AuditHistoryModal', () => {
   })
 
   it('shows an inline error when revert fails', async () => {
-    vi.spyOn(apiClient, 'getMyAuditHistory').mockResolvedValue(entries)
+    vi.spyOn(apiClient, 'getAuditHistory').mockResolvedValue(entries)
     vi.spyOn(apiClient, 'revertAuditEntry').mockRejectedValue(
       new Error('409: no active edit lock for this file')
     )
-    renderModal()
+    renderModal('/files?file=shipx_2026-08-01')
     await waitFor(() => expect(screen.getAllByText('Revert')[0]).toBeInTheDocument())
 
     fireEvent.click(screen.getAllByText('Revert')[0])
@@ -140,9 +186,7 @@ describe('AuditHistoryModal', () => {
   })
 
   it('calls onClose when the close button is clicked', async () => {
-    vi.spyOn(apiClient, 'getMyAuditHistory').mockResolvedValue([])
-    const { onClose } = renderModal()
-    await waitFor(() => expect(screen.getByText('No edits yet.')).toBeInTheDocument())
+    const { onClose } = renderModal('/')
 
     fireEvent.click(screen.getByLabelText('Close'))
 
@@ -150,9 +194,7 @@ describe('AuditHistoryModal', () => {
   })
 
   it('drags to a new position via the header', async () => {
-    vi.spyOn(apiClient, 'getMyAuditHistory').mockResolvedValue([])
-    const { container } = renderModal()
-    await waitFor(() => expect(screen.getByText('No edits yet.')).toBeInTheDocument())
+    const { container } = renderModal('/')
 
     const modal = container.querySelector('.audit-history-modal') as HTMLElement
     const header = container.querySelector('.audit-history-modal-header') as HTMLElement
@@ -168,9 +210,7 @@ describe('AuditHistoryModal', () => {
   })
 
   it('clamps drag position so the modal cannot be dragged fully off-screen', async () => {
-    vi.spyOn(apiClient, 'getMyAuditHistory').mockResolvedValue([])
-    const { container } = renderModal()
-    await waitFor(() => expect(screen.getByText('No edits yet.')).toBeInTheDocument())
+    const { container } = renderModal('/')
 
     const modal = container.querySelector('.audit-history-modal') as HTMLElement
     const header = container.querySelector('.audit-history-modal-header') as HTMLElement
@@ -193,9 +233,7 @@ describe('AuditHistoryModal', () => {
   })
 
   it('does not move once the drag ends (mouseup detaches the listeners)', async () => {
-    vi.spyOn(apiClient, 'getMyAuditHistory').mockResolvedValue([])
-    const { container } = renderModal()
-    await waitFor(() => expect(screen.getByText('No edits yet.')).toBeInTheDocument())
+    const { container } = renderModal('/')
 
     const modal = container.querySelector('.audit-history-modal') as HTMLElement
     const header = container.querySelector('.audit-history-modal-header') as HTMLElement
@@ -212,9 +250,7 @@ describe('AuditHistoryModal', () => {
   })
 
   it('resizes via the corner handle, clamped to a minimum size', async () => {
-    vi.spyOn(apiClient, 'getMyAuditHistory').mockResolvedValue([])
-    const { container } = renderModal()
-    await waitFor(() => expect(screen.getByText('No edits yet.')).toBeInTheDocument())
+    const { container } = renderModal('/')
 
     const modal = container.querySelector('.audit-history-modal') as HTMLElement
     const handle = container.querySelector('.audit-history-modal-resize-handle') as HTMLElement

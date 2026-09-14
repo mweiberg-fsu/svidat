@@ -90,36 +90,33 @@ describe('Sidebar', () => {
 
   it('opens the audit history modal when the link is clicked, and closes it', async () => {
     vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
-    vi.spyOn(apiClient, 'getMyAuditHistory').mockResolvedValue([])
     renderSidebar('qca')
-    expect(screen.queryByText('No edits yet.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Select a file to view its audit history.')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByText('Audit History'))
 
-    await waitFor(() => expect(screen.getByText('No edits yet.')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Select a file to view its audit history.')).toBeInTheDocument())
 
     fireEvent.click(screen.getByLabelText('Close'))
 
-    expect(screen.queryByText('No edits yet.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Select a file to view its audit history.')).not.toBeInTheDocument()
   })
 
   it('closes the audit history modal when the documentation link is clicked', async () => {
     vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
-    vi.spyOn(apiClient, 'getMyAuditHistory').mockResolvedValue([])
     renderSidebar('qca')
 
     fireEvent.click(screen.getByText('Audit History'))
-    await waitFor(() => expect(screen.getByText('No edits yet.')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Select a file to view its audit history.')).toBeInTheDocument())
 
     fireEvent.click(screen.getByText('Documentation'))
 
     expect(screen.getByRole('tab', { name: 'Overview' })).toBeInTheDocument()
-    expect(screen.queryByText('No edits yet.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Select a file to view its audit history.')).not.toBeInTheDocument()
   })
 
   it('closes the documentation modal when the audit history link is clicked', async () => {
     vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
-    vi.spyOn(apiClient, 'getMyAuditHistory').mockResolvedValue([])
     renderSidebar('qca')
 
     fireEvent.click(screen.getByText('Documentation'))
@@ -127,7 +124,7 @@ describe('Sidebar', () => {
 
     fireEvent.click(screen.getByText('Audit History'))
 
-    await waitFor(() => expect(screen.getByText('No edits yet.')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Select a file to view its audit history.')).toBeInTheDocument())
     expect(screen.queryByRole('tab', { name: 'Overview' })).not.toBeInTheDocument()
   })
 

@@ -24,6 +24,8 @@ interface EditSessionState {
   notifyFlagged: () => void
   flagsVisible: boolean
   toggleFlagsVisible: () => void
+  bulkEdit: boolean
+  toggleBulkEdit: () => void
 }
 
 const EditSessionContext = createContext<EditSessionState | undefined>(undefined)
@@ -37,6 +39,7 @@ export function EditSessionProvider({ children }: { children: ReactNode }) {
   const [flagSelection, setFlagSelection] = useState<FlagSelection | null>(null)
   const [flagAppliedAt, setFlagAppliedAt] = useState(0)
   const [flagsVisible, setFlagsVisible] = useState(true)
+  const [bulkEdit, setBulkEdit] = useState(false)
 
   const canEdit = roles.includes('qca')
   const editable = sessionOpen && canEdit
@@ -50,6 +53,7 @@ export function EditSessionProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     setSessionOpen(false)
     setSessionError(null)
+    setBulkEdit(false)
     openingRef.current = false
   }, [file])
 
@@ -104,6 +108,7 @@ export function EditSessionProvider({ children }: { children: ReactNode }) {
 
   const notifyFlagged = () => setFlagAppliedAt((v) => v + 1)
   const toggleFlagsVisible = () => setFlagsVisible((v) => !v)
+  const toggleBulkEdit = () => setBulkEdit((v) => !v)
 
   return (
     <EditSessionContext.Provider
@@ -120,6 +125,8 @@ export function EditSessionProvider({ children }: { children: ReactNode }) {
         notifyFlagged,
         flagsVisible,
         toggleFlagsVisible,
+        bulkEdit,
+        toggleBulkEdit,
       }}
     >
       {children}

@@ -19,6 +19,8 @@ function Consumer() {
     setFlagSelection,
     flagAppliedAt,
     notifyFlagged,
+    bulkEdit,
+    toggleBulkEdit,
   } = useEditSession()
   return (
     <div>
@@ -28,6 +30,7 @@ function Consumer() {
       <span>sessionError:{sessionError ?? 'none'}</span>
       <span>flagSelection:{flagSelection ? flagSelection.rangeLabel : 'none'}</span>
       <span>flagAppliedAt:{flagAppliedAt}</span>
+      <span>bulkEdit:{String(bulkEdit)}</span>
       <button onClick={() => openSession()}>open</button>
       <button onClick={() => closeSession()}>close</button>
       <button
@@ -39,6 +42,7 @@ function Consumer() {
       </button>
       <button onClick={() => setFlagSelection(null)}>clear</button>
       <button onClick={() => notifyFlagged()}>notify</button>
+      <button onClick={() => toggleBulkEdit()}>toggle bulk</button>
     </div>
   )
 }
@@ -319,5 +323,25 @@ describe('EditSessionContext', () => {
 
     fireEvent.click(screen.getByText('set-flag-sibling'))
     expect(screen.getByTestId('flag-display-sibling')).toHaveTextContent('flagSelection:01:00–02:00')
+  })
+
+  it('bulkEdit defaults to false; toggleBulkEdit flips it', () => {
+    renderWithRole('qca')
+    expect(screen.getByText('bulkEdit:false')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('toggle bulk'))
+    expect(screen.getByText('bulkEdit:true')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('toggle bulk'))
+    expect(screen.getByText('bulkEdit:false')).toBeInTheDocument()
+  })
+
+  it('changing the file resets bulkEdit to false', async () => {
+    renderWithRole('qca')
+    fireEvent.click(screen.getByText('toggle bulk'))
+    expect(screen.getByText('bulkEdit:true')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('set-file-b'))
+    await waitFor(() => expect(screen.getByText('bulkEdit:false')).toBeInTheDocument())
   })
 })

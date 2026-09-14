@@ -59,13 +59,18 @@ def open_session(
 
     # All validation passed — safe to acquire the lock and perform the copy.
     if existing_lock is None:
-        db.add(Lock(filename=filename, user_id=user.id, acquired_at=datetime.utcnow()))
+        lock = Lock(filename=filename, user_id=user.id, acquired_at=datetime.utcnow())
+        db.add(lock)
         db.commit()
+        db.refresh(lock)
+        acquired_at = lock.acquired_at
+    else:
+        acquired_at = existing_lock.acquired_at
 
     if need_copy:
         storage.atomic_copy(src, dst)
 
-    return {"temp_path": str(dst)}
+    return {"temp_path": str(dst), "acquired_at": acquired_at.isoformat()}
 
 
 @router.post("/{filename}/close")

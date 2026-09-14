@@ -138,102 +138,160 @@ export function AdminUsersPage() {
   }
 
   return (
-    <div>
+    <div className="admin-page">
       <h1>Users</h1>
-      <ul>
-        {users.map((u) => (
-          <li key={u.id}>
-            {editingId === u.id ? (
-              <>
-                {u.username}
-                {ROLE_OPTIONS.map((r) => (
-                  <label key={r}>
-                    <input
-                      type="checkbox"
-                      checked={editRoles.includes(r)}
-                      onChange={() => toggleEditRole(r)}
+
+      <section className="admin-card">
+        <h2>All users</h2>
+        <ul className="admin-user-list">
+          {users.map((u) => (
+            <li key={u.id} className="admin-user-row">
+              {editingId === u.id ? (
+                <>
+                  <span className="admin-user-name">{u.username}</span>
+                  <div className="admin-role-checks">
+                    {ROLE_OPTIONS.map((r) => (
+                      <label key={r} className="admin-role-check">
+                        <input
+                          type="checkbox"
+                          checked={editRoles.includes(r)}
+                          onChange={() => toggleEditRole(r)}
+                          disabled={editSubmitting}
+                        />
+                        {r}
+                      </label>
+                    ))}
+                  </div>
+                  <div className="admin-user-actions">
+                    <button
+                      className="admin-btn admin-btn-primary"
+                      onClick={() => saveEdit(u.id)}
                       disabled={editSubmitting}
-                    />
-                    {r}
-                  </label>
-                ))}
-                <button onClick={() => saveEdit(u.id)} disabled={editSubmitting}>
-                  Save
-                </button>
-                <button onClick={cancelEdit} disabled={editSubmitting}>
-                  Cancel
-                </button>
-              </>
-            ) : (
-              <>
-                {u.username} ({u.roles.length ? u.roles.join(', ') : 'view only'})
-                <button onClick={() => startEdit(u)} disabled={submitting}>
-                  Edit
-                </button>
-                <button onClick={() => handleDelete(u.id)} disabled={submitting}>
-                  Delete
-                </button>
-              </>
-            )}
-          </li>
-        ))}
-      </ul>
+                    >
+                      Save
+                    </button>
+                    <button className="admin-btn" onClick={cancelEdit} disabled={editSubmitting}>
+                      Cancel
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <span className="admin-user-name">{u.username}</span>
+                  <div className="admin-role-badges">
+                    {u.roles.length ? (
+                      u.roles.map((r) => (
+                        <span key={r} className="admin-role-badge">
+                          {r}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="admin-role-badge admin-role-badge-muted">view only</span>
+                    )}
+                  </div>
+                  <div className="admin-user-actions">
+                    <button className="admin-btn" onClick={() => startEdit(u)} disabled={submitting}>
+                      Edit
+                    </button>
+                    <button
+                      className="admin-btn admin-btn-danger"
+                      onClick={() => handleDelete(u.id)}
+                      disabled={submitting}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </>
+              )}
+            </li>
+          ))}
+        </ul>
+      </section>
 
-      <h2>Add user</h2>
-      <label>
-        Username
-        <input value={username} onChange={(e) => setUsername(e.target.value)} />
-      </label>
-      <label>
-        Password
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-      </label>
-      {ROLE_OPTIONS.map((r) => (
-        <label key={r}>
-          <input
-            type="checkbox"
-            checked={newRoles.includes(r)}
-            onChange={() => toggleNewRole(r)}
-          />
-          {r}
-        </label>
-      ))}
-      <button onClick={handleCreate} disabled={submitting}>
-        Create user
-      </button>
+      <section className="admin-card">
+        <h2>Add user</h2>
+        <div className="admin-form-row">
+          <label className="admin-field">
+            Username
+            <input value={username} onChange={(e) => setUsername(e.target.value)} />
+          </label>
+          <label className="admin-field">
+            Password
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </label>
+        </div>
+        <div className="admin-role-checks">
+          {ROLE_OPTIONS.map((r) => (
+            <label key={r} className="admin-role-check">
+              <input
+                type="checkbox"
+                checked={newRoles.includes(r)}
+                onChange={() => toggleNewRole(r)}
+              />
+              {r}
+            </label>
+          ))}
+        </div>
+        <button className="admin-btn admin-btn-primary" onClick={handleCreate} disabled={submitting}>
+          Create user
+        </button>
 
-      {status && <p role="status">{status}</p>}
+        {status && (
+          <p className={`admin-status ${status.startsWith('Error') ? 'admin-status-error' : ''}`}>
+            {status}
+          </p>
+        )}
+      </section>
 
-      <h2>OAuth allowed email domains</h2>
-      <p>Empty list = any Google/Microsoft account may sign in and auto-create an account.</p>
-      <ul>
-        {allowedDomains.map((d) => (
-          <li key={d}>
-            {d}
-            <button onClick={() => handleRemoveDomain(d)} disabled={oauthSubmitting}>
-              Remove
-            </button>
-          </li>
-        ))}
-      </ul>
-      <label>
-        New domain
-        <input
-          value={domainInput}
-          onChange={(e) => setDomainInput(e.target.value)}
-          placeholder="fsu.edu"
-          disabled={oauthSubmitting}
-        />
-      </label>
-      <button onClick={handleAddDomain} disabled={oauthSubmitting}>
-        Add domain
-      </button>
+      <section className="admin-card">
+        <h2>OAuth allowed email domains</h2>
+        <p className="admin-hint">
+          Empty list = any Google/Microsoft account may sign in and auto-create an account.
+        </p>
+        <ul className="admin-domain-list">
+          {allowedDomains.map((d) => (
+            <li key={d} className="admin-domain-chip">
+              {d}
+              <button
+                className="admin-domain-remove"
+                onClick={() => handleRemoveDomain(d)}
+                disabled={oauthSubmitting}
+                aria-label={`Remove ${d}`}
+              >
+                ×
+              </button>
+            </li>
+          ))}
+        </ul>
+        <div className="admin-form-row">
+          <label className="admin-field">
+            New domain
+            <input
+              value={domainInput}
+              onChange={(e) => setDomainInput(e.target.value)}
+              placeholder="fsu.edu"
+              disabled={oauthSubmitting}
+            />
+          </label>
+          <button
+            className="admin-btn admin-btn-primary admin-btn-inline"
+            onClick={handleAddDomain}
+            disabled={oauthSubmitting}
+          >
+            Add domain
+          </button>
+        </div>
 
-      {oauthStatus && <p role="status">{oauthStatus}</p>}
+        {oauthStatus && (
+          <p className={`admin-status ${oauthStatus.startsWith('Error') ? 'admin-status-error' : ''}`}>
+            {oauthStatus}
+          </p>
+        )}
+      </section>
     </div>
   )
 }

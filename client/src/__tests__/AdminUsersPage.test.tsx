@@ -36,7 +36,7 @@ describe('AdminUsersPage OAuth domain allowlist', () => {
     render(<AdminUsersPage />)
     await screen.findByText('fsu.edu')
 
-    fireEvent.click(screen.getByText('Remove'))
+    fireEvent.click(screen.getByRole('button', { name: 'Remove fsu.edu' }))
 
     await waitFor(() => expect(client.updateOAuthSettings).toHaveBeenCalledWith([]))
   })
@@ -56,7 +56,7 @@ describe('AdminUsersPage OAuth domain allowlist', () => {
 
     await waitFor(() => expect(screen.getByText('Add domain')).toBeDisabled())
     expect(screen.getByPlaceholderText('fsu.edu')).toBeDisabled()
-    expect(screen.getByText('Remove')).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Remove fsu.edu' })).toBeDisabled()
 
     // a second click while in flight must not fire a second request
     fireEvent.click(screen.getByText('Add domain'))
@@ -144,7 +144,9 @@ describe('AdminUsersPage role management', () => {
 
     await waitFor(() => expect(client.updateUserRoles).toHaveBeenCalledWith(7, ['admin', 'qca']))
     expect(screen.queryByText('Save')).not.toBeInTheDocument()
-    expect(await screen.findByText(/admin, qca/)).toBeInTheDocument()
+    const row = (await screen.findByText(/existinguser/)).closest('li')
+    expect(row).toHaveTextContent('admin')
+    expect(row).toHaveTextContent('qca')
   })
 
   it('Cancel discards checkbox changes and exits edit mode without saving', async () => {

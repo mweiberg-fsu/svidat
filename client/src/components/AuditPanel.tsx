@@ -10,21 +10,21 @@ export function AuditPanel({
   filename: string
   refreshSignal: number
 }) {
-  const { notifyFlagged } = useEditSession()
+  const { notifyFlagged, sessionOpenedAt } = useEditSession()
   const [entries, setEntries] = useState<AuditEntry[]>([])
   const [status, setStatus] = useState<string | null>(null)
   const [revertingId, setRevertingId] = useState<number | null>(null)
 
   const refresh = () => {
     setStatus(null)
-    getAuditHistory(filename)
+    getAuditHistory(filename, sessionOpenedAt ?? undefined)
       .then(setEntries)
       .catch((err) => {
         setStatus(`Error: ${err instanceof Error ? err.message : String(err)}`)
       })
   }
 
-  useEffect(refresh, [filename, refreshSignal])
+  useEffect(refresh, [filename, refreshSignal, sessionOpenedAt])
 
   const handleRevert = async (id: number) => {
     setRevertingId(id)
@@ -41,7 +41,7 @@ export function AuditPanel({
 
   return (
     <div>
-      <h2>Audit history</h2>
+      <h2>Audit history (this session)</h2>
       <ul>
         {entries.map((e) => (
           <li key={e.id}>

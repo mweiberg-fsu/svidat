@@ -94,7 +94,7 @@ describe('FilesPage', () => {
 
     await waitFor(() => expect(screen.getByText('Close session')).toBeInTheDocument())
     expect(screen.getByText('Edit')).toBeInTheDocument()
-    expect(screen.getByText('Audit history')).toBeInTheDocument()
+    expect(screen.getByText('Audit history (this session)')).toBeInTheDocument()
   })
 
   it('closes a session and hides the edit form again', async () => {
@@ -153,7 +153,7 @@ describe('FilesPage', () => {
     fireEvent.click(screen.getByTestId('set-file'))
     await waitFor(() => expect(apiClient.getFileMetadata).toHaveBeenCalledWith('FILE_A'))
     fireEvent.click(screen.getByTestId('open-session'))
-    await waitFor(() => expect(screen.getByText('Audit history')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Audit history (this session)')).toBeInTheDocument())
     await waitFor(() => expect(getAuditHistorySpy).toHaveBeenCalledTimes(1))
 
     fireEvent.click(screen.getByText('notify flagged'))

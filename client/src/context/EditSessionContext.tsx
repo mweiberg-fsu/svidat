@@ -13,6 +13,7 @@ export interface FlagSelection {
 
 interface EditSessionState {
   sessionOpen: boolean
+  sessionOpenedAt: string | null
   canEdit: boolean
   editable: boolean
   sessionError: string | null
@@ -35,6 +36,7 @@ export function EditSessionProvider({ children }: { children: ReactNode }) {
   const { file, variables } = usePlotSelection()
   const [searchParams] = useSearchParams()
   const [sessionOpen, setSessionOpen] = useState(false)
+  const [sessionOpenedAt, setSessionOpenedAt] = useState<string | null>(null)
   const [sessionError, setSessionError] = useState<string | null>(null)
   const [flagSelection, setFlagSelection] = useState<FlagSelection | null>(null)
   const [flagAppliedAt, setFlagAppliedAt] = useState(0)
@@ -52,6 +54,7 @@ export function EditSessionProvider({ children }: { children: ReactNode }) {
   // swallowed by the guard in handleOpenSession.
   useEffect(() => {
     setSessionOpen(false)
+    setSessionOpenedAt(null)
     setSessionError(null)
     setBulkEdit(false)
     openingRef.current = false
@@ -84,7 +87,8 @@ export function EditSessionProvider({ children }: { children: ReactNode }) {
     setSessionError(null)
     try {
       const source = searchParams.get('source') ?? 'raw'
-      await openSession(file, source)
+      const result = await openSession(file, source)
+      setSessionOpenedAt(result.acquired_at ?? null)
       setSessionOpen(true)
     } catch (e) {
       setSessionError(e instanceof Error ? e.message : 'failed to open session')
@@ -100,6 +104,7 @@ export function EditSessionProvider({ children }: { children: ReactNode }) {
     try {
       await closeSession(file)
       setSessionOpen(false)
+      setSessionOpenedAt(null)
       setFlagSelection(null)
     } catch (e) {
       setSessionError(e instanceof Error ? e.message : 'failed to close session')
@@ -114,6 +119,7 @@ export function EditSessionProvider({ children }: { children: ReactNode }) {
     <EditSessionContext.Provider
       value={{
         sessionOpen,
+        sessionOpenedAt,
         canEdit,
         editable,
         sessionError,

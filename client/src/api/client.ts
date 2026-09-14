@@ -128,8 +128,10 @@ export const saveDraft = (filename: string) =>
   apiFetch('/save', { method: 'POST', body: JSON.stringify({ filename }) }).then((r) => r.json())
 export const publishFile = (filename: string) =>
   apiFetch('/publish', { method: 'POST', body: JSON.stringify({ filename }) }).then((r) => r.json())
-export const getAuditHistory = (filename: string) =>
-  apiFetch(`/audit/${encodeURIComponent(filename)}`).then((r) => r.json())
+export const getAuditHistory = (filename: string, since?: string) => {
+  const params = since ? `?${new URLSearchParams({ since }).toString()}` : ''
+  return apiFetch(`/audit/${encodeURIComponent(filename)}${params}`).then((r) => r.json())
+}
 export const revertAuditEntry = (auditId: number) =>
   apiFetch(`/audit/${auditId}/revert`, { method: 'POST' }).then((r) => r.json())
 export const getMyAuditHistory = () => apiFetch('/audit').then((r) => r.json())

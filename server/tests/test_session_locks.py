@@ -11,6 +11,24 @@ def test_open_session_copies_raw_to_temp(client, auth_header, synthetic_nc):
     assert temp.exists()
 
 
+def test_open_session_returns_acquired_at(client, auth_header, synthetic_nc):
+    synthetic_nc("shipx_2026-09-07")
+    headers = auth_header("editor_acq1", is_qca=True)
+
+    resp = client.post("/session/shipx_2026-09-07/open", params={"source": "raw"}, headers=headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "acquired_at" in body
+    # Re-opening the same still-held session must return the original
+    # acquired_at, not a new timestamp — the frontend uses this value to
+    # scope "current session" audit history, so it must stay stable across
+    # a page refresh while the lock is held.
+    first_acquired_at = body["acquired_at"]
+    resp2 = client.post("/session/shipx_2026-09-07/open", params={"source": "raw"}, headers=headers)
+    assert resp2.status_code == 200
+    assert resp2.json()["acquired_at"] == first_acquired_at
+
+
 def test_second_user_blocked_while_locked(client, auth_header, synthetic_nc):
     synthetic_nc("shipx_2026-08-06")
     headers_a = auth_header("editor2", is_qca=True)

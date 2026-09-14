@@ -1,4 +1,5 @@
 import json
+from datetime import datetime
 from typing import Optional
 
 import numpy as np
@@ -48,14 +49,25 @@ def my_history(db: Session = Depends(get_db), user: User = Depends(get_current_u
 
 @router.get("/{filename}")
 def history(
-    filename: str, db: Session = Depends(get_db), _: User = Depends(get_current_user)
+    filename: str,
+    since: Optional[str] = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
-    entries = (
-        db.query(AuditLog)
-        .filter(AuditLog.filename == filename)
-        .order_by(AuditLog.timestamp.asc())
-        .all()
-    )
+    query = db.query(AuditLog).filter(AuditLog.filename == filename)
+    if since is not None:
+        try:
+            since_dt = datetime.fromisoformat(since)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="invalid since timestamp"
+            )
+        # Scoping to "this session" also means "this user" — only the lock
+        # holder can write entries during an open session, so filtering to
+        # the current user is redundant in practice but makes the intent
+        # explicit and keeps this query safe if that invariant ever changes.
+        query = query.filter(AuditLog.timestamp >= since_dt, AuditLog.user_id == user.id)
+    entries = query.order_by(AuditLog.timestamp.asc()).all()
     user_ids = {e.user_id for e in entries}
     usernames = {
         u.id: u.username

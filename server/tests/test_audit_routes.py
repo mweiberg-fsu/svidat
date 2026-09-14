@@ -85,6 +85,60 @@ def test_my_history_empty_for_a_user_with_no_edits(client, auth_header):
     assert resp.json() == []
 
 
+def test_history_since_filters_to_current_user_and_time(client, auth_header, synthetic_nc):
+    synthetic_nc("shipx_2026-09-05")
+    mine = auth_header("audituser16", is_qca=True)
+    other = auth_header("audituser17", is_qca=True)
+
+    # First session: one edit, then closed — this is the "earlier session"
+    # entry that a `since` filter scoped to a later session must exclude.
+    client.post("/session/shipx_2026-09-05/open", params={"source": "raw"}, headers=mine)
+    client.post(
+        "/edit/point",
+        json={"filename": "shipx_2026-09-05", "var_name": "temperature", "indices": [0], "value": 1.0},
+        headers=mine,
+    )
+    client.post("/session/shipx_2026-09-05/close", headers=mine)
+
+    # Second session (same user, new lock) — its acquired_at is what the
+    # frontend passes as `since` to scope the sidebar panel to "this session".
+    reopened = client.post(
+        "/session/shipx_2026-09-05/open", params={"source": "raw"}, headers=mine
+    ).json()
+    since = reopened["acquired_at"]
+    client.post(
+        "/edit/point",
+        json={"filename": "shipx_2026-09-05", "var_name": "temperature", "indices": [1], "value": 2.0},
+        headers=mine,
+    )
+    client.post("/session/shipx_2026-09-05/close", headers=mine)
+
+    # A different user's later edit on the same file must not leak in either.
+    client.post("/session/shipx_2026-09-05/open", params={"source": "raw"}, headers=other)
+    client.post(
+        "/edit/point",
+        json={"filename": "shipx_2026-09-05", "var_name": "temperature", "indices": [2], "value": 3.0},
+        headers=other,
+    )
+
+    resp = client.get("/audit/shipx_2026-09-05", params={"since": since}, headers=mine)
+    assert resp.status_code == 200
+    entries = resp.json()
+    # Only the second session's own entry — excludes the first session's
+    # earlier edit and the other user's later edit.
+    assert len(entries) == 1
+    assert entries[0]["new_value"] == 2.0
+
+
+def test_history_since_invalid_timestamp_returns_400(client, auth_header, synthetic_nc):
+    synthetic_nc("shipx_2026-09-06")
+    headers = auth_header("audituser18", is_qca=True)
+    resp = client.get(
+        "/audit/shipx_2026-09-06", params={"since": "not-a-timestamp"}, headers=headers
+    )
+    assert resp.status_code == 400
+
+
 def test_audit_and_audit_filename_routes_do_not_collide(client, auth_header, synthetic_nc):
     synthetic_nc("audit")  # a file literally named "audit" — the trickiest
     # possible collision case between GET /audit and GET /audit/{filename}.

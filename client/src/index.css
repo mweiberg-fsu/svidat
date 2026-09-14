@@ -526,6 +526,30 @@ code {
   gap: 10px;
 }
 
+.sidebar-flags-panel-modes {
+  display: flex;
+  gap: 14px;
+  align-self: flex-start;
+}
+
+.sidebar-flags-panel-modes label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-h);
+  cursor: pointer;
+}
+
+.sidebar-flags-panel-modes input[type='checkbox'] {
+  margin: 0;
+  cursor: pointer;
+}
+
+.sidebar-flags-panel-modes input[type='checkbox']:disabled {
+  cursor: not-allowed;
+}
+
 .sidebar-flags-panel-status {
   font-size: 11px;
   text-transform: uppercase;

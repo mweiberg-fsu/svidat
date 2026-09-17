@@ -1,10 +1,11 @@
-import type { CurrentUser, Catalog, OAuthSettings, VariableDataResponse } from './types'
+import type { CurrentUser, Catalog, OAuthSettings, TempSessionEntry, VariableDataResponse } from './types'
 
 const BASE_URL = 'http://localhost:8000'
 const TOKEN_KEY = 'svidat_token'
 export const ROLE_KEY = 'svidat_role'
 export const USERNAME_KEY = 'svidat_username'
 export const ID_KEY = 'svidat_id'
+export const RESUME_CHECKED_KEY = 'svidat_resume_checked'
 
 export function setToken(token: string): void {
   localStorage.setItem(TOKEN_KEY, token)
@@ -99,6 +100,12 @@ export const openSession = (filename: string, source: string, sourceUsername?: s
 }
 export const closeSession = (filename: string) =>
   apiFetch(`/session/${encodeURIComponent(filename)}/close`, { method: 'POST' }).then((r) =>
+    r.json()
+  )
+export const getMySessions = (): Promise<TempSessionEntry[]> =>
+  apiFetch('/session/mine').then((r) => r.json())
+export const discardSession = (filename: string) =>
+  apiFetch(`/session/${encodeURIComponent(filename)}/discard`, { method: 'POST' }).then((r) =>
     r.json()
   )
 export const pointEdit = (

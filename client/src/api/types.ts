@@ -32,6 +32,12 @@ export interface AuditEntry {
   timestamp: string
 }
 
+export interface TempSessionEntry {
+  filename: string
+  created_at: string
+  last_edited_at: string | null
+}
+
 export interface JobStatusResponse {
   status: 'pending' | 'running' | 'done' | 'failed'
   error: string | null

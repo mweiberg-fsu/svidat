@@ -353,6 +353,41 @@ describe('Sidebar', () => {
     await waitFor(() => expect(screen.getByText('Plots')).toHaveClass('active'))
   })
 
+  it('confirms before navigating when there are unresolved resumable sessions, and only navigates if confirmed', async () => {
+    vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
+    vi.spyOn(apiClient, 'getMySessions').mockResolvedValue([
+      { filename: 'shipx_2026-08-01', created_at: '2026-08-01T10:00:00', last_edited_at: '2026-08-01T10:05:00' },
+    ])
+    localStorage.clear()
+    setToken('tok')
+    localStorage.setItem('svidat_role', JSON.stringify(['qca']))
+    localStorage.setItem('svidat_username', 'testuser')
+    render(
+      <AuthProvider>
+        <MemoryRouter initialEntries={['/files']}>
+          <PlotSelectionProvider>
+            <EditSessionProvider>
+              <Sidebar />
+            </EditSessionProvider>
+          </PlotSelectionProvider>
+        </MemoryRouter>
+      </AuthProvider>
+    )
+    await waitFor(() => expect(screen.getByText('Continue editing?')).toBeInTheDocument())
+
+    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
+    fireEvent.click(screen.getByText('Profile'))
+    expect(confirmSpy).toHaveBeenCalledWith(
+      'You have unresolved edits to continue or discard. Leave anyway?'
+    )
+    // Cancelled — still on /files.
+    expect(screen.getByText('Plots')).toHaveClass('active')
+
+    confirmSpy.mockReturnValue(true)
+    fireEvent.click(screen.getByText('Profile'))
+    await waitFor(() => expect(screen.getByText('Profile')).toHaveClass('active'))
+  })
+
   it('does not show the resume prompt when there are no resumable sessions', async () => {
     vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
     renderSidebar('qca')

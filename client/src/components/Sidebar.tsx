@@ -68,6 +68,11 @@ export function Sidebar() {
         return
       }
     }
+    if (resumableSessions.length > 0 && location.pathname !== path) {
+      if (!window.confirm('You have unresolved edits to continue or discard. Leave anyway?')) {
+        return
+      }
+    }
     navigate(path)
   }
 

@@ -30,9 +30,9 @@ def save(
     dst = storage.draft_path(user.username, payload.filename)
     with file_write_lock(f"nc:{payload.filename}"):
         storage.atomic_copy(temp, dst)
-    temp_sessions.mark_clean(db, payload.filename, user.id)
-    db.add(AuditLog(filename=payload.filename, user_id=user.id, action="save"))
-    db.commit()
+        temp_sessions.mark_clean(db, payload.filename, user.id)
+        db.add(AuditLog(filename=payload.filename, user_id=user.id, action="save"))
+        db.commit()
     return {"draft_path": str(dst)}
 
 
@@ -54,7 +54,7 @@ def publish(
     dst = storage.published_path(payload.filename)
     with file_write_lock(f"nc:{payload.filename}"):
         storage.atomic_copy(temp, dst)
-    temp_sessions.mark_clean(db, payload.filename, user.id)
-    db.add(AuditLog(filename=payload.filename, user_id=user.id, action="publish"))
-    db.commit()
+        temp_sessions.mark_clean(db, payload.filename, user.id)
+        db.add(AuditLog(filename=payload.filename, user_id=user.id, action="publish"))
+        db.commit()
     return {"published_path": str(dst)}

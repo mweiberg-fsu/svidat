@@ -76,28 +76,31 @@ def bulk_edit(
     user_id = user.id
 
     def run_bulk_edit() -> dict:
-        with file_write_lock(f"nc:{payload.filename}"):
-            old_values = netcdf_ops.write_bulk(path, payload.var_name, slices, payload.value, payload.op)
         job_db = SessionLocal()
         try:
-            log = AuditLog(
-                filename=payload.filename,
-                user_id=user_id,
-                action="bulk_edit",
-                var_name=payload.var_name,
-                indices_json=json.dumps(payload.slices),
-                new_value_scalar=payload.value,
-            )
-            job_db.add(log)
-            temp_sessions.mark_dirty(job_db, payload.filename, user_id)
-            job_db.commit()
-            job_db.refresh(log)
+            with file_write_lock(f"nc:{payload.filename}"):
+                old_values = netcdf_ops.write_bulk(
+                    path, payload.var_name, slices, payload.value, payload.op
+                )
 
-            blob_path = storage.audit_blob_path(log.id)
-            blob_path.parent.mkdir(parents=True, exist_ok=True)
-            np.save(blob_path, old_values)
-            log.old_value_ref = str(blob_path)
-            job_db.commit()
+                log = AuditLog(
+                    filename=payload.filename,
+                    user_id=user_id,
+                    action="bulk_edit",
+                    var_name=payload.var_name,
+                    indices_json=json.dumps(payload.slices),
+                    new_value_scalar=payload.value,
+                )
+                job_db.add(log)
+                temp_sessions.mark_dirty(job_db, payload.filename, user_id)
+                job_db.commit()
+                job_db.refresh(log)
+
+                blob_path = storage.audit_blob_path(log.id)
+                blob_path.parent.mkdir(parents=True, exist_ok=True)
+                np.save(blob_path, old_values)
+                log.old_value_ref = str(blob_path)
+                job_db.commit()
             return {"audit_id": log.id}
         finally:
             job_db.close()
@@ -133,34 +136,35 @@ def flag_edit(
     user_id = user.id
 
     def run_flag_edit() -> dict:
-        with file_write_lock(f"nc:{payload.filename}"):
-            old_values = netcdf_ops.write_flags(
-                path,
-                payload.var_name,
-                payload.start_time_idx,
-                payload.end_time_idx,
-                payload.flag_code,
-            )
         job_db = SessionLocal()
         try:
-            log = AuditLog(
-                filename=payload.filename,
-                user_id=user_id,
-                action="flag_edit",
-                var_name=payload.var_name,
-                indices_json=json.dumps([payload.start_time_idx, payload.end_time_idx]),
-                new_value_str=payload.flag_code,
-            )
-            job_db.add(log)
-            temp_sessions.mark_dirty(job_db, payload.filename, user_id)
-            job_db.commit()
-            job_db.refresh(log)
+            with file_write_lock(f"nc:{payload.filename}"):
+                old_values = netcdf_ops.write_flags(
+                    path,
+                    payload.var_name,
+                    payload.start_time_idx,
+                    payload.end_time_idx,
+                    payload.flag_code,
+                )
 
-            blob_path = storage.audit_blob_path(log.id)
-            blob_path.parent.mkdir(parents=True, exist_ok=True)
-            np.save(blob_path, old_values)
-            log.old_value_ref = str(blob_path)
-            job_db.commit()
+                log = AuditLog(
+                    filename=payload.filename,
+                    user_id=user_id,
+                    action="flag_edit",
+                    var_name=payload.var_name,
+                    indices_json=json.dumps([payload.start_time_idx, payload.end_time_idx]),
+                    new_value_str=payload.flag_code,
+                )
+                job_db.add(log)
+                temp_sessions.mark_dirty(job_db, payload.filename, user_id)
+                job_db.commit()
+                job_db.refresh(log)
+
+                blob_path = storage.audit_blob_path(log.id)
+                blob_path.parent.mkdir(parents=True, exist_ok=True)
+                np.save(blob_path, old_values)
+                log.old_value_ref = str(blob_path)
+                job_db.commit()
             return {"audit_id": log.id}
         finally:
             job_db.close()

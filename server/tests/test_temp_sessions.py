@@ -233,6 +233,101 @@ def test_bulk_edit_marks_temp_session_dirty(client, auth_header, synthetic_nc):
     assert len(client.get("/session/mine", headers=headers).json()) == 1
 
 
+def test_bulk_edit_then_save_marks_temp_session_clean(client, auth_header, synthetic_nc):
+    # Regression test for widening file_write_lock in run_bulk_edit/save to
+    # cover the dirty/clean mutation: run a bulk edit to completion, then
+    # save, and confirm the sequential (non-racing) case still ends up
+    # clean, exactly as before the lock-scope change.
+    import time
+
+    synthetic_nc("shipx_2026-09-23")
+    headers = auth_header("tsdirty5", is_qca=True)
+    client.post("/session/shipx_2026-09-23/open", params={"source": "raw"}, headers=headers)
+
+    job_id = client.post(
+        "/edit/bulk",
+        json={
+            "filename": "shipx_2026-09-23",
+            "var_name": "temperature",
+            "slices": [[0, 3]],
+            "op": "set",
+            "value": 0.0,
+        },
+        headers=headers,
+    ).json()["job_id"]
+
+    deadline = time.time() + 2
+    while time.time() < deadline:
+        if client.get(f"/edit/jobs/{job_id}", headers=headers).json()["status"] == "done":
+            break
+        time.sleep(0.02)
+
+    assert len(client.get("/session/mine", headers=headers).json()) == 1
+
+    resp = client.post("/save", json={"filename": "shipx_2026-09-23"}, headers=headers)
+    assert resp.status_code == 200
+    assert client.get("/session/mine", headers=headers).json() == []
+
+
+def test_bulk_edit_then_discard_clears_temp_session(client, auth_header, synthetic_nc):
+    # Companion regression test: a bulk edit followed by discard (instead of
+    # save) should still clear out the temp session/lock, confirming the
+    # widened lock scope in run_bulk_edit didn't break the discard path.
+    import time
+
+    synthetic_nc("shipx_2026-09-24")
+    headers = auth_header("tsdirty6", is_qca=True)
+    client.post("/session/shipx_2026-09-24/open", params={"source": "raw"}, headers=headers)
+
+    job_id = client.post(
+        "/edit/bulk",
+        json={
+            "filename": "shipx_2026-09-24",
+            "var_name": "temperature",
+            "slices": [[0, 3]],
+            "op": "set",
+            "value": 0.0,
+        },
+        headers=headers,
+    ).json()["job_id"]
+
+    deadline = time.time() + 2
+    while time.time() < deadline:
+        if client.get(f"/edit/jobs/{job_id}", headers=headers).json()["status"] == "done":
+            break
+        time.sleep(0.02)
+
+    assert len(client.get("/session/mine", headers=headers).json()) == 1
+
+    resp = client.post("/session/shipx_2026-09-24/discard", headers=headers)
+    assert resp.status_code == 200
+    assert client.get("/session/mine", headers=headers).json() == []
+
+
+def test_point_edit_then_publish_marks_temp_session_clean(client, auth_header, synthetic_nc):
+    # Regression test for widening file_write_lock in publish to cover the
+    # mark_clean mutation: confirm the sequential publish path still ends
+    # up clean, exactly as before the lock-scope change.
+    synthetic_nc("shipx_2026-09-25")
+    headers = auth_header("tsdirty7", is_qca=True)
+    client.post("/session/shipx_2026-09-25/open", params={"source": "raw"}, headers=headers)
+    client.post(
+        "/edit/point",
+        json={
+            "filename": "shipx_2026-09-25",
+            "var_name": "temperature",
+            "indices": [0],
+            "value": 1.0,
+        },
+        headers=headers,
+    )
+    assert len(client.get("/session/mine", headers=headers).json()) == 1
+
+    resp = client.post("/publish", json={"filename": "shipx_2026-09-25"}, headers=headers)
+    assert resp.status_code == 200
+    assert client.get("/session/mine", headers=headers).json() == []
+
+
 def test_revert_marks_temp_session_dirty_again(client, auth_header, synthetic_nc):
     synthetic_nc("shipx_2026-09-17b")
     headers = auth_header("tsdirty4", is_qca=True)

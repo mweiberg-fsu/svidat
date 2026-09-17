@@ -391,6 +391,62 @@ def test_publish_marks_temp_session_clean(client, auth_header, synthetic_nc):
     assert client.get("/session/mine", headers=headers).json() == []
 
 
+def test_point_edit_then_save_marks_temp_session_clean(client, auth_header, synthetic_nc):
+    # Regression test for widening file_write_lock in point_edit to cover the
+    # AuditLog insert + mark_dirty + commit: confirm the sequential (non-
+    # racing) point-edit-then-save path still ends up clean, exactly as
+    # before the lock-scope change.
+    synthetic_nc("shipx_2026-09-26")
+    headers = auth_header("tsdirty8", is_qca=True)
+    client.post("/session/shipx_2026-09-26/open", params={"source": "raw"}, headers=headers)
+    client.post(
+        "/edit/point",
+        json={
+            "filename": "shipx_2026-09-26",
+            "var_name": "temperature",
+            "indices": [0],
+            "value": 1.0,
+        },
+        headers=headers,
+    )
+    assert len(client.get("/session/mine", headers=headers).json()) == 1
+
+    resp = client.post("/save", json={"filename": "shipx_2026-09-26"}, headers=headers)
+    assert resp.status_code == 200
+    assert client.get("/session/mine", headers=headers).json() == []
+
+
+def test_revert_then_shows_dirty_in_session_mine(client, auth_header, synthetic_nc):
+    # Regression test for wrapping revert's shared claim/insert/mark_dirty
+    # tail in its own file_write_lock: point edit -> save (clean) -> revert
+    # (should mark dirty again) -> confirm /session/mine reflects it, exactly
+    # as before the lock-scope change.
+    synthetic_nc("shipx_2026-09-27")
+    headers = auth_header("tsdirty9", is_qca=True)
+    client.post("/session/shipx_2026-09-27/open", params={"source": "raw"}, headers=headers)
+    edit_resp = client.post(
+        "/edit/point",
+        json={
+            "filename": "shipx_2026-09-27",
+            "var_name": "temperature",
+            "indices": [0],
+            "value": 5.0,
+        },
+        headers=headers,
+    )
+    audit_id = edit_resp.json()["audit_id"]
+
+    resp = client.post("/save", json={"filename": "shipx_2026-09-27"}, headers=headers)
+    assert resp.status_code == 200
+    assert client.get("/session/mine", headers=headers).json() == []
+
+    resp = client.post(f"/audit/{audit_id}/revert", headers=headers)
+    assert resp.status_code == 200
+    mine = client.get("/session/mine", headers=headers).json()
+    assert len(mine) == 1
+    assert mine[0]["filename"] == "shipx_2026-09-27"
+
+
 def test_flag_edit_marks_temp_session_dirty(client, auth_header, synthetic_nc_with_qc):
     import time
 

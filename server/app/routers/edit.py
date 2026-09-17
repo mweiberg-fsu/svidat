@@ -31,28 +31,28 @@ def point_edit(
             status_code=status.HTTP_404_NOT_FOUND, detail="no open session for this file"
         )
 
-    try:
-        with file_write_lock(f"nc:{payload.filename}"):
+    with file_write_lock(f"nc:{payload.filename}"):
+        try:
             old_value = netcdf_ops.write_point(path, payload.var_name, payload.indices, payload.value)
-    except (KeyError, IndexError, ValueError) as exc:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"invalid edit for var '{payload.var_name}': {exc}",
-        )
+        except (KeyError, IndexError, ValueError) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"invalid edit for var '{payload.var_name}': {exc}",
+            )
 
-    log = AuditLog(
-        filename=payload.filename,
-        user_id=user.id,
-        action="point_edit",
-        var_name=payload.var_name,
-        indices_json=json.dumps(payload.indices),
-        old_value_scalar=old_value,
-        new_value_scalar=payload.value,
-    )
-    db.add(log)
-    temp_sessions.mark_dirty(db, payload.filename, user.id)
-    db.commit()
-    db.refresh(log)
+        log = AuditLog(
+            filename=payload.filename,
+            user_id=user.id,
+            action="point_edit",
+            var_name=payload.var_name,
+            indices_json=json.dumps(payload.indices),
+            old_value_scalar=old_value,
+            new_value_scalar=payload.value,
+        )
+        db.add(log)
+        temp_sessions.mark_dirty(db, payload.filename, user.id)
+        db.commit()
+        db.refresh(log)
     return {"audit_id": log.id, "old_value": old_value, "new_value": payload.value}
 
 

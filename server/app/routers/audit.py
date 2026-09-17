@@ -167,19 +167,23 @@ def revert(
 
     # Atomically claim this entry so a concurrent revert of the same audit_id can't
     # also pass the check above and insert its own "revert" audit row after the
-    # restore above already ran.
-    claimed = (
-        db.query(AuditLog)
-        .filter(AuditLog.id == audit_id, AuditLog.reverted == False)  # noqa: E712
-        .update({"reverted": True})
-    )
-    if claimed == 0:
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="already reverted"
+    # restore above already ran. Runs inside its own file_write_lock (separate
+    # from each branch's own restore-lock above, which has already been
+    # released) so this claim/insert/mark_dirty/commit can't interleave with a
+    # concurrent save/publish/edit on the same file.
+    with file_write_lock(f"nc:{entry.filename}"):
+        claimed = (
+            db.query(AuditLog)
+            .filter(AuditLog.id == audit_id, AuditLog.reverted == False)  # noqa: E712
+            .update({"reverted": True})
         )
+        if claimed == 0:
+            db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail="already reverted"
+            )
 
-    db.add(new_log)
-    temp_sessions.mark_dirty(db, entry.filename, user.id)
-    db.commit()
+        db.add(new_log)
+        temp_sessions.mark_dirty(db, entry.filename, user.id)
+        db.commit()
     return {"status": "reverted"}

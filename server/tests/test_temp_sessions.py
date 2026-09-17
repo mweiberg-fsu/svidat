@@ -181,3 +181,81 @@ def test_admin_alone_cannot_discard(client, auth_header):
     headers = auth_header("tsdiscard_admin", is_admin=True)
     resp = client.post("/session/shipx/discard", headers=headers)
     assert resp.status_code == 403
+
+
+def test_point_edit_marks_temp_session_dirty(client, auth_header, synthetic_nc):
+    synthetic_nc("shipx_2026-09-14")
+    headers = auth_header("tsdirty1", is_qca=True)
+    client.post("/session/shipx_2026-09-14/open", params={"source": "raw"}, headers=headers)
+    assert client.get("/session/mine", headers=headers).json() == []
+
+    client.post(
+        "/edit/point",
+        json={
+            "filename": "shipx_2026-09-14",
+            "var_name": "temperature",
+            "indices": [0],
+            "value": 1.0,
+        },
+        headers=headers,
+    )
+
+    mine = client.get("/session/mine", headers=headers).json()
+    assert len(mine) == 1
+    assert mine[0]["filename"] == "shipx_2026-09-14"
+
+
+def test_bulk_edit_marks_temp_session_dirty(client, auth_header, synthetic_nc):
+    import time
+
+    synthetic_nc("shipx_2026-09-15")
+    headers = auth_header("tsdirty2", is_qca=True)
+    client.post("/session/shipx_2026-09-15/open", params={"source": "raw"}, headers=headers)
+
+    job_id = client.post(
+        "/edit/bulk",
+        json={
+            "filename": "shipx_2026-09-15",
+            "var_name": "temperature",
+            "slices": [[0, 3]],
+            "op": "set",
+            "value": 0.0,
+        },
+        headers=headers,
+    ).json()["job_id"]
+
+    deadline = time.time() + 2
+    while time.time() < deadline:
+        if client.get(f"/edit/jobs/{job_id}", headers=headers).json()["status"] == "done":
+            break
+        time.sleep(0.02)
+
+    assert len(client.get("/session/mine", headers=headers).json()) == 1
+
+
+def test_flag_edit_marks_temp_session_dirty(client, auth_header, synthetic_nc_with_qc):
+    import time
+
+    synthetic_nc_with_qc("shipx_2026-09-16")
+    headers = auth_header("tsdirty3", is_qca=True)
+    client.post("/session/shipx_2026-09-16/open", params={"source": "raw"}, headers=headers)
+
+    job_id = client.post(
+        "/edit/flag",
+        json={
+            "filename": "shipx_2026-09-16",
+            "var_name": "temperature",
+            "start_time_idx": 0,
+            "end_time_idx": 1,
+            "flag_code": "K",
+        },
+        headers=headers,
+    ).json()["job_id"]
+
+    deadline = time.time() + 2
+    while time.time() < deadline:
+        if client.get(f"/edit/jobs/{job_id}", headers=headers).json()["status"] == "done":
+            break
+        time.sleep(0.02)
+
+    assert len(client.get("/session/mine", headers=headers).json()) == 1

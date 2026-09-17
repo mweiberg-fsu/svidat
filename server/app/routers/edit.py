@@ -4,7 +4,7 @@ import numpy as np
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app import jobs, netcdf_ops, storage
+from app import jobs, netcdf_ops, storage, temp_sessions
 from app.database import SessionLocal, get_db
 from app.deps import require_role
 from app.file_locks import file_write_lock
@@ -50,6 +50,7 @@ def point_edit(
         new_value_scalar=payload.value,
     )
     db.add(log)
+    temp_sessions.mark_dirty(db, payload.filename, user.id)
     db.commit()
     db.refresh(log)
     return {"audit_id": log.id, "old_value": old_value, "new_value": payload.value}
@@ -88,6 +89,7 @@ def bulk_edit(
                 new_value_scalar=payload.value,
             )
             job_db.add(log)
+            temp_sessions.mark_dirty(job_db, payload.filename, user_id)
             job_db.commit()
             job_db.refresh(log)
 
@@ -150,6 +152,7 @@ def flag_edit(
                 new_value_str=payload.flag_code,
             )
             job_db.add(log)
+            temp_sessions.mark_dirty(job_db, payload.filename, user_id)
             job_db.commit()
             job_db.refresh(log)
 

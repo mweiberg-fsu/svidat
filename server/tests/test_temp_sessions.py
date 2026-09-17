@@ -56,3 +56,34 @@ def test_mark_dirty_on_missing_row_is_a_no_op(db_session, make_user):
         db_session.query(TempSession).filter(TempSession.filename == "shipx_ts_missing").count()
         == 0
     )
+
+
+def test_audit_visible_across_explicit_close_and_reopen_via_session_started_at(
+    client, auth_header, synthetic_nc
+):
+    synthetic_nc("shipx_2026-09-13")
+    headers = auth_header("audituser19", is_qca=True)
+
+    client.post("/session/shipx_2026-09-13/open", params={"source": "raw"}, headers=headers)
+    client.post(
+        "/edit/point",
+        json={
+            "filename": "shipx_2026-09-13",
+            "var_name": "temperature",
+            "indices": [0],
+            "value": 1.0,
+        },
+        headers=headers,
+    )
+    client.post("/session/shipx_2026-09-13/close", headers=headers)
+
+    reopened = client.post(
+        "/session/shipx_2026-09-13/open", params={"source": "raw"}, headers=headers
+    ).json()
+    since = reopened["session_started_at"]
+
+    resp = client.get("/audit/shipx_2026-09-13", params={"since": since}, headers=headers)
+    assert resp.status_code == 200
+    entries = resp.json()
+    assert len(entries) == 1
+    assert entries[0]["new_value"] == 1.0

@@ -112,3 +112,46 @@ def test_admin_alone_cannot_open_session(client, auth_header, synthetic_nc):
     headers = auth_header("adminonly_session1", is_admin=True)
     resp = client.post(f"/session/{filename}/open", headers=headers)
     assert resp.status_code == 403
+
+
+def test_open_session_returns_session_started_at(client, auth_header, synthetic_nc):
+    synthetic_nc("shipx_2026-09-10")
+    headers = auth_header("tsopen1", is_qca=True)
+
+    resp = client.post("/session/shipx_2026-09-10/open", params={"source": "raw"}, headers=headers)
+    assert resp.status_code == 200
+    assert "session_started_at" in resp.json()
+
+
+def test_reopen_after_explicit_close_preserves_session_started_at(client, auth_header, synthetic_nc):
+    synthetic_nc("shipx_2026-09-11")
+    headers = auth_header("tsopen2", is_qca=True)
+
+    first = client.post(
+        "/session/shipx_2026-09-11/open", params={"source": "raw"}, headers=headers
+    ).json()
+    client.post("/session/shipx_2026-09-11/close", headers=headers)
+
+    second = client.post(
+        "/session/shipx_2026-09-11/open", params={"source": "raw"}, headers=headers
+    ).json()
+    # Lock was released and reacquired (fresh acquired_at) but the temp file
+    # and its TempSession row survive the close — session_started_at (and
+    # thus audit visibility, see test_temp_sessions.py) must not reset.
+    assert second["session_started_at"] == first["session_started_at"]
+    assert second["acquired_at"] != first["acquired_at"]
+
+
+def test_force_reopen_resets_session_started_at(client, auth_header, synthetic_nc):
+    synthetic_nc("shipx_2026-09-12")
+    headers = auth_header("tsopen3", is_qca=True)
+
+    first = client.post(
+        "/session/shipx_2026-09-12/open", params={"source": "raw"}, headers=headers
+    ).json()
+    second = client.post(
+        "/session/shipx_2026-09-12/open",
+        params={"source": "raw", "force": "true"},
+        headers=headers,
+    ).json()
+    assert second["session_started_at"] != first["session_started_at"]

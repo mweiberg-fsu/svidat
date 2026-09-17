@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app import storage
+from app import storage, temp_sessions
 from app.database import get_db
 from app.deps import require_role
 from app.models import Lock, Role, User
@@ -69,8 +69,17 @@ def open_session(
 
     if need_copy:
         storage.atomic_copy(src, dst)
+        session_row = temp_sessions.reset(db, filename, user.id)
+    else:
+        session_row = temp_sessions.get_or_create(db, filename, user.id)
+    db.commit()
+    db.refresh(session_row)
 
-    return {"temp_path": str(dst), "acquired_at": acquired_at.isoformat()}
+    return {
+        "temp_path": str(dst),
+        "acquired_at": acquired_at.isoformat(),
+        "session_started_at": session_row.created_at.isoformat(),
+    }
 
 
 @router.post("/{filename}/close")

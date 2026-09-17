@@ -9,8 +9,7 @@ import { FlagsPanel } from './FlagsPanel'
 import { AuditHistoryModal } from './AuditHistoryModal'
 import { DocumentationModal } from './DocumentationModal'
 import { ResumeSessionModal } from './ResumeSessionModal'
-import { discardSession, getMySessions, RESUME_CHECKED_KEY } from '../api/client'
-import type { TempSessionEntry } from '../api/types'
+import { discardSession } from '../api/client'
 
 const MIN_WIDTH = 200
 const MAX_WIDTH = 400
@@ -19,7 +18,7 @@ const DEFAULT_WIDTH = 250
 type SidebarTab = 'files' | 'flags'
 
 export function Sidebar() {
-  const { username, roles, id, avatarVersion } = useAuth()
+  const { username, roles, id, avatarVersion, resumableSessions, removeResumableSession } = useAuth()
   const { flagSelection, sessionOpen, openSession } = useEditSession()
   const { setFile } = usePlotSelection()
   const avatarUrl = useAvatar(id, avatarVersion)
@@ -29,7 +28,6 @@ export function Sidebar() {
   const [activeTab, setActiveTab] = useState<SidebarTab>('files')
   const [showAuditHistory, setShowAuditHistory] = useState(false)
   const [showDocs, setShowDocs] = useState(false)
-  const [resumableSessions, setResumableSessions] = useState<TempSessionEntry[]>([])
   const draggingRef = useRef(false)
 
   // Mirrors the old popover's "appears once you resolve a drag" behavior —
@@ -38,28 +36,16 @@ export function Sidebar() {
     if (flagSelection) setActiveTab('flags')
   }, [flagSelection])
 
-  // Sidebar remounts on every route navigation (providers aren't shared
-  // across routes), so a plain ref/state guard wouldn't survive that. The
-  // sessionStorage flag persists across remounts within the same tab, so
-  // this fetch only fires once per login, not once per navigation.
-  useEffect(() => {
-    if (sessionStorage.getItem(RESUME_CHECKED_KEY)) return
-    sessionStorage.setItem(RESUME_CHECKED_KEY, '1')
-    getMySessions()
-      .then(setResumableSessions)
-      .catch(() => {})
-  }, [])
-
   const handleContinueSession = async (filename: string) => {
     setFile(filename)
     await openSession(filename)
-    setResumableSessions((prev) => prev.filter((s) => s.filename !== filename))
+    removeResumableSession(filename)
     if (location.pathname !== '/files') navigate('/files')
   }
 
   const handleDiscardSession = async (filename: string) => {
     await discardSession(filename)
-    setResumableSessions((prev) => prev.filter((s) => s.filename !== filename))
+    removeResumableSession(filename)
   }
 
   const handleNavClick = (path: string) => {

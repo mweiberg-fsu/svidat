@@ -438,4 +438,61 @@ describe('Sidebar', () => {
     await waitFor(() => expect(screen.getByText('testuser')).toBeInTheDocument())
     expect(mineSpy).toHaveBeenCalledTimes(1)
   })
+
+  it('keeps resumable sessions (and the nav-guard) alive across a Sidebar remount within the same AuthProvider, mirroring per-route navigation', async () => {
+    // This is the regression test for the bug: App.tsx wraps each route in
+    // its own <ProtectedRoute> (which renders Sidebar), so navigating
+    // between routes unmounts and remounts the Sidebar tree while the
+    // single AuthProvider above <BrowserRouter> stays mounted. Data owned
+    // by Sidebar-local state would be lost on that remount; data owned by
+    // AuthContext should not be.
+    vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
+    const mineSpy = vi.spyOn(apiClient, 'getMySessions').mockResolvedValue([
+      { filename: 'shipx_2026-08-01', created_at: '2026-08-01T10:00:00', last_edited_at: '2026-08-01T10:05:00' },
+    ])
+    localStorage.clear()
+    setToken('tok')
+    localStorage.setItem('svidat_role', JSON.stringify(['qca']))
+    localStorage.setItem('svidat_username', 'testuser')
+
+    const { rerender } = render(
+      <AuthProvider>
+        <MemoryRouter initialEntries={['/files']}>
+          <PlotSelectionProvider>
+            <EditSessionProvider>
+              <Sidebar key="first" />
+            </EditSessionProvider>
+          </PlotSelectionProvider>
+        </MemoryRouter>
+      </AuthProvider>
+    )
+
+    await waitFor(() => expect(screen.getByText('Continue editing?')).toBeInTheDocument())
+    expect(mineSpy).toHaveBeenCalledTimes(1)
+
+    // Re-render with a differently-keyed Sidebar element so React unmounts
+    // the first Sidebar instance and mounts a brand new one, while
+    // AuthProvider/MemoryRouter/PlotSelectionProvider/EditSessionProvider —
+    // same element types at the same tree positions — are only re-rendered,
+    // not remounted. This mirrors App.tsx exactly: AuthProvider sits above
+    // BrowserRouter/Routes and is never remounted by route navigation, only
+    // the per-route ProtectedRoute -> Sidebar tree is.
+    rerender(
+      <AuthProvider>
+        <MemoryRouter initialEntries={['/files']}>
+          <PlotSelectionProvider>
+            <EditSessionProvider>
+              <Sidebar key="second" />
+            </EditSessionProvider>
+          </PlotSelectionProvider>
+        </MemoryRouter>
+      </AuthProvider>
+    )
+
+    // The new Sidebar instance should immediately show the resume prompt —
+    // proving resumableSessions survived the remount — without triggering a
+    // second fetch.
+    expect(screen.getByText('Continue editing?')).toBeInTheDocument()
+    expect(mineSpy).toHaveBeenCalledTimes(1)
+  })
 })

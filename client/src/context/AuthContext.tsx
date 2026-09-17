@@ -1,6 +1,15 @@
-import { createContext, useContext, useState, type ReactNode } from 'react'
-import { ID_KEY, ROLE_KEY, RESUME_CHECKED_KEY, USERNAME_KEY, clearAuthStorage, getToken, setToken } from '../api/client'
-import type { Role } from '../api/types'
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import {
+  ID_KEY,
+  ROLE_KEY,
+  RESUME_CHECKED_KEY,
+  USERNAME_KEY,
+  clearAuthStorage,
+  getMySessions,
+  getToken,
+  setToken,
+} from '../api/client'
+import type { Role, TempSessionEntry } from '../api/types'
 
 interface AuthState {
   token: string | null
@@ -8,6 +17,8 @@ interface AuthState {
   username: string | null
   id: number | null
   avatarVersion: number
+  resumableSessions: TempSessionEntry[]
+  removeResumableSession: (filename: string) => void
   login: (token: string, roles: Role[], username: string, id: number) => void
   logout: () => void
   bumpAvatarVersion: () => void
@@ -35,6 +46,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return stored ? parseInt(stored, 10) : null
   })
   const [avatarVersion, setAvatarVersion] = useState(0)
+  const [resumableSessions, setResumableSessions] = useState<TempSessionEntry[]>([])
+
+  // Fires once per login (guarded by a sessionStorage flag so it survives
+  // remounts of anything below this provider, e.g. per-route Sidebar
+  // remounts), and re-evaluates when `token` changes so it also catches a
+  // fresh login() call, not just the initial mount with a token already in
+  // localStorage.
+  useEffect(() => {
+    if (!token) return
+    if (sessionStorage.getItem(RESUME_CHECKED_KEY)) return
+    sessionStorage.setItem(RESUME_CHECKED_KEY, '1')
+    getMySessions()
+      .then(setResumableSessions)
+      .catch(() => {})
+  }, [token])
+
+  const removeResumableSession = (filename: string) => {
+    setResumableSessions((prev) => prev.filter((s) => s.filename !== filename))
+  }
 
   const login = (newToken: string, newRoles: Role[], newUsername: string, newId: number) => {
     setToken(newToken)
@@ -50,6 +80,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = () => {
     clearAuthStorage()
     sessionStorage.removeItem(RESUME_CHECKED_KEY)
+    setResumableSessions([])
     setTokenState(null)
     setRoles([])
     setUsername(null)
@@ -60,7 +91,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ token, roles, username, id, avatarVersion, login, logout, bumpAvatarVersion }}
+      value={{
+        token,
+        roles,
+        username,
+        id,
+        avatarVersion,
+        resumableSessions,
+        removeResumableSession,
+        login,
+        logout,
+        bumpAvatarVersion,
+      }}
     >
       {children}
     </AuthContext.Provider>

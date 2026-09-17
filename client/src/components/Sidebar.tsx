@@ -2,11 +2,15 @@ import { useEffect, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../context/AuthContext'
 import { useEditSession } from '../context/EditSessionContext'
+import { usePlotSelection } from '../context/PlotSelectionContext'
 import { useAvatar } from '../hooks/useAvatar'
 import { PlotPicker } from './PlotPicker'
 import { FlagsPanel } from './FlagsPanel'
 import { AuditHistoryModal } from './AuditHistoryModal'
 import { DocumentationModal } from './DocumentationModal'
+import { ResumeSessionModal } from './ResumeSessionModal'
+import { discardSession, getMySessions, RESUME_CHECKED_KEY } from '../api/client'
+import type { TempSessionEntry } from '../api/types'
 
 const MIN_WIDTH = 200
 const MAX_WIDTH = 400
@@ -16,7 +20,8 @@ type SidebarTab = 'files' | 'flags'
 
 export function Sidebar() {
   const { username, roles, id, avatarVersion } = useAuth()
-  const { flagSelection, sessionOpen } = useEditSession()
+  const { flagSelection, sessionOpen, openSession } = useEditSession()
+  const { setFile } = usePlotSelection()
   const avatarUrl = useAvatar(id, avatarVersion)
   const navigate = useNavigate()
   const location = useLocation()
@@ -24,6 +29,7 @@ export function Sidebar() {
   const [activeTab, setActiveTab] = useState<SidebarTab>('files')
   const [showAuditHistory, setShowAuditHistory] = useState(false)
   const [showDocs, setShowDocs] = useState(false)
+  const [resumableSessions, setResumableSessions] = useState<TempSessionEntry[]>([])
   const draggingRef = useRef(false)
 
   // Mirrors the old popover's "appears once you resolve a drag" behavior —
@@ -31,6 +37,30 @@ export function Sidebar() {
   useEffect(() => {
     if (flagSelection) setActiveTab('flags')
   }, [flagSelection])
+
+  // Sidebar remounts on every route navigation (providers aren't shared
+  // across routes), so a plain ref/state guard wouldn't survive that. The
+  // sessionStorage flag persists across remounts within the same tab, so
+  // this fetch only fires once per login, not once per navigation.
+  useEffect(() => {
+    if (sessionStorage.getItem(RESUME_CHECKED_KEY)) return
+    sessionStorage.setItem(RESUME_CHECKED_KEY, '1')
+    getMySessions()
+      .then(setResumableSessions)
+      .catch(() => {})
+  }, [])
+
+  const handleContinueSession = async (filename: string) => {
+    setFile(filename)
+    await openSession(filename)
+    setResumableSessions((prev) => prev.filter((s) => s.filename !== filename))
+    if (location.pathname !== '/files') navigate('/files')
+  }
+
+  const handleDiscardSession = async (filename: string) => {
+    await discardSession(filename)
+    setResumableSessions((prev) => prev.filter((s) => s.filename !== filename))
+  }
 
   const handleNavClick = (path: string) => {
     if (sessionOpen && location.pathname !== path) {
@@ -156,6 +186,13 @@ export function Sidebar() {
         <AuditHistoryModal onClose={() => setShowAuditHistory(false)} />
       )}
       {showDocs && <DocumentationModal onClose={() => setShowDocs(false)} />}
+      {resumableSessions.length > 0 && (
+        <ResumeSessionModal
+          entries={resumableSessions}
+          onContinue={handleContinueSession}
+          onDiscard={handleDiscardSession}
+        />
+      )}
     </aside>
   )
 }

@@ -40,7 +40,9 @@ function renderSidebar(role: string) {
 describe('Sidebar', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
+    sessionStorage.clear()
     vi.spyOn(apiClient, 'fetchAvatarBlobUrl').mockResolvedValue(null)
+    vi.spyOn(apiClient, 'getMySessions').mockResolvedValue([])
   })
 
   it('shows welcome message with username', () => {
@@ -349,5 +351,56 @@ describe('Sidebar', () => {
 
     expect(confirmSpy).not.toHaveBeenCalled()
     await waitFor(() => expect(screen.getByText('Plots')).toHaveClass('active'))
+  })
+
+  it('does not show the resume prompt when there are no resumable sessions', async () => {
+    vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
+    renderSidebar('qca')
+    await waitFor(() => expect(apiClient.getMySessions).toHaveBeenCalled())
+    expect(screen.queryByText('Continue editing?')).not.toBeInTheDocument()
+  })
+
+  it('shows the resume prompt and continues a resumable session', async () => {
+    vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
+    vi.spyOn(apiClient, 'getMySessions').mockResolvedValue([
+      { filename: 'shipx_2026-08-01', created_at: '2026-08-01T10:00:00', last_edited_at: '2026-08-01T10:05:00' },
+    ])
+    const openSpy = vi.spyOn(apiClient, 'openSession').mockResolvedValue({ status: 'opened' })
+    renderSidebar('qca')
+
+    await waitFor(() => expect(screen.getByText('Continue editing?')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByText('Continue'))
+
+    await waitFor(() => expect(openSpy).toHaveBeenCalledWith('shipx_2026-08-01', 'raw'))
+    await waitFor(() => expect(screen.queryByText('Continue editing?')).not.toBeInTheDocument())
+  })
+
+  it('discards a resumable session', async () => {
+    vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
+    vi.spyOn(apiClient, 'getMySessions').mockResolvedValue([
+      { filename: 'shipx_2026-08-01', created_at: '2026-08-01T10:00:00', last_edited_at: null },
+    ])
+    const discardSpy = vi.spyOn(apiClient, 'discardSession').mockResolvedValue({ status: 'discarded' })
+    renderSidebar('qca')
+
+    await waitFor(() => expect(screen.getByText('Continue editing?')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByText('Discard'))
+
+    await waitFor(() => expect(discardSpy).toHaveBeenCalledWith('shipx_2026-08-01'))
+    await waitFor(() => expect(screen.queryByText('Continue editing?')).not.toBeInTheDocument())
+  })
+
+  it('only fetches resumable sessions once per browser tab', async () => {
+    vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
+    const mineSpy = vi.spyOn(apiClient, 'getMySessions').mockResolvedValue([])
+    const { unmount } = renderSidebar('qca')
+    await waitFor(() => expect(mineSpy).toHaveBeenCalledTimes(1))
+    unmount()
+
+    renderSidebar('qca')
+    await waitFor(() => expect(screen.getByText('testuser')).toBeInTheDocument())
+    expect(mineSpy).toHaveBeenCalledTimes(1)
   })
 })

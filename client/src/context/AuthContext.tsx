@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, type ReactNode } from 'react'
-import { ID_KEY, ROLE_KEY, USERNAME_KEY, clearAuthStorage, getToken, setToken } from '../api/client'
+import { ID_KEY, ROLE_KEY, RESUME_CHECKED_KEY, USERNAME_KEY, clearAuthStorage, getToken, setToken } from '../api/client'
 import type { Role } from '../api/types'
 
 interface AuthState {
@@ -49,6 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = () => {
     clearAuthStorage()
+    sessionStorage.removeItem(RESUME_CHECKED_KEY)
     setTokenState(null)
     setRoles([])
     setUsername(null)

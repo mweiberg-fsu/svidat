@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app import storage, temp_sessions
 from app.database import get_db
 from app.deps import require_role
+from app.file_locks import file_write_lock
 from app.models import Lock, Role, TempSession, User
 
 router = APIRouter(prefix="/session", tags=["session"])
@@ -118,3 +119,36 @@ def close_session(
         db.delete(lock)
         db.commit()
     return {"status": "closed"}
+
+
+@router.post("/{filename}/discard")
+def discard_session(
+    filename: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(Role.qca)),
+):
+    lock = (
+        db.query(Lock)
+        .filter(Lock.filename == filename, Lock.user_id == user.id)
+        .first()
+    )
+    if lock:
+        db.delete(lock)
+
+    try:
+        temp = storage.temp_path(user.username, filename)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    with file_write_lock(f"nc:{filename}"):
+        temp.unlink(missing_ok=True)
+
+    session_row = (
+        db.query(TempSession)
+        .filter(TempSession.filename == filename, TempSession.user_id == user.id)
+        .first()
+    )
+    if session_row:
+        db.delete(session_row)
+
+    db.commit()
+    return {"status": "discarded"}

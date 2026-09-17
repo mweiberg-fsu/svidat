@@ -125,3 +125,59 @@ def test_regular_user_cannot_call_mine(client, auth_header):
     headers = auth_header("tsmine_viewer")
     resp = client.get("/session/mine", headers=headers)
     assert resp.status_code == 403
+
+
+def test_discard_deletes_lock_temp_file_and_temp_session(client, auth_header, synthetic_nc):
+    synthetic_nc("shipx_2026-09-21")
+    headers = auth_header("tsdiscard1", is_qca=True)
+    client.post("/session/shipx_2026-09-21/open", params={"source": "raw"}, headers=headers)
+    client.post(
+        "/edit/point",
+        json={
+            "filename": "shipx_2026-09-21",
+            "var_name": "temperature",
+            "indices": [0],
+            "value": 1.0,
+        },
+        headers=headers,
+    )
+
+    resp = client.post("/session/shipx_2026-09-21/discard", headers=headers)
+    assert resp.status_code == 200
+
+    from app import storage
+
+    temp = storage.temp_path("tsdiscard1", "shipx_2026-09-21")
+    assert not temp.exists()
+    assert client.get("/session/mine", headers=headers).json() == []
+
+    other = auth_header("tsdiscard2", is_qca=True)
+    resp = client.post("/session/shipx_2026-09-21/open", params={"source": "raw"}, headers=other)
+    assert resp.status_code == 200
+
+
+def test_discard_is_a_no_op_when_nothing_exists(client, auth_header):
+    headers = auth_header("tsdiscard3", is_qca=True)
+    resp = client.post("/session/never-opened/discard", headers=headers)
+    assert resp.status_code == 200
+
+
+def test_discard_only_releases_the_calling_users_own_lock(client, auth_header, synthetic_nc):
+    synthetic_nc("shipx_2026-09-22")
+    headers_a = auth_header("tsdiscard4", is_qca=True)
+    headers_b = auth_header("tsdiscard5", is_qca=True)
+
+    client.post("/session/shipx_2026-09-22/open", params={"source": "raw"}, headers=headers_a)
+
+    resp = client.post("/session/shipx_2026-09-22/discard", headers=headers_b)
+    assert resp.status_code == 200
+
+    # b's discard must not touch a's active lock.
+    resp = client.post("/session/shipx_2026-09-22/open", params={"source": "raw"}, headers=headers_b)
+    assert resp.status_code == 409
+
+
+def test_admin_alone_cannot_discard(client, auth_header):
+    headers = auth_header("tsdiscard_admin", is_admin=True)
+    resp = client.post("/session/shipx/discard", headers=headers)
+    assert resp.status_code == 403

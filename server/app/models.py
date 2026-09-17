@@ -11,6 +11,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 
@@ -83,6 +84,19 @@ class AuditLog(Base):
     timestamp = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="audit_entries")
+
+
+class TempSession(Base):
+    __tablename__ = "temp_sessions"
+
+    id = Column(Integer, primary_key=True)
+    filename = Column(String, nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    dirty = Column(Boolean, nullable=False, default=False)
+    last_edited_at = Column(DateTime, nullable=True)
+
+    __table_args__ = (UniqueConstraint("filename", "user_id"),)
 
 
 class OAuthSettings(Base):

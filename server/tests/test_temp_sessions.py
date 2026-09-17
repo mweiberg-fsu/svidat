@@ -87,3 +87,41 @@ def test_audit_visible_across_explicit_close_and_reopen_via_session_started_at(
     entries = resp.json()
     assert len(entries) == 1
     assert entries[0]["new_value"] == 1.0
+
+
+def test_mine_empty_by_default(client, auth_header):
+    headers = auth_header("tsmine_empty", is_qca=True)
+    resp = client.get("/session/mine", headers=headers)
+    assert resp.status_code == 200
+    assert resp.json() == []
+
+
+def test_mine_only_returns_current_users_dirty_sessions(client, auth_header, synthetic_nc):
+    synthetic_nc("shipx_2026-09-20")
+    headers_a = auth_header("tsmine_a", is_qca=True)
+    headers_b = auth_header("tsmine_b", is_qca=True)
+
+    client.post("/session/shipx_2026-09-20/open", params={"source": "raw"}, headers=headers_a)
+    client.post(
+        "/edit/point",
+        json={
+            "filename": "shipx_2026-09-20",
+            "var_name": "temperature",
+            "indices": [0],
+            "value": 1.0,
+        },
+        headers=headers_a,
+    )
+
+    assert client.get("/session/mine", headers=headers_b).json() == []
+    mine = client.get("/session/mine", headers=headers_a).json()
+    assert len(mine) == 1
+    assert mine[0]["filename"] == "shipx_2026-09-20"
+    assert "created_at" in mine[0]
+    assert "last_edited_at" in mine[0]
+
+
+def test_regular_user_cannot_call_mine(client, auth_header):
+    headers = auth_header("tsmine_viewer")
+    resp = client.get("/session/mine", headers=headers)
+    assert resp.status_code == 403

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app import storage, temp_sessions
 from app.database import get_db
 from app.deps import require_role
-from app.models import Lock, Role, User
+from app.models import Lock, Role, TempSession, User
 
 router = APIRouter(prefix="/session", tags=["session"])
 
@@ -80,6 +80,27 @@ def open_session(
         "acquired_at": acquired_at.isoformat(),
         "session_started_at": session_row.created_at.isoformat(),
     }
+
+
+@router.get("/mine")
+def my_sessions(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(Role.qca)),
+):
+    entries = (
+        db.query(TempSession)
+        .filter(TempSession.user_id == user.id, TempSession.dirty == True)  # noqa: E712
+        .order_by(TempSession.last_edited_at.desc())
+        .all()
+    )
+    return [
+        {
+            "filename": e.filename,
+            "created_at": e.created_at.isoformat(),
+            "last_edited_at": e.last_edited_at.isoformat() if e.last_edited_at else None,
+        }
+        for e in entries
+    ]
 
 
 @router.post("/{filename}/close")

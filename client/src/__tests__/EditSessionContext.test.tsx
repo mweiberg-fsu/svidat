@@ -81,6 +81,17 @@ function FlagDisplaySibling() {
   )
 }
 
+function ExplicitOpenConsumer() {
+  const { sessionOpen, sessionOpenedAt, openSession } = useEditSession()
+  return (
+    <div>
+      <span>sessionOpen:{String(sessionOpen)}</span>
+      <span>sessionOpenedAt:{sessionOpenedAt ?? 'none'}</span>
+      <button onClick={() => openSession('EXPLICIT_FILE')}>open explicit</button>
+    </div>
+  )
+}
+
 function renderWithRole(role: string) {
   localStorage.clear()
   setToken('tok')
@@ -343,5 +354,33 @@ describe('EditSessionContext', () => {
 
     fireEvent.click(screen.getByTestId('set-file-b'))
     await waitFor(() => expect(screen.getByText('bulkEdit:false')).toBeInTheDocument())
+  })
+
+  it('openSession(explicitFilename) opens a session for that file, independent of PlotSelectionContext', async () => {
+    const openSpy = vi.spyOn(apiClient, 'openSession').mockResolvedValue({
+      status: 'opened',
+      session_started_at: '2026-09-17T12:00:00',
+    })
+    localStorage.clear()
+    setToken('tok')
+    localStorage.setItem('svidat_role', JSON.stringify(['qca']))
+    localStorage.setItem('svidat_username', 'testuser')
+    render(
+      <AuthProvider>
+        <MemoryRouter>
+          <PlotSelectionProvider>
+            <EditSessionProvider>
+              <ExplicitOpenConsumer />
+            </EditSessionProvider>
+          </PlotSelectionProvider>
+        </MemoryRouter>
+      </AuthProvider>
+    )
+
+    fireEvent.click(screen.getByText('open explicit'))
+
+    await waitFor(() => expect(screen.getByText('sessionOpen:true')).toBeInTheDocument())
+    expect(openSpy).toHaveBeenCalledWith('EXPLICIT_FILE', 'raw')
+    expect(screen.getByText('sessionOpenedAt:2026-09-17T12:00:00')).toBeInTheDocument()
   })
 })

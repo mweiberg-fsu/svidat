@@ -17,7 +17,7 @@ interface EditSessionState {
   canEdit: boolean
   editable: boolean
   sessionError: string | null
-  openSession: () => Promise<void>
+  openSession: (filename?: string) => Promise<void>
   closeSession: () => Promise<void>
   flagSelection: FlagSelection | null
   setFlagSelection: (selection: FlagSelection | null) => void
@@ -80,15 +80,16 @@ export function EditSessionProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('beforeunload', handler)
   }, [sessionOpen])
 
-  const handleOpenSession = async () => {
-    if (!file) return
+  const handleOpenSession = async (targetFilename?: string) => {
+    const target = targetFilename ?? file
+    if (!target) return
     if (sessionOpen || openingRef.current) return
     openingRef.current = true
     setSessionError(null)
     try {
       const source = searchParams.get('source') ?? 'raw'
-      const result = await openSession(file, source)
-      setSessionOpenedAt(result.acquired_at ?? null)
+      const result = await openSession(target, source)
+      setSessionOpenedAt(result.session_started_at ?? null)
       setSessionOpen(true)
     } catch (e) {
       setSessionError(e instanceof Error ? e.message : 'failed to open session')

@@ -110,6 +110,7 @@ describe('AuditHistoryModal', () => {
     vi.spyOn(apiClient, 'openSession').mockResolvedValue({
       temp_path: '/tmp/x',
       acquired_at: '2026-09-14T10:00:00',
+      session_started_at: '2026-09-14T10:00:00',
     })
     const historySpy = vi.spyOn(apiClient, 'getAuditHistory').mockResolvedValue(entries)
     renderModal('/files?file=shipx_2026-08-01')

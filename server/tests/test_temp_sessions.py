@@ -256,6 +256,46 @@ def test_revert_marks_temp_session_dirty_again(client, auth_header, synthetic_nc
     assert len(client.get("/session/mine", headers=headers).json()) == 1
 
 
+def test_save_marks_temp_session_clean(client, auth_header, synthetic_nc):
+    synthetic_nc("shipx_2026-09-18")
+    headers = auth_header("tsclean1", is_qca=True)
+    client.post("/session/shipx_2026-09-18/open", params={"source": "raw"}, headers=headers)
+    client.post(
+        "/edit/point",
+        json={
+            "filename": "shipx_2026-09-18",
+            "var_name": "temperature",
+            "indices": [0],
+            "value": 1.0,
+        },
+        headers=headers,
+    )
+    assert len(client.get("/session/mine", headers=headers).json()) == 1
+
+    client.post("/save", json={"filename": "shipx_2026-09-18"}, headers=headers)
+    assert client.get("/session/mine", headers=headers).json() == []
+
+
+def test_publish_marks_temp_session_clean(client, auth_header, synthetic_nc):
+    synthetic_nc("shipx_2026-09-19")
+    headers = auth_header("tsclean2", is_qca=True)
+    client.post("/session/shipx_2026-09-19/open", params={"source": "raw"}, headers=headers)
+    client.post(
+        "/edit/point",
+        json={
+            "filename": "shipx_2026-09-19",
+            "var_name": "temperature",
+            "indices": [0],
+            "value": 1.0,
+        },
+        headers=headers,
+    )
+    assert len(client.get("/session/mine", headers=headers).json()) == 1
+
+    client.post("/publish", json={"filename": "shipx_2026-09-19"}, headers=headers)
+    assert client.get("/session/mine", headers=headers).json() == []
+
+
 def test_flag_edit_marks_temp_session_dirty(client, auth_header, synthetic_nc_with_qc):
     import time
 

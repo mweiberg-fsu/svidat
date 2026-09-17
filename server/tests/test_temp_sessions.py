@@ -233,6 +233,29 @@ def test_bulk_edit_marks_temp_session_dirty(client, auth_header, synthetic_nc):
     assert len(client.get("/session/mine", headers=headers).json()) == 1
 
 
+def test_revert_marks_temp_session_dirty_again(client, auth_header, synthetic_nc):
+    synthetic_nc("shipx_2026-09-17b")
+    headers = auth_header("tsdirty4", is_qca=True)
+    client.post("/session/shipx_2026-09-17b/open", params={"source": "raw"}, headers=headers)
+    edit_resp = client.post(
+        "/edit/point",
+        json={
+            "filename": "shipx_2026-09-17b",
+            "var_name": "temperature",
+            "indices": [0],
+            "value": 5.0,
+        },
+        headers=headers,
+    )
+    audit_id = edit_resp.json()["audit_id"]
+
+    client.post("/save", json={"filename": "shipx_2026-09-17b"}, headers=headers)
+    assert client.get("/session/mine", headers=headers).json() == []
+
+    client.post(f"/audit/{audit_id}/revert", headers=headers)
+    assert len(client.get("/session/mine", headers=headers).json()) == 1
+
+
 def test_flag_edit_marks_temp_session_dirty(client, auth_header, synthetic_nc_with_qc):
     import time
 

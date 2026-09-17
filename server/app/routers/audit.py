@@ -6,7 +6,7 @@ import numpy as np
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app import netcdf_ops, storage
+from app import netcdf_ops, storage, temp_sessions
 from app.database import get_db
 from app.deps import get_current_user, require_role
 from app.file_locks import file_write_lock
@@ -180,5 +180,6 @@ def revert(
         )
 
     db.add(new_log)
+    temp_sessions.mark_dirty(db, entry.filename, user.id)
     db.commit()
     return {"status": "reverted"}

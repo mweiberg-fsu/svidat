@@ -1,62 +1,59 @@
-import { useEffect, useState } from 'react'
-import { getFileMetadata } from '../api/client'
+import { useState } from 'react'
+import { publishFile, saveDraft } from '../api/client'
 import { usePlotSelection } from '../context/PlotSelectionContext'
 import { useEditSession } from '../context/EditSessionContext'
 import { SvgPlot } from '../components/SvgPlot'
-import { EditForm } from '../components/EditForm'
-import { AuditPanel } from '../components/AuditPanel'
-import type { FileMetadata } from '../api/types'
 
 export function FilesPage() {
   const { file } = usePlotSelection()
-  const { sessionOpen, canEdit, sessionError, closeSession, flagAppliedAt } = useEditSession()
-  const [metadata, setMetadata] = useState<FileMetadata | null>(null)
-  const [auditRefreshKey, setAuditRefreshKey] = useState(0)
+  const { sessionOpen, canEdit, sessionError, closeSession } = useEditSession()
+  const [submitting, setSubmitting] = useState(false)
+  const [status, setStatus] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (!file) {
-      setMetadata(null)
-      return
+  const handleSave = async () => {
+    setSubmitting(true)
+    try {
+      await saveDraft(file)
+      setStatus('Saved as v250 draft')
+    } catch (err) {
+      setStatus(`Error: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setSubmitting(false)
     }
-    let cancelled = false
-    getFileMetadata(file).then((result) => {
-      if (!cancelled) setMetadata(result)
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [file])
+  }
 
-  // flagAppliedAt starts at 0 and only increments via notifyFlagged, so
-  // skipping 0 avoids firing this effect spuriously on mount. This relies on
-  // FilesPage always mounting alongside a fresh EditSessionProvider (see
-  // ProtectedRoute) — if the provider were ever hoisted higher to persist
-  // session state across navigation, flagAppliedAt could already be nonzero
-  // on mount and this guard would need to change.
-  useEffect(() => {
-    if (flagAppliedAt === 0) return
-    setAuditRefreshKey((k) => k + 1)
-  }, [flagAppliedAt])
+  const handlePublish = async () => {
+    setSubmitting(true)
+    try {
+      await publishFile(file)
+      setStatus('Published as v300')
+    } catch (err) {
+      setStatus(`Error: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   return (
     <div>
       {file && canEdit && (
         <div>
-          {sessionOpen && <button onClick={closeSession}>Close session</button>}
+          {sessionOpen && (
+            <>
+              <button onClick={closeSession}>Close session</button>
+              <button onClick={handleSave} disabled={submitting}>
+                Save draft (v250)
+              </button>
+              <button onClick={handlePublish} disabled={submitting}>
+                Publish (v300)
+              </button>
+            </>
+          )}
           {sessionError && <p role="alert">{sessionError}</p>}
+          {status && <p role="status">{status}</p>}
         </div>
       )}
       <SvgPlot />
-      {sessionOpen && metadata && (
-        <>
-          <EditForm
-            filename={file}
-            variables={Object.keys(metadata.variables)}
-            onChanged={() => setAuditRefreshKey((k) => k + 1)}
-          />
-          <AuditPanel filename={file} refreshSignal={auditRefreshKey} />
-        </>
-      )}
     </div>
   )
 }

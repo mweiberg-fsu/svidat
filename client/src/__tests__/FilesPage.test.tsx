@@ -78,86 +78,56 @@ describe('FilesPage', () => {
     ).toBeInTheDocument()
   })
 
-  it('opens a session and shows the edit form and audit panel', async () => {
-    vi.spyOn(apiClient, 'getFileMetadata').mockResolvedValue({
-      variables: { temperature: { dims: ['time'], shape: [10], dtype: 'f4', attrs: {} } },
-      dimensions: {},
-      global_attrs: {},
-    })
+  it('opens a session and shows close/save/publish buttons', async () => {
     vi.spyOn(apiClient, 'openSession').mockResolvedValue({ status: 'opened' })
-    vi.spyOn(apiClient, 'getAuditHistory').mockResolvedValue([])
 
     renderFilesPageWithFile('qca', 'FILE_A')
-    await waitFor(() => expect(apiClient.getFileMetadata).toHaveBeenCalledWith('FILE_A'))
 
     fireEvent.click(screen.getByTestId('open-session'))
 
     await waitFor(() => expect(screen.getByText('Close session')).toBeInTheDocument())
-    expect(screen.getByText('Edit')).toBeInTheDocument()
-    expect(screen.getByText('Audit history (this session)')).toBeInTheDocument()
+    expect(screen.getByText('Save draft (v250)')).toBeInTheDocument()
+    expect(screen.getByText('Publish (v300)')).toBeInTheDocument()
   })
 
-  it('closes a session and hides the edit form again', async () => {
-    vi.spyOn(apiClient, 'getFileMetadata').mockResolvedValue({
-      variables: { temperature: { dims: ['time'], shape: [10], dtype: 'f4', attrs: {} } },
-      dimensions: {},
-      global_attrs: {},
-    })
+  it('closes a session and hides the save/publish buttons again', async () => {
     vi.spyOn(apiClient, 'openSession').mockResolvedValue({ status: 'opened' })
     vi.spyOn(apiClient, 'closeSession').mockResolvedValue({ status: 'closed' })
-    vi.spyOn(apiClient, 'getAuditHistory').mockResolvedValue([])
 
     renderFilesPageWithFile('qca', 'FILE_A')
-    await waitFor(() => expect(apiClient.getFileMetadata).toHaveBeenCalledWith('FILE_A'))
     fireEvent.click(screen.getByTestId('open-session'))
     await waitFor(() => expect(screen.getByText('Close session')).toBeInTheDocument())
 
     fireEvent.click(screen.getByText('Close session'))
     await waitFor(() => expect(screen.queryByText('Close session')).not.toBeInTheDocument())
-    expect(screen.queryByText('Edit')).not.toBeInTheDocument()
+    expect(screen.queryByText('Save draft (v250)')).not.toBeInTheDocument()
   })
 
-  it('bumps the audit panel refresh signal when flagAppliedAt increments', async () => {
-    vi.spyOn(apiClient, 'getFileMetadata').mockResolvedValue({
-      variables: { temperature: { dims: ['time'], shape: [10], dtype: 'f4', attrs: {} } },
-      dimensions: {},
-      global_attrs: {},
-    })
+  it('saves a draft when the Save draft button is clicked', async () => {
     vi.spyOn(apiClient, 'openSession').mockResolvedValue({ status: 'opened' })
-    const getAuditHistorySpy = vi.spyOn(apiClient, 'getAuditHistory').mockResolvedValue([])
+    const saveDraftSpy = vi.spyOn(apiClient, 'saveDraft').mockResolvedValue({ status: 'saved' })
 
-    localStorage.clear()
-    setToken('tok')
-    localStorage.setItem('svidat_role', JSON.stringify(['qca']))
-    localStorage.setItem('svidat_username', 'testuser')
-
-    function NotifyButton() {
-      const { notifyFlagged } = useEditSession()
-      return <button onClick={() => notifyFlagged()}>notify flagged</button>
-    }
-
-    render(
-      <AuthProvider>
-        <MemoryRouter>
-          <PlotSelectionProvider>
-            <EditSessionProvider>
-              <SetFile file="FILE_A" />
-              <OpenSessionButton />
-              <NotifyButton />
-              <FilesPage />
-            </EditSessionProvider>
-          </PlotSelectionProvider>
-        </MemoryRouter>
-      </AuthProvider>
-    )
-    fireEvent.click(screen.getByTestId('set-file'))
-    await waitFor(() => expect(apiClient.getFileMetadata).toHaveBeenCalledWith('FILE_A'))
+    renderFilesPageWithFile('qca', 'FILE_A')
     fireEvent.click(screen.getByTestId('open-session'))
-    await waitFor(() => expect(screen.getByText('Audit history (this session)')).toBeInTheDocument())
-    await waitFor(() => expect(getAuditHistorySpy).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(screen.getByText('Save draft (v250)')).toBeInTheDocument())
 
-    fireEvent.click(screen.getByText('notify flagged'))
+    fireEvent.click(screen.getByText('Save draft (v250)'))
 
-    await waitFor(() => expect(getAuditHistorySpy).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(saveDraftSpy).toHaveBeenCalledWith('FILE_A'))
+    await waitFor(() => expect(screen.getByText('Saved as v250 draft')).toBeInTheDocument())
+  })
+
+  it('publishes when the Publish button is clicked', async () => {
+    vi.spyOn(apiClient, 'openSession').mockResolvedValue({ status: 'opened' })
+    const publishFileSpy = vi.spyOn(apiClient, 'publishFile').mockResolvedValue({ status: 'published' })
+
+    renderFilesPageWithFile('qca', 'FILE_A')
+    fireEvent.click(screen.getByTestId('open-session'))
+    await waitFor(() => expect(screen.getByText('Publish (v300)')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByText('Publish (v300)'))
+
+    await waitFor(() => expect(publishFileSpy).toHaveBeenCalledWith('FILE_A'))
+    await waitFor(() => expect(screen.getByText('Published as v300')).toBeInTheDocument())
   })
 })

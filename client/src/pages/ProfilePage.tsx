@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { getMyAuditHistory, listDrafts, revertAuditEntry, uploadAvatar } from '../api/client'
+import { getMyAuditHistory, getMySessions, listDrafts, revertAuditEntry, uploadAvatar } from '../api/client'
 import type { AuditEntry } from '../api/types'
 import { useAvatar } from '../hooks/useAvatar'
 import { useAuth } from '../context/AuthContext'
@@ -22,6 +22,8 @@ export function ProfilePage() {
   const [fileFilter, setFileFilter] = useState('')
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
+  const [activeFileTab, setActiveFileTab] = useState<'edited' | 'temp' | 'v250' | 'v300'>('edited')
+  const [openSessions, setOpenSessions] = useState<string[]>([])
 
   const refreshAudit = () => {
     setAuditError(null)
@@ -35,12 +37,41 @@ export function ProfilePage() {
       listDrafts()
         .then(setDrafts)
         .catch((err) => setDraftsError(err instanceof Error ? err.message : String(err)))
+      getMySessions(false)
+        .then((sessions) => setOpenSessions(sessions.map((s) => s.filename)))
+        .catch((err) => setAuditError(err instanceof Error ? err.message : String(err)))
       refreshAudit()
     }
   }, [roles])
 
   const editedFiles = useMemo(
     () => [...new Set(auditEntries.map((e) => e.filename).filter((f): f is string => !!f))].sort(),
+    [auditEntries]
+  )
+
+  const savedV250Files = useMemo(
+    () =>
+      [
+        ...new Set(
+          auditEntries
+            .filter((e) => e.action === 'save')
+            .map((e) => e.filename)
+            .filter((f): f is string => !!f)
+        ),
+      ].sort(),
+    [auditEntries]
+  )
+
+  const savedV300Files = useMemo(
+    () =>
+      [
+        ...new Set(
+          auditEntries
+            .filter((e) => e.action === 'publish')
+            .map((e) => e.filename)
+            .filter((f): f is string => !!f)
+        ),
+      ].sort(),
     [auditEntries]
   )
 
@@ -131,24 +162,125 @@ export function ProfilePage() {
 
       {roles.includes('qca') && (
         <section className="profile-card-wide">
-          <h2>Files edited</h2>
+          <div className="profile-file-tabs">
+            <button
+              type="button"
+              className={`profile-file-tab${activeFileTab === 'edited' ? ' active' : ''}`}
+              onClick={() => setActiveFileTab('edited')}
+            >
+              Files Edited
+            </button>
+            <button
+              type="button"
+              className={`profile-file-tab${activeFileTab === 'temp' ? ' active' : ''}`}
+              onClick={() => setActiveFileTab('temp')}
+            >
+              Temporary Files
+            </button>
+            <button
+              type="button"
+              className={`profile-file-tab${activeFileTab === 'v250' ? ' active' : ''}`}
+              onClick={() => setActiveFileTab('v250')}
+            >
+              Saved to v250
+            </button>
+            <button
+              type="button"
+              className={`profile-file-tab${activeFileTab === 'v300' ? ' active' : ''}`}
+              onClick={() => setActiveFileTab('v300')}
+            >
+              Saved to v300
+            </button>
+          </div>
           {auditError && <p role="status">Error: {auditError}</p>}
-          {editedFiles.length === 0 && !auditError && <p className="profile-hint">No edits yet.</p>}
-          <ul className="profile-files-list">
-            {editedFiles.map((f) => (
-              <li key={f}>
-                <a
-                  href={`/files?file=${encodeURIComponent(f)}`}
-                  onClick={(e) => {
-                    e.preventDefault()
-                    navigate(`/files?file=${encodeURIComponent(f)}`)
-                  }}
-                >
-                  {f}
-                </a>
-              </li>
-            ))}
-          </ul>
+          {activeFileTab === 'edited' && (
+            <>
+              {editedFiles.length === 0 && !auditError && (
+                <p className="profile-hint">No edits yet.</p>
+              )}
+              <ul className="profile-files-list">
+                {editedFiles.map((f) => (
+                  <li key={f}>
+                    <a
+                      href={`/files?file=${encodeURIComponent(f)}`}
+                      onClick={(e) => {
+                        e.preventDefault()
+                        navigate(`/files?file=${encodeURIComponent(f)}`)
+                      }}
+                    >
+                      {f}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          {activeFileTab === 'temp' && (
+            <>
+              {openSessions.length === 0 && !auditError && (
+                <p className="profile-hint">No open sessions.</p>
+              )}
+              <ul className="profile-files-list">
+                {openSessions.map((f) => (
+                  <li key={f}>
+                    <a
+                      href={`/files?file=${encodeURIComponent(f)}`}
+                      onClick={(e) => {
+                        e.preventDefault()
+                        navigate(`/files?file=${encodeURIComponent(f)}`)
+                      }}
+                    >
+                      {f}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          {activeFileTab === 'v250' && (
+            <>
+              {savedV250Files.length === 0 && !auditError && (
+                <p className="profile-hint">No drafts saved.</p>
+              )}
+              <ul className="profile-files-list">
+                {savedV250Files.map((f) => (
+                  <li key={f}>
+                    <a
+                      href={`/files?file=${encodeURIComponent(f)}`}
+                      onClick={(e) => {
+                        e.preventDefault()
+                        navigate(`/files?file=${encodeURIComponent(f)}`)
+                      }}
+                    >
+                      {f}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+          {activeFileTab === 'v300' && (
+            <>
+              {savedV300Files.length === 0 && !auditError && (
+                <p className="profile-hint">No files published.</p>
+              )}
+              <ul className="profile-files-list">
+                {savedV300Files.map((f) => (
+                  <li key={f}>
+                    <a
+                      href={`/files?file=${encodeURIComponent(f)}`}
+                      onClick={(e) => {
+                        e.preventDefault()
+                        navigate(`/files?file=${encodeURIComponent(f)}`)
+                      }}
+                    >
+                      {f}
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
         </section>
       )}
 

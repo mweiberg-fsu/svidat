@@ -75,6 +75,13 @@ export function ProfilePage() {
     [auditEntries]
   )
 
+  const tabConfig: Record<typeof activeFileTab, { files: string[]; empty: string }> = {
+    edited: { files: editedFiles, empty: 'No edits yet.' },
+    temp: { files: openSessions, empty: 'No open sessions.' },
+    v250: { files: savedV250Files, empty: 'No drafts saved.' },
+    v300: { files: savedV300Files, empty: 'No files published.' },
+  }
+
   const filteredAudit = useMemo(() => {
     return auditEntries.filter((e) => {
       if (fileFilter && e.filename !== fileFilter) return false
@@ -193,94 +200,29 @@ export function ProfilePage() {
             </button>
           </div>
           {auditError && <p role="status">Error: {auditError}</p>}
-          {activeFileTab === 'edited' && (
-            <>
-              {editedFiles.length === 0 && !auditError && (
-                <p className="profile-hint">No edits yet.</p>
-              )}
-              <ul className="profile-files-list">
-                {editedFiles.map((f) => (
-                  <li key={f}>
-                    <a
-                      href={`/files?file=${encodeURIComponent(f)}`}
-                      onClick={(e) => {
-                        e.preventDefault()
-                        navigate(`/files?file=${encodeURIComponent(f)}`)
-                      }}
-                    >
-                      {f}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-          {activeFileTab === 'temp' && (
-            <>
-              {openSessions.length === 0 && !auditError && (
-                <p className="profile-hint">No open sessions.</p>
-              )}
-              <ul className="profile-files-list">
-                {openSessions.map((f) => (
-                  <li key={f}>
-                    <a
-                      href={`/files?file=${encodeURIComponent(f)}`}
-                      onClick={(e) => {
-                        e.preventDefault()
-                        navigate(`/files?file=${encodeURIComponent(f)}`)
-                      }}
-                    >
-                      {f}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-          {activeFileTab === 'v250' && (
-            <>
-              {savedV250Files.length === 0 && !auditError && (
-                <p className="profile-hint">No drafts saved.</p>
-              )}
-              <ul className="profile-files-list">
-                {savedV250Files.map((f) => (
-                  <li key={f}>
-                    <a
-                      href={`/files?file=${encodeURIComponent(f)}`}
-                      onClick={(e) => {
-                        e.preventDefault()
-                        navigate(`/files?file=${encodeURIComponent(f)}`)
-                      }}
-                    >
-                      {f}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-          {activeFileTab === 'v300' && (
-            <>
-              {savedV300Files.length === 0 && !auditError && (
-                <p className="profile-hint">No files published.</p>
-              )}
-              <ul className="profile-files-list">
-                {savedV300Files.map((f) => (
-                  <li key={f}>
-                    <a
-                      href={`/files?file=${encodeURIComponent(f)}`}
-                      onClick={(e) => {
-                        e.preventDefault()
-                        navigate(`/files?file=${encodeURIComponent(f)}`)
-                      }}
-                    >
-                      {f}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
+          {(() => {
+            const { files, empty } = tabConfig[activeFileTab]
+            return (
+              <>
+                {files.length === 0 && !auditError && <p className="profile-hint">{empty}</p>}
+                <ul className="profile-files-list">
+                  {files.map((f) => (
+                    <li key={f}>
+                      <a
+                        href={`/files?file=${encodeURIComponent(f)}`}
+                        onClick={(e) => {
+                          e.preventDefault()
+                          navigate(`/files?file=${encodeURIComponent(f)}`)
+                        }}
+                      >
+                        {f}
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </>
+            )
+          })()}
         </section>
       )}
 

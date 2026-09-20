@@ -473,3 +473,34 @@ def test_flag_edit_marks_temp_session_dirty(client, auth_header, synthetic_nc_wi
         time.sleep(0.02)
 
     assert len(client.get("/session/mine", headers=headers).json()) == 1
+
+
+def test_session_mine_dirty_only_param(client, auth_header, synthetic_nc):
+    synthetic_nc("shipx_2026-09-28")
+    synthetic_nc("shipx_2026-09-29")
+    headers = auth_header("tsdirty10", is_qca=True)
+
+    # dirty session
+    client.post("/session/shipx_2026-09-28/open", params={"source": "raw"}, headers=headers)
+    client.post(
+        "/edit/point",
+        json={
+            "filename": "shipx_2026-09-28",
+            "var_name": "temperature",
+            "indices": [0],
+            "value": 1.0,
+        },
+        headers=headers,
+    )
+
+    # clean (just-opened, unedited) session
+    client.post("/session/shipx_2026-09-29/open", params={"source": "raw"}, headers=headers)
+
+    default_resp = client.get("/session/mine", headers=headers).json()
+    assert [e["filename"] for e in default_resp] == ["shipx_2026-09-28"]
+
+    all_resp = client.get("/session/mine", params={"dirty_only": "false"}, headers=headers).json()
+    assert sorted(e["filename"] for e in all_resp) == [
+        "shipx_2026-09-28",
+        "shipx_2026-09-29",
+    ]

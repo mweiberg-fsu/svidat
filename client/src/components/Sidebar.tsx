@@ -36,6 +36,13 @@ export function Sidebar() {
     if (flagSelection) setActiveTab('flags')
   }, [flagSelection])
 
+  // A session ending (Close session button, or Save/Publish which also
+  // end it) leaves the Flags tab showing stale/irrelevant controls once
+  // there's no active session to flag against — revert to File Selection.
+  useEffect(() => {
+    if (!sessionOpen) setActiveTab('files')
+  }, [sessionOpen])
+
   const handleContinueSession = async (filename: string) => {
     setFile(filename)
     await openSession(filename)

@@ -243,6 +243,61 @@ describe('Sidebar', () => {
     )
   })
 
+  it('reverts to the File Selection tab when the session closes', async () => {
+    vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
+    vi.spyOn(apiClient, 'openSession').mockResolvedValue({ status: 'opened' })
+    vi.spyOn(apiClient, 'closeSession').mockResolvedValue({ status: 'closed' })
+    localStorage.clear()
+    setToken('tok')
+    localStorage.setItem('svidat_role', JSON.stringify(['qca']))
+    localStorage.setItem('svidat_username', 'testuser')
+
+    function CloseDriver() {
+      const sel = usePlotSelection()
+      const { openSession, closeSession, setFlagSelection } = useEditSession()
+      return (
+        <>
+          <button onClick={() => sel.setFile('FILE_A')}>set file</button>
+          <button onClick={() => openSession()}>open session</button>
+          <button
+            onClick={() =>
+              setFlagSelection({ varName: 'temperature', startIdx: 4, endIdx: 14, rangeLabel: 'x' })
+            }
+          >
+            resolve selection
+          </button>
+          <button onClick={() => closeSession()}>close session</button>
+        </>
+      )
+    }
+
+    render(
+      <AuthProvider>
+        <MemoryRouter initialEntries={['/files']}>
+          <PlotSelectionProvider>
+            <EditSessionProvider>
+              <CloseDriver />
+              <Sidebar />
+            </EditSessionProvider>
+          </PlotSelectionProvider>
+        </MemoryRouter>
+      </AuthProvider>
+    )
+
+    fireEvent.click(screen.getByText('set file'))
+    fireEvent.click(screen.getByText('open session'))
+    fireEvent.click(screen.getByText('resolve selection'))
+    await waitFor(() =>
+      expect(screen.getByRole('tab', { name: 'Flags' })).toHaveAttribute('aria-selected', 'true')
+    )
+
+    fireEvent.click(screen.getByText('close session'))
+
+    await waitFor(() =>
+      expect(screen.getByRole('tab', { name: 'File Selection' })).toHaveAttribute('aria-selected', 'true')
+    )
+  })
+
   it('highlights the Plots link when on /files', async () => {
     vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
     localStorage.clear()

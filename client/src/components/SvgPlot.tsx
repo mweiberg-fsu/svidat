@@ -524,6 +524,8 @@ export function SvgPlot() {
     setFlagSelection,
     flagAppliedAt,
     flagsVisible,
+    selectedVariables,
+    toggleVariableSelected,
   } = useEditSession()
   const [data, setData] = useState<VariableDataResponse | null>(null)
   const [metadata, setMetadata] = useState<FileMetadata | null>(null)
@@ -1168,6 +1170,16 @@ export function SvgPlot() {
             >
               <span className="svg-plot-tab-grip">⠿</span>
               {varName}
+              <span
+                role="checkbox"
+                aria-checked={selectedVariables.includes(varName)}
+                className={`svg-plot-tab-select${selectedVariables.includes(varName) ? ' selected' : ''}`}
+                onMouseDown={(e) => e.stopPropagation()}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  toggleVariableSelected(varName)
+                }}
+              />
             </div>
             <svg
               width={plotWidth}

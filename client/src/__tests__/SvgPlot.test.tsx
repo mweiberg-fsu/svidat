@@ -1244,6 +1244,36 @@ describe('SvgPlot', () => {
     rectSpy.mockRestore()
   })
 
+  it('selects a panel via its select control, independent of drag/active-variable behavior', async () => {
+    const time = hourlyTimes(4)
+    vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
+      time,
+      variables: {
+        temperature: { values: time.map((_, i) => i), flags: time.map(() => 'Z') },
+        salinity: { values: time.map((_, i) => i * 2), flags: time.map(() => 'Z') },
+      },
+    })
+
+    const { container } = renderSvgPlot('FILE_A', ['temperature', 'salinity'])
+    await waitFor(() => expect(container.querySelectorAll('svg').length).toBe(2))
+
+    const selectControls = () => container.querySelectorAll('[role="checkbox"]')
+    expect(selectControls()).toHaveLength(2)
+    expect(selectControls()[0]).toHaveAttribute('aria-checked', 'false')
+
+    fireEvent.click(selectControls()[0])
+    expect(selectControls()[0]).toHaveAttribute('aria-checked', 'true')
+    expect(selectControls()[1]).toHaveAttribute('aria-checked', 'false')
+
+    // Clicking the select control must not also set the active variable
+    // (the tab's own onClick) or start a drag (the tab's own onMouseDown).
+    const tabs = () => container.querySelectorAll('[data-testid="plot-tab"]')
+    expect(tabs()[0]).not.toHaveClass('active')
+
+    fireEvent.click(selectControls()[0])
+    expect(selectControls()[0]).toHaveAttribute('aria-checked', 'false')
+  })
+
   it('resets the hover tooltip when switching to a dataset with fewer samples', async () => {
     const timeA = hourlyTimes(18) // 19 samples, indices 0-18
     const timeB = hourlyTimes(4) // 5 samples, indices 0-4 — shorter than the hovered index

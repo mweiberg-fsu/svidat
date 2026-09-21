@@ -28,6 +28,8 @@ interface EditSessionState {
   toggleFlagsVisible: () => void
   bulkEdit: boolean
   toggleBulkEdit: () => void
+  selectedVariables: string[]
+  toggleVariableSelected: (varName: string) => void
 }
 
 const EditSessionContext = createContext<EditSessionState | undefined>(undefined)
@@ -43,6 +45,7 @@ export function EditSessionProvider({ children }: { children: ReactNode }) {
   const [flagAppliedAt, setFlagAppliedAt] = useState(0)
   const [flagsVisible, setFlagsVisible] = useState(true)
   const [bulkEdit, setBulkEdit] = useState(false)
+  const [selectedVariables, setSelectedVariables] = useState<string[]>([])
 
   const canEdit = roles.includes('qca')
   const editable = sessionOpen && canEdit
@@ -62,9 +65,12 @@ export function EditSessionProvider({ children }: { children: ReactNode }) {
   }, [file])
 
   // A new file or variable set makes any pending flag selection meaningless
-  // — same as SvgPlot's original [file, variables] reset.
+  // — same as SvgPlot's original [file, variables] reset. A selected panel
+  // that's no longer plotted (or a different file entirely) is meaningless
+  // the same way.
   useEffect(() => {
     setFlagSelection(null)
+    setSelectedVariables([])
   }, [file, variables])
 
   // Warn before the user loses an open edit session (unsaved temp-file
@@ -127,6 +133,11 @@ export function EditSessionProvider({ children }: { children: ReactNode }) {
   const notifyFlagged = () => setFlagAppliedAt((v) => v + 1)
   const toggleFlagsVisible = () => setFlagsVisible((v) => !v)
   const toggleBulkEdit = () => setBulkEdit((v) => !v)
+  const toggleVariableSelected = (varName: string) => {
+    setSelectedVariables((prev) =>
+      prev.includes(varName) ? prev.filter((v) => v !== varName) : [...prev, varName]
+    )
+  }
 
   return (
     <EditSessionContext.Provider
@@ -147,6 +158,8 @@ export function EditSessionProvider({ children }: { children: ReactNode }) {
         toggleFlagsVisible,
         bulkEdit,
         toggleBulkEdit,
+        selectedVariables,
+        toggleVariableSelected,
       }}
     >
       {children}

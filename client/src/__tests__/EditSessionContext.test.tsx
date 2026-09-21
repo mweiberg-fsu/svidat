@@ -21,6 +21,8 @@ function Consumer() {
     notifyFlagged,
     bulkEdit,
     toggleBulkEdit,
+    selectedVariables,
+    toggleVariableSelected,
   } = useEditSession()
   const sel = usePlotSelection()
   return (
@@ -32,6 +34,7 @@ function Consumer() {
       <span>flagSelection:{flagSelection ? flagSelection.rangeLabel : 'none'}</span>
       <span>flagAppliedAt:{flagAppliedAt}</span>
       <span>bulkEdit:{String(bulkEdit)}</span>
+      <span>selectedVariables:{selectedVariables.join(',') || 'none'}</span>
       <span>file:{sel.file || 'none'}</span>
       <button onClick={() => openSession()}>open</button>
       <button onClick={() => closeSession()}>close</button>
@@ -45,6 +48,8 @@ function Consumer() {
       <button onClick={() => setFlagSelection(null)}>clear</button>
       <button onClick={() => notifyFlagged()}>notify</button>
       <button onClick={() => toggleBulkEdit()}>toggle bulk</button>
+      <button onClick={() => toggleVariableSelected('temperature')}>toggle temperature</button>
+      <button onClick={() => toggleVariableSelected('humidity')}>toggle humidity</button>
     </div>
   )
 }
@@ -370,6 +375,30 @@ describe('EditSessionContext', () => {
 
     fireEvent.click(screen.getByTestId('set-file-b'))
     await waitFor(() => expect(screen.getByText('bulkEdit:false')).toBeInTheDocument())
+  })
+
+  it('selectedVariables defaults to empty; toggleVariableSelected adds and removes', () => {
+    renderWithRole('qca')
+    expect(screen.getByText('selectedVariables:none')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('toggle temperature'))
+    expect(screen.getByText('selectedVariables:temperature')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('toggle humidity'))
+    expect(screen.getByText('selectedVariables:temperature,humidity')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('toggle temperature'))
+    expect(screen.getByText('selectedVariables:humidity')).toBeInTheDocument()
+  })
+
+  it('changing the file resets selectedVariables', async () => {
+    renderWithRole('qca')
+    fireEvent.click(screen.getByTestId('set-file'))
+    fireEvent.click(screen.getByText('toggle temperature'))
+    expect(screen.getByText('selectedVariables:temperature')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('set-file-b'))
+    await waitFor(() => expect(screen.getByText('selectedVariables:none')).toBeInTheDocument())
   })
 
   it('openSession(explicitFilename) opens a session for that file, independent of PlotSelectionContext', async () => {

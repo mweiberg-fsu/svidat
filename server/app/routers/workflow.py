@@ -5,7 +5,7 @@ from app import storage, temp_sessions
 from app.database import get_db
 from app.deps import require_role
 from app.file_locks import file_write_lock
-from app.models import AuditLog, Role, User
+from app.models import AuditLog, Lock, Role, User
 from app.schemas import PublishRequest, SaveRequest
 from app.session_lock import require_lock
 
@@ -30,8 +30,16 @@ def save(
     dst = storage.draft_path(user.username, payload.filename)
     with file_write_lock(f"nc:{payload.filename}"):
         storage.atomic_copy(temp, dst)
+        temp.unlink(missing_ok=True)
         temp_sessions.mark_clean(db, payload.filename, user.id)
         db.add(AuditLog(filename=payload.filename, user_id=user.id, action="save"))
+        lock = (
+            db.query(Lock)
+            .filter(Lock.filename == payload.filename, Lock.user_id == user.id)
+            .first()
+        )
+        if lock:
+            db.delete(lock)
         db.commit()
     return {"draft_path": str(dst)}
 

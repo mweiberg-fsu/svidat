@@ -19,6 +19,7 @@ interface EditSessionState {
   sessionError: string | null
   openSession: (filename?: string) => Promise<void>
   closeSession: () => Promise<void>
+  endSessionLocally: () => void
   flagSelection: FlagSelection | null
   setFlagSelection: (selection: FlagSelection | null) => void
   flagAppliedAt: number
@@ -112,6 +113,16 @@ export function EditSessionProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  // For actions that end the session server-side without calling
+  // closeSession (e.g. save, which now releases the lock and deletes the
+  // temp file itself) — resets local state to match without a redundant
+  // closeSession API call.
+  const endSessionLocally = () => {
+    setSessionOpen(false)
+    setSessionOpenedAt(null)
+    setFlagSelection(null)
+  }
+
   const notifyFlagged = () => setFlagAppliedAt((v) => v + 1)
   const toggleFlagsVisible = () => setFlagsVisible((v) => !v)
   const toggleBulkEdit = () => setBulkEdit((v) => !v)
@@ -126,6 +137,7 @@ export function EditSessionProvider({ children }: { children: ReactNode }) {
         sessionError,
         openSession: handleOpenSession,
         closeSession: handleCloseSession,
+        endSessionLocally,
         flagSelection,
         setFlagSelection,
         flagAppliedAt,

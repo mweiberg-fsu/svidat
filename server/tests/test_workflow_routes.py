@@ -1,4 +1,6 @@
 from app import storage
+from app.database import SessionLocal
+from app.models import Lock, User
 
 
 def test_save_copies_temp_to_draft(client, auth_header, synthetic_nc):
@@ -12,12 +14,46 @@ def test_save_copies_temp_to_draft(client, auth_header, synthetic_nc):
     assert draft.exists()
 
 
+def test_save_deletes_temp_and_releases_lock(client, auth_header, synthetic_nc):
+    synthetic_nc("shipx_2026-08-15b")
+    headers = auth_header("saver1b", is_qca=True)
+    client.post("/session/shipx_2026-08-15b/open", params={"source": "raw"}, headers=headers)
+
+    resp = client.post("/save", json={"filename": "shipx_2026-08-15b"}, headers=headers)
+    assert resp.status_code == 200
+
+    temp = storage.temp_path("saver1b", "shipx_2026-08-15b")
+    assert not temp.exists()
+
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.username == "saver1b").first()
+        lock = (
+            db.query(Lock)
+            .filter(Lock.filename == "shipx_2026-08-15b", Lock.user_id == user.id)
+            .first()
+        )
+        assert lock is None
+    finally:
+        db.close()
+
+    # session is over (lock released) -> editing without reopening is rejected
+    resp = client.post(
+        "/edit/point",
+        json={"filename": "shipx_2026-08-15b", "var_name": "temp", "indices": [0], "value": 1.0},
+        headers=headers,
+    )
+    assert resp.status_code == 409
+
+
 def test_save_overwrites_previous_draft(client, auth_header, synthetic_nc):
     synthetic_nc("shipx_2026-08-16")
     headers = auth_header("saver2", is_qca=True)
     client.post("/session/shipx_2026-08-16/open", params={"source": "raw"}, headers=headers)
     client.post("/save", json={"filename": "shipx_2026-08-16"}, headers=headers)
 
+    # save ends the session -> reopen (from the draft just written) before editing again
+    client.post("/session/shipx_2026-08-16/open", params={"source": "draft"}, headers=headers)
     temp = storage.temp_path("saver2", "shipx_2026-08-16")
     temp.write_bytes(b"second-save-marker")
     client.post("/save", json={"filename": "shipx_2026-08-16"}, headers=headers)

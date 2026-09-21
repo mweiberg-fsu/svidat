@@ -347,6 +347,8 @@ def test_revert_marks_temp_session_dirty_again(client, auth_header, synthetic_nc
     client.post("/save", json={"filename": "shipx_2026-09-17b"}, headers=headers)
     assert client.get("/session/mine", headers=headers).json() == []
 
+    # save ends the session (lock + temp released) -> reopen before reverting
+    client.post("/session/shipx_2026-09-17b/open", params={"source": "draft"}, headers=headers)
     client.post(f"/audit/{audit_id}/revert", headers=headers)
     assert len(client.get("/session/mine", headers=headers).json()) == 1
 
@@ -440,6 +442,8 @@ def test_revert_then_shows_dirty_in_session_mine(client, auth_header, synthetic_
     assert resp.status_code == 200
     assert client.get("/session/mine", headers=headers).json() == []
 
+    # save ends the session (lock + temp released) -> reopen before reverting
+    client.post("/session/shipx_2026-09-27/open", params={"source": "draft"}, headers=headers)
     resp = client.post(f"/audit/{audit_id}/revert", headers=headers)
     assert resp.status_code == 200
     mine = client.get("/session/mine", headers=headers).json()

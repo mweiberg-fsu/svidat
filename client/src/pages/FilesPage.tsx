@@ -6,7 +6,7 @@ import { SvgPlot } from '../components/SvgPlot'
 
 export function FilesPage() {
   const { file } = usePlotSelection()
-  const { sessionOpen, canEdit, sessionError, closeSession } = useEditSession()
+  const { sessionOpen, canEdit, sessionError, closeSession, endSessionLocally } = useEditSession()
   const [submitting, setSubmitting] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
 
@@ -14,6 +14,7 @@ export function FilesPage() {
     setSubmitting(true)
     try {
       await saveDraft(file)
+      endSessionLocally()
       setStatus('Saved as v250 draft')
     } catch (err) {
       setStatus(`Error: ${err instanceof Error ? err.message : String(err)}`)

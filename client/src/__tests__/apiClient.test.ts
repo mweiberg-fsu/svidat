@@ -7,6 +7,8 @@ import {
   updateOAuthSettings,
   createUser,
   updateUserRoles,
+  getTheme,
+  updateThemeSettings,
 } from '../api/client'
 
 describe('apiClient', () => {
@@ -106,6 +108,31 @@ describe('oauth client functions', () => {
     expect(url).toContain('/admin/oauth-settings')
     expect(options.method).toBe('PUT')
     expect(JSON.parse(options.body)).toEqual({ allowed_domains: ['fsu.edu', 'noaa.gov'] })
+  })
+
+  it('getTheme and updateThemeSettings hit the theme endpoints', async () => {
+    setToken('abc123')
+    const theme = {
+      primary_color: '#111111',
+      secondary_color: '#222222',
+      tertiary_color: '#333333',
+    }
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(async () => new Response(JSON.stringify(theme), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const got = await getTheme()
+    expect(got).toEqual(theme)
+    const [getUrl, getOptions] = fetchMock.mock.calls[0]
+    expect(getUrl).toContain('/theme')
+    expect(getOptions.method ?? 'GET').toBe('GET')
+
+    await updateThemeSettings(theme)
+    const [url, options] = fetchMock.mock.calls[1]
+    expect(url).toContain('/admin/theme-settings')
+    expect(options.method).toBe('PUT')
+    expect(JSON.parse(options.body)).toEqual(theme)
   })
 })
 

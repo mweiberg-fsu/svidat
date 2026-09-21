@@ -408,6 +408,37 @@ describe('Sidebar', () => {
     await waitFor(() => expect(screen.getByText('Plots')).toHaveClass('active'))
   })
 
+  it('clicking the Plots link while already on /files does not reset the current file/query params', async () => {
+    vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
+    localStorage.clear()
+    setToken('tok')
+    localStorage.setItem('svidat_role', JSON.stringify(['qca']))
+    localStorage.setItem('svidat_username', 'testuser')
+
+    function FileReader() {
+      const sel = usePlotSelection()
+      return <span data-testid="current-file">{sel.file}</span>
+    }
+
+    render(
+      <AuthProvider>
+        <MemoryRouter initialEntries={['/files?ship=KAOU&year=2011&file=FILE_A&vars=temperature']}>
+          <PlotSelectionProvider>
+            <EditSessionProvider>
+              <FileReader />
+              <Sidebar />
+            </EditSessionProvider>
+          </PlotSelectionProvider>
+        </MemoryRouter>
+      </AuthProvider>
+    )
+    await waitFor(() => expect(screen.getByTestId('current-file')).toHaveTextContent('FILE_A'))
+
+    fireEvent.click(screen.getByText('Plots'))
+
+    expect(screen.getByTestId('current-file')).toHaveTextContent('FILE_A')
+  })
+
   it('confirms before navigating when there are unresolved resumable sessions, and only navigates if confirmed', async () => {
     vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
     vi.spyOn(apiClient, 'getMySessions').mockResolvedValue([

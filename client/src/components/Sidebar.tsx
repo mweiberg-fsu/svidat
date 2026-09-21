@@ -56,12 +56,16 @@ export function Sidebar() {
   }
 
   const handleNavClick = (path: string) => {
-    if (sessionOpen && location.pathname !== path) {
+    // Already here — e.g. re-clicking "Plots" while on /files — navigating
+    // to the bare path would drop the current ship/year/file/vars query
+    // params and reset the page. Nothing to do.
+    if (location.pathname === path) return
+    if (sessionOpen) {
       if (!window.confirm('You have an open edit session. Leave without closing it?')) {
         return
       }
     }
-    if (resumableSessions.length > 0 && location.pathname !== path) {
+    if (resumableSessions.length > 0) {
       if (!window.confirm('You have unresolved edits to continue or discard. Leave anyway?')) {
         return
       }

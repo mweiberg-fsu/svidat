@@ -51,7 +51,6 @@ export function FlagsPanel() {
     flagsVisible,
     toggleFlagsVisible,
     bulkEdit,
-    toggleBulkEdit,
   } = useEditSession()
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -116,15 +115,6 @@ export function FlagsPanel() {
         <label>
           <input type="checkbox" checked={flagsVisible} onChange={toggleFlagsVisible} />
           Show flags
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={bulkEdit}
-            onChange={toggleBulkEdit}
-            disabled={!editable}
-          />
-          Bulk edit{bulkEdit && variables.length > 0 ? ` (${variables.length} vars)` : ''}
         </label>
       </div>
       <p className="sidebar-flags-panel-status">

@@ -14,7 +14,8 @@ import * as apiClient from '../api/client'
 // sets the selection, covered in its own test file).
 function Driver() {
   const sel = usePlotSelection()
-  const { openSession, setFlagSelection, flagsVisible, bulkEdit, flagAppliedAt } = useEditSession()
+  const { openSession, setFlagSelection, flagsVisible, bulkEdit, toggleBulkEdit, flagAppliedAt } =
+    useEditSession()
   return (
     <div>
       <span data-testid="flags-visible">{String(flagsVisible)}</span>
@@ -38,6 +39,7 @@ function Driver() {
         select
       </button>
       <button onClick={() => setFlagSelection(null)}>clear</button>
+      <button onClick={() => toggleBulkEdit()}>toggle bulk</button>
     </div>
   )
 }
@@ -173,13 +175,11 @@ describe('FlagsPanel', () => {
     expect(applyFlagSpy).not.toHaveBeenCalled()
   })
 
-  it('renders the mode row: Show flags checked by default, Bulk edit unchecked and disabled until editable', () => {
+  it('renders the mode row: Show flags checked by default', () => {
     renderPanel()
     const showFlags = screen.getByLabelText('Show flags') as HTMLInputElement
-    const bulkEdit = screen.getByLabelText('Bulk edit') as HTMLInputElement
     expect(showFlags.checked).toBe(true)
-    expect(bulkEdit.checked).toBe(false)
-    expect(bulkEdit).toBeDisabled()
+    expect(screen.queryByLabelText(/^Bulk edit/)).not.toBeInTheDocument()
   })
 
   it('clicking "Show flags" toggles flagsVisible', () => {
@@ -191,19 +191,6 @@ describe('FlagsPanel', () => {
 
     fireEvent.click(screen.getByLabelText('Show flags'))
     expect(screen.getByTestId('flags-visible')).toHaveTextContent('true')
-  })
-
-  it('enables "Bulk edit" once editable, and toggling it flips bulkEdit and shows the variable count', async () => {
-    await selectAndMakeEditable(() => fireEvent.click(screen.getByText('set variables')))
-
-    const bulkEdit = screen.getByLabelText(/^Bulk edit/) as HTMLInputElement
-    expect(bulkEdit).not.toBeDisabled()
-    expect(bulkEdit.checked).toBe(false)
-    expect(screen.getByTestId('bulk-edit')).toHaveTextContent('false')
-
-    fireEvent.click(bulkEdit)
-    expect(screen.getByTestId('bulk-edit')).toHaveTextContent('true')
-    expect(screen.getByText('Bulk edit (3 vars)')).toBeInTheDocument()
   })
 
   it('with bulk edit off, applying a code still calls applyFlag only for the selected variable', async () => {
@@ -229,7 +216,7 @@ describe('FlagsPanel', () => {
       result: { audit_id: 1 },
     })
     await selectAndMakeEditable(() => fireEvent.click(screen.getByText('set variables')))
-    fireEvent.click(screen.getByLabelText(/^Bulk edit/))
+    fireEvent.click(screen.getByText('toggle bulk'))
 
     fireEvent.click(screen.getByText('K-Suspect/Caution'))
 
@@ -249,7 +236,7 @@ describe('FlagsPanel', () => {
       result: { audit_id: 1 },
     })
     await selectAndMakeEditable()
-    fireEvent.click(screen.getByLabelText(/^Bulk edit/))
+    fireEvent.click(screen.getByText('toggle bulk'))
 
     fireEvent.click(screen.getByText('K-Suspect/Caution'))
 
@@ -268,7 +255,7 @@ describe('FlagsPanel', () => {
       return Promise.resolve({ status: 'done', error: null, result: { audit_id: 1 } })
     })
     await selectAndMakeEditable(() => fireEvent.click(screen.getByText('set variables')))
-    fireEvent.click(screen.getByLabelText(/^Bulk edit/))
+    fireEvent.click(screen.getByText('toggle bulk'))
 
     fireEvent.click(screen.getByText('K-Suspect/Caution'))
 

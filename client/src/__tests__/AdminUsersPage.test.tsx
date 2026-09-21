@@ -8,6 +8,11 @@ describe('AdminUsersPage OAuth domain allowlist', () => {
     vi.restoreAllMocks()
     vi.spyOn(client, 'listUsers').mockResolvedValue([])
     vi.spyOn(client, 'getOAuthSettings').mockResolvedValue({ allowed_domains: ['fsu.edu'] })
+    vi.spyOn(client, 'getTheme').mockResolvedValue({
+      primary_color: '#ed1f21',
+      secondary_color: '#5e6cb3',
+      tertiary_color: '#cbe3f5',
+    })
   })
 
   it('loads and displays existing allowed domains', async () => {
@@ -72,6 +77,11 @@ describe('AdminUsersPage role management', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
     vi.spyOn(client, 'getOAuthSettings').mockResolvedValue({ allowed_domains: [] })
+    vi.spyOn(client, 'getTheme').mockResolvedValue({
+      primary_color: '#ed1f21',
+      secondary_color: '#5e6cb3',
+      tertiary_color: '#cbe3f5',
+    })
   })
 
   it('creates a user with checked roles', async () => {
@@ -191,5 +201,57 @@ describe('AdminUsersPage role management', () => {
 
     resolveUpdate!({ id: 7, username: 'existinguser', roles: ['admin'] })
     await waitFor(() => expect(screen.queryByText('Save')).not.toBeInTheDocument())
+  })
+})
+
+describe('AdminUsersPage theme colors', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+    vi.spyOn(client, 'listUsers').mockResolvedValue([])
+    vi.spyOn(client, 'getOAuthSettings').mockResolvedValue({ allowed_domains: [] })
+    vi.spyOn(client, 'getTheme').mockResolvedValue({
+      primary_color: '#ed1f21',
+      secondary_color: '#5e6cb3',
+      tertiary_color: '#cbe3f5',
+    })
+  })
+
+  it('loads and displays the current theme colors', async () => {
+    render(<AdminUsersPage />)
+    expect(await screen.findByDisplayValue('#ed1f21')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('#5e6cb3')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('#cbe3f5')).toBeInTheDocument()
+  })
+
+  it('saves edited colors and shows a success status', async () => {
+    vi.spyOn(client, 'updateThemeSettings').mockResolvedValue({
+      primary_color: '#111111',
+      secondary_color: '#5e6cb3',
+      tertiary_color: '#cbe3f5',
+    })
+    render(<AdminUsersPage />)
+    await screen.findByDisplayValue('#ed1f21')
+
+    fireEvent.change(screen.getByLabelText('Primary color'), { target: { value: '#111111' } })
+    fireEvent.click(screen.getByText('Save colors'))
+
+    await waitFor(() =>
+      expect(client.updateThemeSettings).toHaveBeenCalledWith({
+        primary_color: '#111111',
+        secondary_color: '#5e6cb3',
+        tertiary_color: '#cbe3f5',
+      })
+    )
+    expect(await screen.findByText('Colors updated')).toBeInTheDocument()
+  })
+
+  it('shows an error status when saving fails', async () => {
+    vi.spyOn(client, 'updateThemeSettings').mockRejectedValue(new Error('400: invalid hex color'))
+    render(<AdminUsersPage />)
+    await screen.findByDisplayValue('#ed1f21')
+
+    fireEvent.click(screen.getByText('Save colors'))
+
+    expect(await screen.findByText('Error: 400: invalid hex color')).toBeInTheDocument()
   })
 })

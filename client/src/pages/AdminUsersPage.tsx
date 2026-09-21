@@ -3,8 +3,10 @@ import {
   createUser,
   deleteUser,
   getOAuthSettings,
+  getTheme,
   listUsers,
   updateOAuthSettings,
+  updateThemeSettings,
   updateUserRoles,
 } from '../api/client'
 
@@ -33,6 +35,14 @@ export function AdminUsersPage() {
   const [oauthStatus, setOauthStatus] = useState<string | null>(null)
   const [oauthSubmitting, setOauthSubmitting] = useState(false)
 
+  const [themeColors, setThemeColors] = useState({
+    primary_color: '',
+    secondary_color: '',
+    tertiary_color: '',
+  })
+  const [themeStatus, setThemeStatus] = useState<string | null>(null)
+  const [themeSubmitting, setThemeSubmitting] = useState(false)
+
   const refresh = () => {
     listUsers()
       .then(setUsers)
@@ -48,6 +58,14 @@ export function AdminUsersPage() {
       .then((s) => setAllowedDomains(s.allowed_domains))
       .catch((err) => {
         setOauthStatus(`Error: ${err instanceof Error ? err.message : String(err)}`)
+      })
+  }, [])
+
+  useEffect(() => {
+    getTheme()
+      .then(setThemeColors)
+      .catch((err) => {
+        setThemeStatus(`Error: ${err instanceof Error ? err.message : String(err)}`)
       })
   }, [])
 
@@ -135,6 +153,20 @@ export function AdminUsersPage() {
 
   const handleRemoveDomain = (domain: string) => {
     saveDomains(allowedDomains.filter((d) => d !== domain))
+  }
+
+  const handleSaveTheme = async () => {
+    setThemeStatus(null)
+    setThemeSubmitting(true)
+    try {
+      const saved = await updateThemeSettings(themeColors)
+      setThemeColors(saved)
+      setThemeStatus('Colors updated')
+    } catch (err) {
+      setThemeStatus(`Error: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setThemeSubmitting(false)
+    }
   }
 
   return (
@@ -289,6 +321,58 @@ export function AdminUsersPage() {
         {oauthStatus && (
           <p className={`admin-status ${oauthStatus.startsWith('Error') ? 'admin-status-error' : ''}`}>
             {oauthStatus}
+          </p>
+        )}
+      </section>
+
+      <section className="admin-card">
+        <h2>Theme colors</h2>
+        <div className="admin-form-row">
+          <label className="admin-field">
+            Primary color
+            <input
+              type="color"
+              value={themeColors.primary_color}
+              onChange={(e) =>
+                setThemeColors((prev) => ({ ...prev, primary_color: e.target.value }))
+              }
+              disabled={themeSubmitting}
+            />
+          </label>
+          <label className="admin-field">
+            Secondary color
+            <input
+              type="color"
+              value={themeColors.secondary_color}
+              onChange={(e) =>
+                setThemeColors((prev) => ({ ...prev, secondary_color: e.target.value }))
+              }
+              disabled={themeSubmitting}
+            />
+          </label>
+          <label className="admin-field">
+            Tertiary color
+            <input
+              type="color"
+              value={themeColors.tertiary_color}
+              onChange={(e) =>
+                setThemeColors((prev) => ({ ...prev, tertiary_color: e.target.value }))
+              }
+              disabled={themeSubmitting}
+            />
+          </label>
+        </div>
+        <button
+          className="admin-btn admin-btn-primary"
+          onClick={handleSaveTheme}
+          disabled={themeSubmitting}
+        >
+          Save colors
+        </button>
+
+        {themeStatus && (
+          <p className={`admin-status ${themeStatus.startsWith('Error') ? 'admin-status-error' : ''}`}>
+            {themeStatus}
           </p>
         )}
       </section>

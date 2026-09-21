@@ -1112,7 +1112,7 @@ describe('SvgPlot', () => {
     )
   })
 
-  it('a click below the drag threshold does not open a session', async () => {
+  it('a click below the drag threshold does not open a second session', async () => {
     const time = hourlyTimes(18)
     vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
       time,
@@ -1122,13 +1122,15 @@ describe('SvgPlot', () => {
 
     const { container } = renderSvgPlot('FILE_A', ['temperature'])
     await waitFor(() => expect(container.querySelector('svg')).toBeInTheDocument())
+    // Selecting the file already opens a session automatically.
+    await waitFor(() => expect(openSpy).toHaveBeenCalledTimes(1))
 
     const svg = container.querySelector('svg')!
     fireEvent.mouseDown(svg, { clientX: 200 })
     fireEvent.mouseMove(window, { clientX: 202 })
     fireEvent.mouseUp(window, { clientX: 202 })
 
-    expect(openSpy).not.toHaveBeenCalled()
+    expect(openSpy).toHaveBeenCalledTimes(1)
   })
 
   it('does not re-open a session on a second drag once one is already open', async () => {

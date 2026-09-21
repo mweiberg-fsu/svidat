@@ -302,20 +302,18 @@ describe('EditSessionContext', () => {
         })
     )
     renderWithRole('qca')
-    fireEvent.click(screen.getByTestId('set-file'))
 
-    // Kick off an open for FILE_A and leave it unresolved.
-    fireEvent.click(screen.getByText('open'))
-    expect(openSpy).toHaveBeenCalledTimes(1)
+    // Selecting a file now opens a session for it automatically — leave the
+    // FILE_A request unresolved.
+    fireEvent.click(screen.getByTestId('set-file'))
+    await waitFor(() => expect(openSpy).toHaveBeenCalledTimes(1))
     expect(openSpy).toHaveBeenNthCalledWith(1, 'FILE_A', 'raw')
 
     // Switch to FILE_B before the FILE_A request resolves. This must clear
-    // the stale in-flight guard so a subsequent open isn't silently dropped.
-    fireEvent.click(screen.getByTestId('set-file-b'))
-    await waitFor(() => expect(screen.getByText('sessionOpen:false')).toBeInTheDocument())
-
+    // the stale in-flight guard so the auto-open for FILE_B isn't silently
+    // dropped.
     openSpy.mockResolvedValueOnce({ status: 'opened' })
-    fireEvent.click(screen.getByText('open'))
+    fireEvent.click(screen.getByTestId('set-file-b'))
     await waitFor(() => expect(openSpy).toHaveBeenCalledTimes(2))
     expect(openSpy).toHaveBeenNthCalledWith(2, 'FILE_B', 'raw')
     await waitFor(() => expect(screen.getByText('sessionOpen:true')).toBeInTheDocument())

@@ -77,9 +77,10 @@ function renderPanel(role: string = 'qca') {
 
 async function selectAndMakeEditable(beforeSelect?: () => void) {
   renderPanel()
-  fireEvent.click(screen.getByText('set file'))
   vi.spyOn(apiClient, 'openSession').mockResolvedValue({ status: 'opened' })
-  fireEvent.click(screen.getByText('open session'))
+  // Selecting a file now opens a session automatically, so the mock must be
+  // in place before this click, not after.
+  fireEvent.click(screen.getByText('set file'))
   await waitFor(() =>
     expect(screen.getByText('Select points on the plot to flag them')).toBeInTheDocument()
   )

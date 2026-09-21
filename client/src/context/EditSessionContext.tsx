@@ -55,14 +55,32 @@ export function EditSessionProvider({ children }: { children: ReactNode }) {
   // A new file invalidates the current edit session — same as FilesPage's
   // original per-file session reset. Also clear any stale in-flight open
   // flag so a legitimate open request for the new file isn't silently
-  // swallowed by the guard in handleOpenSession.
+  // swallowed by the guard in handleOpenSession. Then, for an editable-role
+  // user, immediately open a session for the new file — so the session
+  // toolbar (Close/Bulk edit/Save/Publish) appears as soon as a file is
+  // selected, rather than waiting for the first flag-drag gesture. This
+  // claims the file's DB edit lock on open, not on first edit, so simply
+  // viewing a file as a qca user now blocks other qca users from opening
+  // it too. Calls performOpen (not handleOpenSession) because this effect
+  // has already reset sessionOpen above — but that reset is an async state
+  // update, not yet reflected in this render's `sessionOpen` closure, so
+  // handleOpenSession's own `if (sessionOpen ...) return` guard would still
+  // see the *previous* file's stale true value here and wrongly no-op.
+  // performOpen is deliberately omitted from the deps below — it's redefined
+  // every render, and including it would rerun this effect (and re-attempt
+  // an open) on every unrelated render, not just on an actual file/role
+  // change, since performOpen only guards on openingRef, not sessionOpen.
   useEffect(() => {
     setSessionOpen(false)
     setSessionOpenedAt(null)
     setSessionError(null)
     setBulkEdit(false)
     openingRef.current = false
-  }, [file])
+    if (file && canEdit) {
+      performOpen(file)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [file, canEdit])
 
   // A new file or variable set makes any pending flag selection meaningless
   // — same as SvgPlot's original [file, variables] reset. A selected panel
@@ -87,10 +105,13 @@ export function EditSessionProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('beforeunload', handler)
   }, [sessionOpen])
 
-  const handleOpenSession = async (targetFilename?: string) => {
-    const target = targetFilename ?? file
-    if (!target) return
-    if (sessionOpen || openingRef.current) return
+  // Core open logic, guarded only by openingRef (a ref, always synchronously
+  // current — unlike sessionOpen state, which may lag a render behind).
+  // handleOpenSession wraps this with an additional sessionOpen check for
+  // its other callers (e.g. Sidebar resuming a session), where skipping a
+  // redundant open when already known-open is the desired behavior.
+  const performOpen = async (target: string) => {
+    if (!target || openingRef.current) return
     openingRef.current = true
     setSessionError(null)
     try {
@@ -104,6 +125,13 @@ export function EditSessionProvider({ children }: { children: ReactNode }) {
     } finally {
       openingRef.current = false
     }
+  }
+
+  const handleOpenSession = async (targetFilename?: string) => {
+    const target = targetFilename ?? file
+    if (!target) return
+    if (sessionOpen || openingRef.current) return
+    await performOpen(target)
   }
 
   const handleCloseSession = async () => {

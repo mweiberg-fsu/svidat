@@ -5,7 +5,7 @@ import { useEditSession } from '../context/EditSessionContext'
 import { SvgPlot } from '../components/SvgPlot'
 
 export function FilesPage() {
-  const { file, variables } = usePlotSelection()
+  const { file } = usePlotSelection()
   const {
     sessionOpen,
     canEdit,
@@ -15,6 +15,7 @@ export function FilesPage() {
     editable,
     bulkEdit,
     toggleBulkEdit,
+    selectedVariables,
   } = useEditSession()
   const [submitting, setSubmitting] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
@@ -57,7 +58,7 @@ export function FilesPage() {
                   onClick={toggleBulkEdit}
                   disabled={!editable}
                 >
-                  Bulk edit{bulkEdit && variables.length > 0 ? ` (${variables.length} vars)` : ''}
+                  Bulk edit{bulkEdit && selectedVariables.length > 0 ? ` (${selectedVariables.length} vars)` : ''}
                 </button>
               </div>
               <div className="files-toolbar-right">

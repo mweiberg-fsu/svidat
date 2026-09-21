@@ -5,8 +5,17 @@ import { useEditSession } from '../context/EditSessionContext'
 import { SvgPlot } from '../components/SvgPlot'
 
 export function FilesPage() {
-  const { file } = usePlotSelection()
-  const { sessionOpen, canEdit, sessionError, closeSession, endSessionLocally } = useEditSession()
+  const { file, variables } = usePlotSelection()
+  const {
+    sessionOpen,
+    canEdit,
+    sessionError,
+    closeSession,
+    endSessionLocally,
+    editable,
+    bulkEdit,
+    toggleBulkEdit,
+  } = useEditSession()
   const [submitting, setSubmitting] = useState(false)
   const [status, setStatus] = useState<string | null>(null)
 
@@ -40,15 +49,26 @@ export function FilesPage() {
       {file && canEdit && (
         <div>
           {sessionOpen && (
-            <>
-              <button onClick={closeSession}>Close session</button>
-              <button onClick={handleSave} disabled={submitting}>
-                Save draft (v250)
-              </button>
-              <button onClick={handlePublish} disabled={submitting}>
-                Publish (v300)
-              </button>
-            </>
+            <div className="files-toolbar">
+              <div className="files-toolbar-left">
+                <button onClick={closeSession}>Close session</button>
+                <button
+                  className={`files-toolbar-btn${bulkEdit ? ' active' : ''}`}
+                  onClick={toggleBulkEdit}
+                  disabled={!editable}
+                >
+                  Bulk edit{bulkEdit && variables.length > 0 ? ` (${variables.length} vars)` : ''}
+                </button>
+              </div>
+              <div className="files-toolbar-right">
+                <button onClick={handleSave} disabled={submitting}>
+                  Save draft (v250)
+                </button>
+                <button onClick={handlePublish} disabled={submitting}>
+                  Publish (v300)
+                </button>
+              </div>
+            </div>
           )}
           {sessionError && <p role="alert">{sessionError}</p>}
           {status && <p role="status">{status}</p>}

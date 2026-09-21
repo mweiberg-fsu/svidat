@@ -130,4 +130,33 @@ describe('FilesPage', () => {
     await waitFor(() => expect(publishFileSpy).toHaveBeenCalledWith('FILE_A'))
     await waitFor(() => expect(screen.getByText('Published as v300')).toBeInTheDocument())
   })
+
+  it('shows a Bulk edit button next to Close session, toggling active state', async () => {
+    vi.spyOn(apiClient, 'openSession').mockResolvedValue({ status: 'opened' })
+
+    renderFilesPageWithFile('qca', 'FILE_A')
+    fireEvent.click(screen.getByTestId('open-session'))
+    await waitFor(() => expect(screen.getByText('Close session')).toBeInTheDocument())
+
+    const bulkEditBtn = screen.getByText('Bulk edit')
+    expect(bulkEditBtn).not.toHaveClass('active')
+
+    fireEvent.click(bulkEditBtn)
+    expect(screen.getByText('Bulk edit')).toHaveClass('active')
+  })
+
+  it('closing the session clears the file and shows the empty state again', async () => {
+    vi.spyOn(apiClient, 'openSession').mockResolvedValue({ status: 'opened' })
+    vi.spyOn(apiClient, 'closeSession').mockResolvedValue({ status: 'closed' })
+
+    renderFilesPageWithFile('qca', 'FILE_A')
+    fireEvent.click(screen.getByTestId('open-session'))
+    await waitFor(() => expect(screen.getByText('Close session')).toBeInTheDocument())
+
+    fireEvent.click(screen.getByText('Close session'))
+
+    await waitFor(() =>
+      expect(screen.getByText('Select variables in the sidebar to view plots.')).toBeInTheDocument()
+    )
+  })
 })

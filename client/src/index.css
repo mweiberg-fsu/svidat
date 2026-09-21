@@ -735,6 +735,26 @@ code {
   background: var(--accent-bg);
 }
 
+.files-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.files-toolbar-left,
+.files-toolbar-right {
+  display: flex;
+  gap: 8px;
+}
+
+.files-toolbar-btn.active {
+  color: var(--text-h);
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+}
+
 .profile-audit-filters {
   display: flex;
   gap: 16px;

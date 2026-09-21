@@ -706,6 +706,35 @@ code {
   font-size: 14px;
 }
 
+.profile-file-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+.profile-file-tab {
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.profile-file-tab:hover {
+  background: var(--social-bg);
+}
+
+.profile-file-tab.active {
+  color: var(--text-h);
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+}
+
 .profile-audit-filters {
   display: flex;
   gap: 16px;

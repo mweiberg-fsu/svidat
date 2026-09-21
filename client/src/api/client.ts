@@ -102,8 +102,8 @@ export const closeSession = (filename: string) =>
   apiFetch(`/session/${encodeURIComponent(filename)}/close`, { method: 'POST' }).then((r) =>
     r.json()
   )
-export const getMySessions = (): Promise<TempSessionEntry[]> =>
-  apiFetch('/session/mine').then((r) => r.json())
+export const getMySessions = (dirtyOnly = true): Promise<TempSessionEntry[]> =>
+  apiFetch(`/session/mine?dirty_only=${dirtyOnly}`).then((r) => r.json())
 export const discardSession = (filename: string) =>
   apiFetch(`/session/${encodeURIComponent(filename)}/discard`, { method: 'POST' }).then((r) =>
     r.json()

@@ -85,15 +85,14 @@ def open_session(
 
 @router.get("/mine")
 def my_sessions(
+    dirty_only: bool = True,
     db: Session = Depends(get_db),
     user: User = Depends(require_role(Role.qca)),
 ):
-    entries = (
-        db.query(TempSession)
-        .filter(TempSession.user_id == user.id, TempSession.dirty == True)  # noqa: E712
-        .order_by(TempSession.last_edited_at.desc())
-        .all()
-    )
+    query = db.query(TempSession).filter(TempSession.user_id == user.id)
+    if dirty_only:
+        query = query.filter(TempSession.dirty == True)  # noqa: E712
+    entries = query.order_by(TempSession.last_edited_at.desc()).all()
     return [
         {
             "filename": e.filename,

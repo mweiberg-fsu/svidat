@@ -1,4 +1,4 @@
-import type { CurrentUser, Catalog, OAuthSettings, TempSessionEntry, VariableDataResponse } from './types'
+import type { CurrentUser, Catalog, OAuthSettings, TempSessionEntry, VariableDataResponse, ThemeSettings } from './types'
 
 const BASE_URL = 'http://localhost:8000'
 const TOKEN_KEY = 'svidat_token'
@@ -162,6 +162,15 @@ export const updateOAuthSettings = (allowedDomains: string[]): Promise<OAuthSett
   apiFetch('/admin/oauth-settings', {
     method: 'PUT',
     body: JSON.stringify({ allowed_domains: allowedDomains }),
+  }).then((r) => r.json())
+
+export const getTheme = (): Promise<ThemeSettings> =>
+  apiFetch('/theme').then((r) => r.json())
+
+export const updateThemeSettings = (theme: ThemeSettings): Promise<ThemeSettings> =>
+  apiFetch('/admin/theme-settings', {
+    method: 'PUT',
+    body: JSON.stringify(theme),
   }).then((r) => r.json())
 
 export const getCurrentUser = (): Promise<CurrentUser> =>

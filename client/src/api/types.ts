@@ -65,3 +65,9 @@ export interface VariableDataResponse {
 export interface OAuthSettings {
   allowed_domains: string[]
 }
+
+export interface ThemeSettings {
+  primary_color: string
+  secondary_color: string
+  tertiary_color: string
+}

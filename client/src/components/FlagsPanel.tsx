@@ -42,7 +42,7 @@ async function runFlagJob(
 }
 
 export function FlagsPanel() {
-  const { file, variables } = usePlotSelection()
+  const { file } = usePlotSelection()
   const {
     editable,
     flagSelection,
@@ -51,6 +51,7 @@ export function FlagsPanel() {
     flagsVisible,
     toggleFlagsVisible,
     bulkEdit,
+    selectedVariables,
   } = useEditSession()
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -72,11 +73,11 @@ export function FlagsPanel() {
     if (!flagSelection) return
     setSubmitting(true)
     setError(null)
-    // Bulk mode fans the same drag range out to every currently plotted
-    // variable; falls back to just the dragged-on variable if somehow none
-    // are plotted (a drag itself requires a plotted row, so this is a
-    // defensive fallback rather than an expected path).
-    const targets = bulkEdit && variables.length > 0 ? variables : [flagSelection.varName]
+    // Bulk mode fans the same drag range out to every explicitly selected
+    // panel; falls back to just the dragged-on variable if none are
+    // selected.
+    const targets =
+      bulkEdit && selectedVariables.length > 0 ? selectedVariables : [flagSelection.varName]
     try {
       const results = await Promise.all(
         targets.map((varName) =>

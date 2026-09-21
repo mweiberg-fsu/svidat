@@ -14,13 +14,22 @@ import * as apiClient from '../api/client'
 // sets the selection, covered in its own test file).
 function Driver() {
   const sel = usePlotSelection()
-  const { openSession, setFlagSelection, flagsVisible, bulkEdit, toggleBulkEdit, flagAppliedAt } =
-    useEditSession()
+  const {
+    openSession,
+    setFlagSelection,
+    flagsVisible,
+    bulkEdit,
+    toggleBulkEdit,
+    flagAppliedAt,
+    selectedVariables,
+    toggleVariableSelected,
+  } = useEditSession()
   return (
     <div>
       <span data-testid="flags-visible">{String(flagsVisible)}</span>
       <span data-testid="bulk-edit">{String(bulkEdit)}</span>
       <span data-testid="flag-applied-at">{flagAppliedAt}</span>
+      <span data-testid="selected-variables">{selectedVariables.join(',')}</span>
       <button onClick={() => sel.setFile('FILE_A')}>set file</button>
       <button onClick={() => sel.setVariables(['temperature', 'humidity', 'salinity'])}>
         set variables
@@ -40,6 +49,9 @@ function Driver() {
       </button>
       <button onClick={() => setFlagSelection(null)}>clear</button>
       <button onClick={() => toggleBulkEdit()}>toggle bulk</button>
+      <button onClick={() => toggleVariableSelected('temperature')}>select temperature</button>
+      <button onClick={() => toggleVariableSelected('humidity')}>select humidity</button>
+      <button onClick={() => toggleVariableSelected('salinity')}>select salinity</button>
     </div>
   )
 }
@@ -217,6 +229,9 @@ describe('FlagsPanel', () => {
     })
     await selectAndMakeEditable(() => fireEvent.click(screen.getByText('set variables')))
     fireEvent.click(screen.getByText('toggle bulk'))
+    fireEvent.click(screen.getByText('select temperature'))
+    fireEvent.click(screen.getByText('select humidity'))
+    fireEvent.click(screen.getByText('select salinity'))
 
     fireEvent.click(screen.getByText('K-Suspect/Caution'))
 
@@ -256,6 +271,9 @@ describe('FlagsPanel', () => {
     })
     await selectAndMakeEditable(() => fireEvent.click(screen.getByText('set variables')))
     fireEvent.click(screen.getByText('toggle bulk'))
+    fireEvent.click(screen.getByText('select temperature'))
+    fireEvent.click(screen.getByText('select humidity'))
+    fireEvent.click(screen.getByText('select salinity'))
 
     fireEvent.click(screen.getByText('K-Suspect/Caution'))
 

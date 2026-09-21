@@ -764,6 +764,29 @@ code {
   gap: 8px;
 }
 
+.files-toolbar-left button,
+.files-toolbar-right button {
+  padding: 7px 14px;
+  border: 1px solid var(--border);
+  background: var(--code-bg);
+  color: var(--text-h);
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.files-toolbar-left button:hover:not(:disabled),
+.files-toolbar-right button:hover:not(:disabled) {
+  background: var(--social-bg);
+}
+
+.files-toolbar-left button:disabled,
+.files-toolbar-right button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .files-toolbar-btn.active {
   color: var(--text-h);
   border-color: var(--accent-border);

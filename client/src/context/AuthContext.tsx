@@ -6,6 +6,7 @@ import {
   USERNAME_KEY,
   clearAuthStorage,
   getMySessions,
+  getTheme,
   getToken,
   setToken,
 } from '../api/client'
@@ -59,6 +60,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     sessionStorage.setItem(RESUME_CHECKED_KEY, '1')
     getMySessions()
       .then(setResumableSessions)
+      .catch(() => {})
+  }, [token])
+
+  // Applies the site's admin-configured theme colors on login (and on
+  // every fresh token, e.g. re-login after logout, in case an admin
+  // changed the theme meanwhile). No sessionStorage re-fire guard is
+  // needed here, unlike the resumable-sessions effect above — that one
+  // specifically guards against per-route Sidebar remounts, but
+  // AuthProvider itself doesn't remount per route, so this only re-runs
+  // on an actual token change.
+  useEffect(() => {
+    if (!token) return
+    getTheme()
+      .then((theme) => {
+        document.documentElement.style.setProperty('--accent', theme.primary_color)
+        document.documentElement.style.setProperty('--secondary', theme.secondary_color)
+        document.documentElement.style.setProperty('--tertiary', theme.tertiary_color)
+      })
       .catch(() => {})
   }, [token])
 

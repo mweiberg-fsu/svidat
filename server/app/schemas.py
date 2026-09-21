@@ -1,3 +1,4 @@
+import re
 from typing import List
 
 from pydantic import BaseModel, field_validator
@@ -84,3 +85,32 @@ class OAuthSettingsOut(BaseModel):
 
 class OAuthSettingsUpdate(BaseModel):
     allowed_domains: List[str]
+
+
+HEX_COLOR_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+def _validate_hex_color(v: str) -> str:
+    if not HEX_COLOR_RE.match(v):
+        raise ValueError(f"invalid hex color: {v!r}")
+    return v
+
+
+class ThemeSettingsOut(BaseModel):
+    primary_color: str
+    secondary_color: str
+    tertiary_color: str
+
+    class Config:
+        from_attributes = True
+
+
+class ThemeSettingsUpdate(BaseModel):
+    primary_color: str
+    secondary_color: str
+    tertiary_color: str
+
+    @field_validator("primary_color", "secondary_color", "tertiary_color")
+    @classmethod
+    def validate_hex(cls, v: str) -> str:
+        return _validate_hex_color(v)

@@ -104,3 +104,12 @@ class OAuthSettings(Base):
 
     id = Column(Integer, primary_key=True)
     allowed_domains = Column(String, nullable=True)
+
+
+class ThemeSettings(Base):
+    __tablename__ = "theme_settings"
+
+    id = Column(Integer, primary_key=True)
+    primary_color = Column(String, nullable=False, default="#ed1f21")
+    secondary_color = Column(String, nullable=False, default="#5e6cb3")
+    tertiary_color = Column(String, nullable=False, default="#cbe3f5")

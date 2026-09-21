@@ -22,6 +22,7 @@ function Consumer() {
     bulkEdit,
     toggleBulkEdit,
   } = useEditSession()
+  const sel = usePlotSelection()
   return (
     <div>
       <span>sessionOpen:{String(sessionOpen)}</span>
@@ -31,6 +32,7 @@ function Consumer() {
       <span>flagSelection:{flagSelection ? flagSelection.rangeLabel : 'none'}</span>
       <span>flagAppliedAt:{flagAppliedAt}</span>
       <span>bulkEdit:{String(bulkEdit)}</span>
+      <span>file:{sel.file || 'none'}</span>
       <button onClick={() => openSession()}>open</button>
       <button onClick={() => closeSession()}>close</button>
       <button
@@ -217,6 +219,20 @@ describe('EditSessionContext', () => {
     fireEvent.click(screen.getByText('close'))
     await waitFor(() => expect(screen.getByText('sessionOpen:false')).toBeInTheDocument())
     expect(screen.getByText('flagSelection:none')).toBeInTheDocument()
+  })
+
+  it('a successful close also clears the plotted file (and variables)', async () => {
+    vi.spyOn(apiClient, 'openSession').mockResolvedValue({ status: 'opened' })
+    vi.spyOn(apiClient, 'closeSession').mockResolvedValue({ status: 'closed' })
+    renderWithRole('qca')
+    fireEvent.click(screen.getByTestId('set-file'))
+    fireEvent.click(screen.getByText('open'))
+    await waitFor(() => expect(screen.getByText('sessionOpen:true')).toBeInTheDocument())
+    expect(screen.getByText('file:FILE_A')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('close'))
+    await waitFor(() => expect(screen.getByText('sessionOpen:false')).toBeInTheDocument())
+    expect(screen.getByText('file:none')).toBeInTheDocument()
   })
 
   it('does not fire a second open request while one is already in flight', async () => {

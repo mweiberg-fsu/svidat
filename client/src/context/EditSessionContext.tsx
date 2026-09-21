@@ -34,7 +34,7 @@ const EditSessionContext = createContext<EditSessionState | undefined>(undefined
 
 export function EditSessionProvider({ children }: { children: ReactNode }) {
   const { roles } = useAuth()
-  const { file, variables } = usePlotSelection()
+  const { file, variables, setFile } = usePlotSelection()
   const [searchParams] = useSearchParams()
   const [sessionOpen, setSessionOpen] = useState(false)
   const [sessionOpenedAt, setSessionOpenedAt] = useState<string | null>(null)
@@ -108,6 +108,7 @@ export function EditSessionProvider({ children }: { children: ReactNode }) {
       setSessionOpen(false)
       setSessionOpenedAt(null)
       setFlagSelection(null)
+      setFile('')
     } catch (e) {
       setSessionError(e instanceof Error ? e.message : 'failed to close session')
     }

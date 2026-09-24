@@ -178,3 +178,37 @@ def test_run_migrations_role_flags_idempotent(tmp_path):
     assert cols.count("is_qca") == 1
     assert row[0] == 1
     assert row[1] == 1
+
+
+def test_run_migrations_adds_theme_branding_columns(tmp_path):
+    db_path = tmp_path / "legacy_theme.db"
+    _make_legacy_users_table(db_path)
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        "CREATE TABLE theme_settings ("
+        "id INTEGER PRIMARY KEY, "
+        "primary_color VARCHAR NOT NULL, "
+        "secondary_color VARCHAR NOT NULL, "
+        "tertiary_color VARCHAR NOT NULL)"
+    )
+    conn.execute(
+        "INSERT INTO theme_settings (primary_color, secondary_color, tertiary_color) "
+        "VALUES ('#111111', '#222222', '#333333')"
+    )
+    conn.commit()
+    conn.close()
+    engine = create_engine(f"sqlite:///{db_path}")
+
+    run_migrations(engine)
+    run_migrations(engine)  # idempotent
+
+    with engine.connect() as conn:
+        cols = [row[1] for row in conn.execute(text("PRAGMA table_info(theme_settings)"))]
+        row = conn.execute(
+            text("SELECT site_name, logo_path, save_draft_label, publish_label FROM theme_settings")
+        ).one()
+    assert cols.count("site_name") == 1
+    assert cols.count("logo_path") == 1
+    assert cols.count("save_draft_label") == 1
+    assert cols.count("publish_label") == 1
+    assert row == ("SVIDAT", None, "Save draft (v250)", "Publish (v300)")

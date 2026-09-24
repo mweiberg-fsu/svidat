@@ -26,6 +26,8 @@ interface EditSessionState {
   notifyFlagged: () => void
   flagsVisible: boolean
   toggleFlagsVisible: () => void
+  climatologyVisible: boolean
+  toggleClimatologyVisible: () => void
   bulkEdit: boolean
   toggleBulkEdit: () => void
   selectedVariables: string[]
@@ -44,6 +46,7 @@ export function EditSessionProvider({ children }: { children: ReactNode }) {
   const [flagSelection, setFlagSelection] = useState<FlagSelection | null>(null)
   const [flagAppliedAt, setFlagAppliedAt] = useState(0)
   const [flagsVisible, setFlagsVisible] = useState(true)
+  const [climatologyVisible, setClimatologyVisible] = useState(false)
   const [bulkEdit, setBulkEdit] = useState(false)
   const [selectedVariables, setSelectedVariables] = useState<string[]>([])
 
@@ -160,6 +163,7 @@ export function EditSessionProvider({ children }: { children: ReactNode }) {
 
   const notifyFlagged = () => setFlagAppliedAt((v) => v + 1)
   const toggleFlagsVisible = () => setFlagsVisible((v) => !v)
+  const toggleClimatologyVisible = () => setClimatologyVisible((v) => !v)
   const toggleBulkEdit = () => setBulkEdit((v) => !v)
   const toggleVariableSelected = (varName: string) => {
     setSelectedVariables((prev) =>
@@ -184,6 +188,8 @@ export function EditSessionProvider({ children }: { children: ReactNode }) {
         notifyFlagged,
         flagsVisible,
         toggleFlagsVisible,
+        climatologyVisible,
+        toggleClimatologyVisible,
         bulkEdit,
         toggleBulkEdit,
         selectedVariables,

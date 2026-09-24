@@ -62,6 +62,10 @@ export interface VariableDataResponse {
   variables: Record<string, VariableSeries>
 }
 
+export interface ClimatologyResponse {
+  variables: Record<string, (number | null)[]>
+}
+
 export interface OAuthSettings {
   allowed_domains: string[]
 }
@@ -70,4 +74,30 @@ export interface ThemeSettings {
   primary_color: string
   secondary_color: string
   tertiary_color: string
+  site_name: string
+  save_draft_label: string
+  publish_label: string
+  has_logo: boolean
+}
+
+export type ThemeSettingsUpdate = Omit<ThemeSettings, 'has_logo'>
+
+export type DragTrigger = 'shift' | 'ctrl' | 'alt' | 'meta'
+export type ClickTrigger = DragTrigger | 'dblclick'
+
+export interface KeyBindings {
+  x_zoom: DragTrigger
+  y_zoom: DragTrigger
+  undo: ClickTrigger
+  redo: ClickTrigger
+}
+
+export interface DocTab {
+  title: string
+  body: string
+}
+
+export interface AppConfig {
+  keybindings: KeyBindings
+  documentation: DocTab[]
 }

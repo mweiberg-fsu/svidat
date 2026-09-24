@@ -44,6 +44,10 @@ def avatar_path(user_id: int, ext: str) -> Path:
     return base_dir() / "avatars" / f"{user_id}.{ext}"
 
 
+def logo_path(ext: str) -> Path:
+    return base_dir() / "branding" / f"logo.{ext}"
+
+
 def atomic_copy(src: Path, dst: Path) -> None:
     dst.parent.mkdir(parents=True, exist_ok=True)
     tmp_dst = dst.with_suffix(dst.suffix + ".tmp")

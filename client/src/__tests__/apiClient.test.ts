@@ -9,6 +9,9 @@ import {
   updateUserRoles,
   getTheme,
   updateThemeSettings,
+  uploadThemeLogo,
+  deleteThemeLogo,
+  getClimatology,
 } from '../api/client'
 
 describe('apiClient', () => {
@@ -116,6 +119,10 @@ describe('oauth client functions', () => {
       primary_color: '#111111',
       secondary_color: '#222222',
       tertiary_color: '#333333',
+      site_name: 'SVIDAT',
+      save_draft_label: 'Save draft (v250)',
+      publish_label: 'Publish (v300)',
+      has_logo: false,
     }
     const fetchMock = vi
       .fn()
@@ -128,11 +135,61 @@ describe('oauth client functions', () => {
     expect(getUrl).toContain('/theme')
     expect(getOptions.method ?? 'GET').toBe('GET')
 
-    await updateThemeSettings(theme)
+    const update = {
+      primary_color: '#111111',
+      secondary_color: '#222222',
+      tertiary_color: '#333333',
+      save_draft_label: 'Save draft (v250)',
+      publish_label: 'Publish (v300)',
+      site_name: 'SVIDAT',
+    }
+    await updateThemeSettings(update)
     const [url, options] = fetchMock.mock.calls[1]
     expect(url).toContain('/admin/theme-settings')
     expect(options.method).toBe('PUT')
-    expect(JSON.parse(options.body)).toEqual(theme)
+    expect(JSON.parse(options.body)).toEqual(update)
+  })
+
+  it('uploadThemeLogo posts multipart form and deleteThemeLogo sends DELETE', async () => {
+    setToken('abc123')
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(async () => new Response(JSON.stringify({ has_logo: true }), { status: 200 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await uploadThemeLogo(new File(['x'], 'logo.png', { type: 'image/png' }))
+    const [url, options] = fetchMock.mock.calls[0]
+    expect(url).toContain('/admin/theme-logo')
+    expect(options.method).toBe('POST')
+    expect(options.body).toBeInstanceOf(FormData)
+    expect(options.headers.Authorization).toBe('Bearer abc123')
+
+    await deleteThemeLogo()
+    const [delUrl, delOptions] = fetchMock.mock.calls[1]
+    expect(delUrl).toContain('/admin/theme-logo')
+    expect(delOptions.method).toBe('DELETE')
+  })
+})
+
+describe('climatology client function', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    vi.restoreAllMocks()
+  })
+
+  it('getClimatology requests /files/{file}/climatology with comma-joined vars', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(JSON.stringify({ variables: { T: [1, null] } }), { status: 200 })
+      )
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await getClimatology('SHIP A', ['T', 'TS'])
+
+    const [url] = fetchMock.mock.calls[0]
+    expect(url).toBe('http://localhost:8000/files/SHIP%20A/climatology?vars=T%2CTS')
+    expect(result).toEqual({ variables: { T: [1, null] } })
   })
 })
 

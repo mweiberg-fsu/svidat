@@ -120,6 +120,9 @@ code {
 }
 
 .navbar-logo {
+  display: flex;
+  align-items: center;
+  gap: 10px;
   font-weight: 700;
   font-size: 20px;
   letter-spacing: 0.5px;
@@ -130,8 +133,15 @@ code {
   padding: 0;
 }
 
-.navbar-logo span {
+.navbar-logo-accent {
   color: var(--accent);
+}
+
+.navbar-logo-img {
+  height: 28px;
+  width: auto;
+  max-width: 120px;
+  object-fit: contain;
 }
 
 .navbar-account {
@@ -545,7 +555,8 @@ code {
 
 .sidebar-flags-panel-modes {
   display: flex;
-  gap: 14px;
+  flex-direction: column;
+  gap: 4px;
   align-self: flex-start;
 }
 
@@ -685,6 +696,143 @@ code {
   font-size: 13px;
   text-transform: none;
   letter-spacing: normal;
+}
+
+.plot-picker-label-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.help-icon {
+  display: inline-flex;
+  color: var(--text);
+  cursor: help;
+  border-radius: 50%;
+}
+
+.help-icon:hover,
+.help-icon:focus-visible {
+  color: var(--accent);
+  outline: none;
+}
+
+.help-tooltip {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  right: 0;
+  z-index: 10;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-h);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  font-size: 12px;
+  line-height: 1.4;
+  text-transform: none;
+  letter-spacing: normal;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.12s ease;
+}
+
+.help-icon:hover + .help-tooltip,
+.help-icon:focus-visible + .help-tooltip {
+  opacity: 1;
+  visibility: visible;
+}
+
+.admin-subheading {
+  font-size: 14px;
+  margin: 16px 0 6px;
+  color: var(--text-h);
+}
+
+.admin-field select {
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-h);
+  font: inherit;
+  font-size: 14px;
+}
+
+.admin-doc-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+.admin-doc-tab,
+.admin-doc-mode-btn {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.admin-doc-tab.active,
+.admin-doc-mode-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-bg);
+}
+
+.admin-doc-tab-add {
+  border-style: dashed;
+}
+
+.admin-doc-tab:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.admin-doc-mode {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.admin-doc-textarea,
+.admin-doc-preview {
+  width: 100%;
+  box-sizing: border-box;
+  min-height: 240px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text-h);
+  font-size: 13px;
+}
+
+.admin-doc-textarea {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  line-height: 1.5;
+  resize: vertical;
+}
+
+.admin-doc-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-bg);
+}
+
+.admin-config-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
 }
 
 /* Profile drafts section */
@@ -1170,11 +1318,21 @@ code {
   font-weight: 700;
   letter-spacing: 0.5px;
   color: var(--text-h);
-  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
 }
 
-.login-logo span {
+.login-logo-accent {
   color: var(--accent);
+}
+
+.login-logo-img {
+  height: 36px;
+  width: auto;
+  max-width: 140px;
+  object-fit: contain;
 }
 
 .login-subtitle {
@@ -1481,6 +1639,44 @@ code {
   color: var(--text-h);
   font: inherit;
   font-size: 14px;
+}
+
+.admin-color-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-color-row input {
+  flex: 1;
+  min-width: 0;
+}
+
+.admin-color-swatch {
+  flex: none;
+  width: 38px;
+  height: 38px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+}
+
+.admin-logo-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+
+.admin-logo-preview {
+  height: 40px;
+  width: auto;
+  max-width: 160px;
+  object-fit: contain;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px;
+  background: var(--bg);
 }
 
 .admin-field input:focus {

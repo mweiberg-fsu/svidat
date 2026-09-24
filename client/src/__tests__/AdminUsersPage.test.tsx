@@ -12,6 +12,10 @@ describe('AdminUsersPage OAuth domain allowlist', () => {
       primary_color: '#ed1f21',
       secondary_color: '#5e6cb3',
       tertiary_color: '#cbe3f5',
+      site_name: 'SVIDAT',
+      save_draft_label: 'Save draft (v250)',
+      publish_label: 'Publish (v300)',
+      has_logo: false,
     })
   })
 
@@ -81,6 +85,10 @@ describe('AdminUsersPage role management', () => {
       primary_color: '#ed1f21',
       secondary_color: '#5e6cb3',
       tertiary_color: '#cbe3f5',
+      site_name: 'SVIDAT',
+      save_draft_label: 'Save draft (v250)',
+      publish_label: 'Publish (v300)',
+      has_logo: false,
     })
   })
 
@@ -204,7 +212,7 @@ describe('AdminUsersPage role management', () => {
   })
 })
 
-describe('AdminUsersPage theme colors', () => {
+describe('AdminUsersPage theme', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
     vi.spyOn(client, 'listUsers').mockResolvedValue([])
@@ -213,6 +221,10 @@ describe('AdminUsersPage theme colors', () => {
       primary_color: '#ed1f21',
       secondary_color: '#5e6cb3',
       tertiary_color: '#cbe3f5',
+      site_name: 'SVIDAT',
+      save_draft_label: 'Save draft (v250)',
+      publish_label: 'Publish (v300)',
+      has_logo: false,
     })
   })
 
@@ -223,26 +235,71 @@ describe('AdminUsersPage theme colors', () => {
     expect(screen.getByDisplayValue('#cbe3f5')).toBeInTheDocument()
   })
 
-  it('saves edited colors and shows a success status', async () => {
+  it('shows a swatch per theme color that updates live as the picker changes', async () => {
+    render(<AdminUsersPage />)
+    await screen.findByDisplayValue('#ed1f21')
+
+    expect(screen.getByTestId('swatch-primary_color')).toHaveStyle({ backgroundColor: '#ed1f21' })
+    expect(screen.getByTestId('swatch-secondary_color')).toHaveStyle({ backgroundColor: '#5e6cb3' })
+    expect(screen.getByTestId('swatch-tertiary_color')).toHaveStyle({ backgroundColor: '#cbe3f5' })
+
+    fireEvent.change(screen.getByLabelText('Secondary color'), { target: { value: '#00ff00' } })
+    expect(screen.getByTestId('swatch-secondary_color')).toHaveStyle({ backgroundColor: '#00ff00' })
+  })
+
+  it('saves edited theme and shows a success status', async () => {
     vi.spyOn(client, 'updateThemeSettings').mockResolvedValue({
       primary_color: '#111111',
       secondary_color: '#5e6cb3',
       tertiary_color: '#cbe3f5',
+      site_name: 'SVIDAT',
+      save_draft_label: 'Save draft (v250)',
+      publish_label: 'Publish (v300)',
+      has_logo: false,
     })
     render(<AdminUsersPage />)
     await screen.findByDisplayValue('#ed1f21')
 
     fireEvent.change(screen.getByLabelText('Primary color'), { target: { value: '#111111' } })
-    fireEvent.click(screen.getByText('Save colors'))
+    fireEvent.change(screen.getByLabelText('Site name'), { target: { value: 'My QC' } })
+    fireEvent.click(screen.getByText('Save theme'))
 
     await waitFor(() =>
       expect(client.updateThemeSettings).toHaveBeenCalledWith({
         primary_color: '#111111',
         secondary_color: '#5e6cb3',
         tertiary_color: '#cbe3f5',
+        save_draft_label: 'Save draft (v250)',
+        publish_label: 'Publish (v300)',
+        site_name: 'My QC',
       })
     )
-    expect(await screen.findByText('Colors updated')).toBeInTheDocument()
+    expect(await screen.findByText('Theme updated')).toBeInTheDocument()
+  })
+
+  it('edits and saves the save draft and publish button labels', async () => {
+    vi.spyOn(client, 'updateThemeSettings').mockResolvedValue({
+      primary_color: '#ed1f21',
+      secondary_color: '#5e6cb3',
+      tertiary_color: '#cbe3f5',
+      site_name: 'SVIDAT',
+      save_draft_label: 'Save QC',
+      publish_label: 'Release',
+      has_logo: false,
+    })
+    render(<AdminUsersPage />)
+    expect(await screen.findByDisplayValue('Save draft (v250)')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('Publish (v300)')).toBeInTheDocument()
+
+    fireEvent.change(screen.getByLabelText('Save draft button text'), { target: { value: 'Save QC' } })
+    fireEvent.change(screen.getByLabelText('Publish button text'), { target: { value: 'Release' } })
+    fireEvent.click(screen.getByText('Save theme'))
+
+    await waitFor(() =>
+      expect(client.updateThemeSettings).toHaveBeenCalledWith(
+        expect.objectContaining({ save_draft_label: 'Save QC', publish_label: 'Release' })
+      )
+    )
   })
 
   it('shows an error status when saving fails', async () => {
@@ -250,8 +307,67 @@ describe('AdminUsersPage theme colors', () => {
     render(<AdminUsersPage />)
     await screen.findByDisplayValue('#ed1f21')
 
-    fireEvent.click(screen.getByText('Save colors'))
+    fireEvent.click(screen.getByText('Save theme'))
 
     expect(await screen.findByText('Error: 400: invalid hex color')).toBeInTheDocument()
+  })
+
+  it('shows the Theme heading and current site name', async () => {
+    render(<AdminUsersPage />)
+    expect(await screen.findByDisplayValue('SVIDAT')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Theme' })).toBeInTheDocument()
+    expect(screen.getByText('No logo set')).toBeInTheDocument()
+  })
+
+  it('uploads a logo and shows its preview', async () => {
+    vi.spyOn(client, 'uploadThemeLogo').mockResolvedValue({
+      primary_color: '#ed1f21',
+      secondary_color: '#5e6cb3',
+      tertiary_color: '#cbe3f5',
+      site_name: 'SVIDAT',
+      save_draft_label: 'Save draft (v250)',
+      publish_label: 'Publish (v300)',
+      has_logo: true,
+    })
+    vi.spyOn(client, 'fetchLogoBlobUrl').mockResolvedValue('blob:logo')
+    render(<AdminUsersPage />)
+    await screen.findByDisplayValue('SVIDAT')
+
+    const file = new File(['x'], 'logo.png', { type: 'image/png' })
+    fireEvent.change(screen.getByLabelText('Upload logo'), { target: { files: [file] } })
+
+    await waitFor(() => expect(client.uploadThemeLogo).toHaveBeenCalledWith(file))
+    expect(await screen.findByAltText('Current logo')).toHaveAttribute('src', 'blob:logo')
+    expect(screen.getByText('Logo updated')).toBeInTheDocument()
+    expect(screen.getByText('Remove logo')).toBeInTheDocument()
+  })
+
+  it('removes an existing logo', async () => {
+    vi.spyOn(client, 'getTheme').mockResolvedValue({
+      primary_color: '#ed1f21',
+      secondary_color: '#5e6cb3',
+      tertiary_color: '#cbe3f5',
+      site_name: 'SVIDAT',
+      save_draft_label: 'Save draft (v250)',
+      publish_label: 'Publish (v300)',
+      has_logo: true,
+    })
+    vi.spyOn(client, 'fetchLogoBlobUrl').mockResolvedValue('blob:logo')
+    vi.spyOn(client, 'deleteThemeLogo').mockResolvedValue({
+      primary_color: '#ed1f21',
+      secondary_color: '#5e6cb3',
+      tertiary_color: '#cbe3f5',
+      site_name: 'SVIDAT',
+      save_draft_label: 'Save draft (v250)',
+      publish_label: 'Publish (v300)',
+      has_logo: false,
+    })
+    render(<AdminUsersPage />)
+    await screen.findByAltText('Current logo')
+
+    fireEvent.click(screen.getByText('Remove logo'))
+
+    expect(await screen.findByText('Logo removed')).toBeInTheDocument()
+    expect(screen.queryByAltText('Current logo')).not.toBeInTheDocument()
   })
 })

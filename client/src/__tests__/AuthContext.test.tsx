@@ -23,6 +23,10 @@ describe('AuthContext theme', () => {
       primary_color: '#111111',
       secondary_color: '#222222',
       tertiary_color: '#333333',
+      site_name: 'SVIDAT',
+      save_draft_label: 'Save draft (v250)',
+      publish_label: 'Publish (v300)',
+      has_logo: false,
     })
 
     render(
@@ -39,14 +43,26 @@ describe('AuthContext theme', () => {
     expect(document.documentElement.style.getPropertyValue('--tertiary')).toBe('#333333')
   })
 
-  it('does not fetch the theme when there is no token', () => {
-    const themeSpy = vi.spyOn(apiClient, 'getTheme')
-    vi.spyOn(apiClient, 'getMySessions').mockResolvedValue([])
+  it('fetches the public theme even when there is no token', async () => {
+    const themeSpy = vi.spyOn(apiClient, 'getTheme').mockResolvedValue({
+      primary_color: '#444444',
+      secondary_color: '#555555',
+      tertiary_color: '#666666',
+      site_name: 'SVIDAT',
+      save_draft_label: 'Save draft (v250)',
+      publish_label: 'Publish (v300)',
+      has_logo: false,
+    })
+    const sessionsSpy = vi.spyOn(apiClient, 'getMySessions').mockResolvedValue([])
     render(
       <AuthProvider>
         <Consumer />
       </AuthProvider>
     )
-    expect(themeSpy).not.toHaveBeenCalled()
+    expect(themeSpy).toHaveBeenCalledTimes(1)
+    expect(sessionsSpy).not.toHaveBeenCalled()
+    await waitFor(() =>
+      expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#444444')
+    )
   })
 })

@@ -1,4 +1,4 @@
-import type { CurrentUser, Catalog, OAuthSettings, TempSessionEntry, VariableDataResponse, ThemeSettings } from './types'
+import type { AppConfig, CurrentUser, Catalog, ClimatologyResponse, OAuthSettings, TempSessionEntry, VariableDataResponse, ThemeSettings, ThemeSettingsUpdate } from './types'
 
 const BASE_URL = 'http://localhost:8000'
 const TOKEN_KEY = 'svidat_token'
@@ -167,11 +167,48 @@ export const updateOAuthSettings = (allowedDomains: string[]): Promise<OAuthSett
 export const getTheme = (): Promise<ThemeSettings> =>
   apiFetch('/theme').then((r) => r.json())
 
-export const updateThemeSettings = (theme: ThemeSettings): Promise<ThemeSettings> =>
+export const updateThemeSettings = (theme: ThemeSettingsUpdate): Promise<ThemeSettings> =>
   apiFetch('/admin/theme-settings', {
     method: 'PUT',
     body: JSON.stringify(theme),
   }).then((r) => r.json())
+
+export const getConfig = (): Promise<AppConfig> => apiFetch('/config').then((r) => r.json())
+
+export const updateConfig = (config: AppConfig): Promise<AppConfig> =>
+  apiFetch('/admin/config', {
+    method: 'PUT',
+    body: JSON.stringify(config),
+  }).then((r) => r.json())
+
+export const uploadThemeLogo = (file: File): Promise<ThemeSettings> => {
+  const form = new FormData()
+  form.append('file', file)
+  const token = getToken()
+  const headers: Record<string, string> = {}
+  if (token) headers.Authorization = `Bearer ${token}`
+  return fetch(`${BASE_URL}/admin/theme-logo`, {
+    method: 'POST',
+    body: form,
+    headers,
+  }).then(async (r) => {
+    if (!r.ok) throw new Error(`${r.status}: ${await r.text()}`)
+    return r.json()
+  })
+}
+
+export const deleteThemeLogo = (): Promise<ThemeSettings> =>
+  apiFetch('/admin/theme-logo', { method: 'DELETE' }).then((r) => r.json())
+
+export const fetchLogoBlobUrl = async (): Promise<string | null> => {
+  const token = getToken()
+  const headers: Record<string, string> = {}
+  if (token) headers.Authorization = `Bearer ${token}`
+  const response = await fetch(`${BASE_URL}/theme/logo`, { headers })
+  if (!response.ok) return null
+  const blob = await response.blob()
+  return URL.createObjectURL(blob)
+}
 
 export const getCurrentUser = (): Promise<CurrentUser> =>
   apiFetch('/users/me').then((r) => r.json())
@@ -212,6 +249,16 @@ export const getVariableData = (
   return apiFetch(`/files/${encodeURIComponent(filename)}/data?${params.toString()}`).then((r) =>
     r.json()
   )
+}
+
+export const getClimatology = (
+  filename: string,
+  varNames: string[]
+): Promise<ClimatologyResponse> => {
+  const params = new URLSearchParams({ vars: varNames.join(',') })
+  return apiFetch(
+    `/files/${encodeURIComponent(filename)}/climatology?${params.toString()}`
+  ).then((r) => r.json())
 }
 
 export const applyFlag = (

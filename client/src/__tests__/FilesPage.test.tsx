@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { FilesPage } from '../pages/FilesPage'
 import { AuthProvider } from '../context/AuthContext'
@@ -7,6 +7,7 @@ import { PlotSelectionProvider, usePlotSelection } from '../context/PlotSelectio
 import { EditSessionProvider, useEditSession } from '../context/EditSessionContext'
 import { setToken } from '../api/client'
 import * as apiClient from '../api/client'
+import { applyTheme } from '../theme'
 
 function SetFile({ file }: { file: string }) {
   const sel = usePlotSelection()
@@ -88,6 +89,31 @@ describe('FilesPage', () => {
     await waitFor(() => expect(screen.getByText('Close session')).toBeInTheDocument())
     expect(screen.getByText('Save draft (v250)')).toBeInTheDocument()
     expect(screen.getByText('Publish (v300)')).toBeInTheDocument()
+  })
+
+  it('uses admin-configured save draft and publish button labels', async () => {
+    vi.spyOn(apiClient, 'openSession').mockResolvedValue({ status: 'opened' })
+    const theme = {
+      primary_color: '#ed1f21',
+      secondary_color: '#5e6cb3',
+      tertiary_color: '#cbe3f5',
+      site_name: 'SVIDAT',
+      save_draft_label: 'Save QC',
+      publish_label: 'Release',
+      has_logo: false,
+    }
+
+    renderFilesPageWithFile('qca', 'FILE_A')
+    fireEvent.click(screen.getByTestId('open-session'))
+    await waitFor(() => expect(screen.getByText('Close session')).toBeInTheDocument())
+
+    act(() => applyTheme(theme))
+    expect(screen.getByText('Save QC')).toBeInTheDocument()
+    expect(screen.getByText('Release')).toBeInTheDocument()
+
+    act(() =>
+      applyTheme({ ...theme, save_draft_label: 'Save draft (v250)', publish_label: 'Publish (v300)' })
+    )
   })
 
   it('closes a session and hides the save/publish buttons again', async () => {

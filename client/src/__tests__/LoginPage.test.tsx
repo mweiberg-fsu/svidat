@@ -72,3 +72,29 @@ describe('LoginPage OAuth buttons', () => {
     expect(screen.queryByText('Sign in with Microsoft')).not.toBeInTheDocument()
   })
 })
+
+describe('LoginPage branding', () => {
+  beforeEach(() => {
+    vi.restoreAllMocks()
+    localStorage.clear()
+  })
+
+  it('shows the admin-configured site name and logo before login', async () => {
+    vi.spyOn(client, 'getTheme').mockResolvedValue({
+      primary_color: '#111111',
+      secondary_color: '#222222',
+      tertiary_color: '#333333',
+      site_name: 'My QC',
+      save_draft_label: 'Save draft (v250)',
+      publish_label: 'Publish (v300)',
+      has_logo: true,
+    })
+    vi.spyOn(client, 'fetchLogoBlobUrl').mockResolvedValue('blob:logo')
+    const { container } = renderLoginPage()
+
+    expect(await screen.findByText('My QC')).toBeInTheDocument()
+    await waitFor(() =>
+      expect(container.querySelector('.login-logo-img')).toHaveAttribute('src', 'blob:logo')
+    )
+  })
+})

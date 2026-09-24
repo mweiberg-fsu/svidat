@@ -1,14 +1,20 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ChangeEvent } from 'react'
 import {
   createUser,
+  deleteThemeLogo,
   deleteUser,
+  fetchLogoBlobUrl,
   getOAuthSettings,
   getTheme,
   listUsers,
   updateOAuthSettings,
   updateThemeSettings,
   updateUserRoles,
+  uploadThemeLogo,
 } from '../api/client'
+import type { ThemeSettings } from '../api/types'
+import { applyTheme } from '../theme'
+import { AdminConfigSection } from '../components/AdminConfigSection'
 
 interface UserRow {
   id: number
@@ -17,6 +23,12 @@ interface UserRow {
 }
 
 const ROLE_OPTIONS = ['admin', 'qca'] as const
+
+const THEME_COLOR_FIELDS = [
+  { key: 'primary_color', label: 'Primary color' },
+  { key: 'secondary_color', label: 'Secondary color' },
+  { key: 'tertiary_color', label: 'Tertiary color' },
+] as const
 
 export function AdminUsersPage() {
   const [users, setUsers] = useState<UserRow[]>([])
@@ -35,13 +47,17 @@ export function AdminUsersPage() {
   const [oauthStatus, setOauthStatus] = useState<string | null>(null)
   const [oauthSubmitting, setOauthSubmitting] = useState(false)
 
-  const [themeColors, setThemeColors] = useState({
+  const [themeForm, setThemeForm] = useState({
     primary_color: '',
     secondary_color: '',
     tertiary_color: '',
+    save_draft_label: '',
+    publish_label: '',
+    site_name: '',
   })
   const [themeStatus, setThemeStatus] = useState<string | null>(null)
   const [themeSubmitting, setThemeSubmitting] = useState(false)
+  const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null)
 
   const refresh = () => {
     listUsers()
@@ -61,9 +77,31 @@ export function AdminUsersPage() {
       })
   }, [])
 
+  const loadLogoPreview = (hasLogo: boolean) => {
+    const next = hasLogo ? fetchLogoBlobUrl() : Promise.resolve(null)
+    next.then((url) =>
+      setLogoPreviewUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev)
+        return url
+      })
+    )
+  }
+
+  const syncTheme = (theme: ThemeSettings) => {
+    setThemeForm({
+      primary_color: theme.primary_color,
+      secondary_color: theme.secondary_color,
+      tertiary_color: theme.tertiary_color,
+      save_draft_label: theme.save_draft_label,
+      publish_label: theme.publish_label,
+      site_name: theme.site_name,
+    })
+    loadLogoPreview(theme.has_logo)
+  }
+
   useEffect(() => {
     getTheme()
-      .then(setThemeColors)
+      .then(syncTheme)
       .catch((err) => {
         setThemeStatus(`Error: ${err instanceof Error ? err.message : String(err)}`)
       })
@@ -159,14 +197,37 @@ export function AdminUsersPage() {
     setThemeStatus(null)
     setThemeSubmitting(true)
     try {
-      const saved = await updateThemeSettings(themeColors)
-      setThemeColors(saved)
-      setThemeStatus('Colors updated')
+      const saved = await updateThemeSettings(themeForm)
+      syncTheme(saved)
+      applyTheme(saved)
+      setThemeStatus('Theme updated')
     } catch (err) {
       setThemeStatus(`Error: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
       setThemeSubmitting(false)
     }
+  }
+
+  const runLogoChange = async (action: () => Promise<ThemeSettings>, success: string) => {
+    setThemeStatus(null)
+    setThemeSubmitting(true)
+    try {
+      const saved = await action()
+      loadLogoPreview(saved.has_logo)
+      applyTheme(saved)
+      setThemeStatus(success)
+    } catch (err) {
+      setThemeStatus(`Error: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setThemeSubmitting(false)
+    }
+  }
+
+  const handleLogoFile = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ''
+    if (!file) return
+    runLogoChange(() => uploadThemeLogo(file), 'Logo updated')
   }
 
   return (
@@ -326,48 +387,100 @@ export function AdminUsersPage() {
       </section>
 
       <section className="admin-card">
-        <h2>Theme colors</h2>
+        <h2>Theme</h2>
         <div className="admin-form-row">
           <label className="admin-field">
-            Primary color
+            Site name
             <input
-              type="color"
-              value={themeColors.primary_color}
+              type="text"
+              value={themeForm.site_name}
+              maxLength={64}
+              onChange={(e) => setThemeForm((prev) => ({ ...prev, site_name: e.target.value }))}
+              disabled={themeSubmitting}
+            />
+          </label>
+        </div>
+        <div className="admin-form-row">
+          <label className="admin-field">
+            Save draft button text
+            <input
+              type="text"
+              value={themeForm.save_draft_label}
+              maxLength={32}
               onChange={(e) =>
-                setThemeColors((prev) => ({ ...prev, primary_color: e.target.value }))
+                setThemeForm((prev) => ({ ...prev, save_draft_label: e.target.value }))
               }
               disabled={themeSubmitting}
             />
           </label>
           <label className="admin-field">
-            Secondary color
+            Publish button text
             <input
-              type="color"
-              value={themeColors.secondary_color}
+              type="text"
+              value={themeForm.publish_label}
+              maxLength={32}
               onChange={(e) =>
-                setThemeColors((prev) => ({ ...prev, secondary_color: e.target.value }))
+                setThemeForm((prev) => ({ ...prev, publish_label: e.target.value }))
               }
               disabled={themeSubmitting}
             />
           </label>
-          <label className="admin-field">
-            Tertiary color
+        </div>
+        <div className="admin-logo-row">
+          {logoPreviewUrl ? (
+            <img className="admin-logo-preview" src={logoPreviewUrl} alt="Current logo" />
+          ) : (
+            <span className="admin-hint">No logo set</span>
+          )}
+          <label className="admin-btn admin-btn-inline">
+            {logoPreviewUrl ? 'Replace logo' : 'Upload logo'}
             <input
-              type="color"
-              value={themeColors.tertiary_color}
-              onChange={(e) =>
-                setThemeColors((prev) => ({ ...prev, tertiary_color: e.target.value }))
-              }
+              type="file"
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              onChange={handleLogoFile}
               disabled={themeSubmitting}
+              hidden
             />
           </label>
+          {logoPreviewUrl && (
+            <button
+              className="admin-btn admin-btn-inline admin-btn-danger"
+              onClick={() => runLogoChange(deleteThemeLogo, 'Logo removed')}
+              disabled={themeSubmitting}
+            >
+              Remove logo
+            </button>
+          )}
+        </div>
+        <div className="admin-form-row">
+          {THEME_COLOR_FIELDS.map(({ key, label }) => (
+            <label key={key} className="admin-field">
+              {label}
+              <span className="admin-color-row">
+                <span
+                  className="admin-color-swatch"
+                  style={{ backgroundColor: themeForm[key] }}
+                  data-testid={`swatch-${key}`}
+                  aria-hidden="true"
+                />
+                <input
+                  type="color"
+                  value={themeForm[key]}
+                  onChange={(e) =>
+                    setThemeForm((prev) => ({ ...prev, [key]: e.target.value }))
+                  }
+                  disabled={themeSubmitting}
+                />
+              </span>
+            </label>
+          ))}
         </div>
         <button
           className="admin-btn admin-btn-primary"
           onClick={handleSaveTheme}
           disabled={themeSubmitting}
         >
-          Save colors
+          Save theme
         </button>
 
         {themeStatus && (
@@ -376,6 +489,8 @@ export function AdminUsersPage() {
           </p>
         )}
       </section>
+
+      <AdminConfigSection />
     </div>
   )
 }

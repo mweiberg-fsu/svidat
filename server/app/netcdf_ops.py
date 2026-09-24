@@ -101,6 +101,16 @@ def restore_bulk(
         ds.variables[var_name][index] = old_values
 
 
+def _missing_mask(var, values: np.ndarray) -> np.ndarray:
+    attrs = set(var.ncattrs())
+    mask = np.zeros(values.shape, dtype=bool)
+    if "missing_value" in attrs:
+        mask |= np.isclose(values, float(var.getncattr("missing_value")))
+    if "special_value" in attrs:
+        mask |= np.isclose(values, float(var.getncattr("special_value")))
+    return mask
+
+
 def get_variable_data(path, var_names: List[str]) -> Dict[str, Any]:
     with netCDF4.Dataset(path, "r") as ds:
         ds.set_auto_mask(False)
@@ -126,11 +136,7 @@ def get_variable_data(path, var_names: List[str]) -> Dict[str, Any]:
             attrs = set(var.ncattrs())
             values = np.array(var[:], dtype=float)
 
-            mask = np.zeros(values.shape, dtype=bool)
-            if "missing_value" in attrs:
-                mask |= np.isclose(values, float(var.getncattr("missing_value")))
-            if "special_value" in attrs:
-                mask |= np.isclose(values, float(var.getncattr("special_value")))
+            mask = _missing_mask(var, values)
             value_list = [None if m else float(v) for v, m in zip(values, mask)]
 
             flags = None
@@ -193,3 +199,31 @@ def restore_flags(
         col = _flag_column(ds, var_name)
         flag_var = ds.variables["flag"]
         flag_var[start_idx:end_idx, col] = old_values
+
+
+def get_track(path) -> Dict[str, np.ndarray]:
+    """Per-obs position + calendar month, for climatology lookup.
+
+    lat/lon missing/special values become NaN. Raises KeyError if the file
+    has no time/lat/lon.
+    """
+    with netCDF4.Dataset(path, "r") as ds:
+        ds.set_auto_mask(False)
+        for name in ("time", "lat", "lon"):
+            if name not in ds.variables:
+                raise KeyError(name)
+        time_var = ds.variables["time"]
+        times = netCDF4.num2date(
+            time_var[:],
+            units=_normalize_time_units(time_var.units),
+            only_use_cftime_datetimes=False,
+            only_use_python_datetimes=True,
+        )
+        months = np.array([t.month for t in times], dtype=int)
+        coords: Dict[str, np.ndarray] = {}
+        for name in ("lat", "lon"):
+            var = ds.variables[name]
+            values = np.array(var[:], dtype=float)
+            values[_missing_mask(var, values)] = np.nan
+            coords[name] = values
+    return {"lat": coords["lat"], "lon": coords["lon"], "month": months}

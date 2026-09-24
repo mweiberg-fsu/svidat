@@ -5,12 +5,15 @@ import {
   RESUME_CHECKED_KEY,
   USERNAME_KEY,
   clearAuthStorage,
+  getConfig,
   getMySessions,
   getTheme,
   getToken,
   setToken,
 } from '../api/client'
 import type { Role, TempSessionEntry } from '../api/types'
+import { applyTheme } from '../theme'
+import { applyConfig } from '../appConfig'
 
 interface AuthState {
   token: string | null
@@ -63,21 +66,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .catch(() => {})
   }, [token])
 
-  // Applies the site's admin-configured theme colors on login (and on
-  // every fresh token, e.g. re-login after logout, in case an admin
+  // Applies the site's admin-configured theme (colors, name, logo) on first
+  // load — /theme is public, so the login page gets branding too — and again
+  // on every token change (e.g. re-login after logout, in case an admin
   // changed the theme meanwhile). No sessionStorage re-fire guard is
   // needed here, unlike the resumable-sessions effect above — that one
   // specifically guards against per-route Sidebar remounts, but
   // AuthProvider itself doesn't remount per route, so this only re-runs
   // on an actual token change.
   useEffect(() => {
-    if (!token) return
     getTheme()
-      .then((theme) => {
-        document.documentElement.style.setProperty('--accent', theme.primary_color)
-        document.documentElement.style.setProperty('--secondary', theme.secondary_color)
-        document.documentElement.style.setProperty('--tertiary', theme.tertiary_color)
-      })
+      .then(applyTheme)
+      .catch(() => {})
+  }, [token])
+
+  // Keybindings + documentation (admin panel's Configuration section). Unlike
+  // /theme this needs a signed-in user; until it lands, gestures fall back to
+  // DEFAULT_KEYBINDINGS.
+  useEffect(() => {
+    if (!token) return
+    getConfig()
+      .then(applyConfig)
       .catch(() => {})
   }, [token])
 

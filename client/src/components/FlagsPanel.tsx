@@ -50,6 +50,8 @@ export function FlagsPanel() {
     notifyFlagged,
     flagsVisible,
     toggleFlagsVisible,
+    climatologyVisible,
+    toggleClimatologyVisible,
     bulkEdit,
     selectedVariables,
   } = useEditSession()
@@ -116,6 +118,14 @@ export function FlagsPanel() {
         <label>
           <input type="checkbox" checked={flagsVisible} onChange={toggleFlagsVisible} />
           Show flags
+        </label>
+        <label>
+          <input
+            type="checkbox"
+            checked={climatologyVisible}
+            onChange={toggleClimatologyVisible}
+          />
+          Show climatology
         </label>
       </div>
       <p className="sidebar-flags-panel-status">

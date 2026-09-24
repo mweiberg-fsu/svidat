@@ -5,11 +5,13 @@ import {
   useState,
   type MouseEvent as ReactMouseEvent,
 } from 'react'
-import { getFileMetadata, getVariableData } from '../api/client'
+import { getClimatology, getFileMetadata, getVariableData } from '../api/client'
 import { usePlotSelection } from '../context/PlotSelectionContext'
-import type { FileMetadata, VariableDataResponse, VariableSeries } from '../api/types'
+import type { ClimatologyResponse, FileMetadata, VariableDataResponse, VariableSeries } from '../api/types'
 import { useEditSession } from '../context/EditSessionContext'
 import { FLAG_CODES } from '../constants/flagCodes'
+import { MODIFIER_KEY, hasModifier, useAppConfig } from '../appConfig'
+import { IS_MAC } from '../platform'
 
 // Fallbacks used only before the container's first real measurement (or in
 // environments without ResizeObserver, e.g. jsdom in tests) — actual
@@ -50,6 +52,8 @@ const FONT_FAMILY = 'Arial, sans-serif'
 const TOOLTIP_BG_COLOR = '#1f2937'
 const TOOLTIP_TEXT_COLOR = '#ffffff'
 const LINE_HOVER_THRESHOLD_PX = 8
+const CLIMATOLOGY_COLOR = '#0891b2'
+const CLIMATOLOGY_DASH = '6 4'
 
 // Inclusive [startIdx, endIdx] window into the shared time axis. `null` means
 // full extent — every row zooms to the same window since they share one
@@ -123,6 +127,29 @@ function buildPath(
     const v = values[i]
     if (v === null || v === undefined) continue
     d += d === '' ? `M${scale.x(i)},${scale.y(v)}` : `L${scale.x(i)},${scale.y(v)}`
+  }
+  return d
+}
+
+// Like buildPath, but starts a new subpath after each null instead of
+// bridging it — a climatology gap means "no nearby ocean cell", which
+// shouldn't be drawn as if the value were interpolated across it.
+function buildGappedPath(
+  values: (number | null)[],
+  scale: Scale,
+  startIdx: number,
+  endIdx: number
+): string {
+  let d = ''
+  let penDown = false
+  for (let i = startIdx; i <= endIdx; i++) {
+    const v = values[i]
+    if (v === null || v === undefined) {
+      penDown = false
+      continue
+    }
+    d += `${penDown ? 'L' : 'M'}${scale.x(i)},${scale.y(v)}`
+    penDown = true
   }
   return d
 }
@@ -524,16 +551,19 @@ export function SvgPlot() {
     setFlagSelection,
     flagAppliedAt,
     flagsVisible,
+    climatologyVisible,
     selectedVariables,
     toggleVariableSelected,
   } = useEditSession()
   const [data, setData] = useState<VariableDataResponse | null>(null)
+  const [climatology, setClimatology] = useState<ClimatologyResponse | null>(null)
   const [metadata, setMetadata] = useState<FileMetadata | null>(null)
   const [activeVariable, setActiveVariable] = useState<string | null>(null)
   const [xRange, setXRange] = useState<XRange>(null)
   const [yOverrides, setYOverrides] = useState<Record<string, [number, number] | null>>({})
-  const [shiftHeld, setShiftHeld] = useState(false)
-  const [ctrlHeld, setCtrlHeld] = useState(false)
+  const { keybindings } = useAppConfig()
+  // KeyboardEvent.key of each modifier currently held, for the zoom cursors.
+  const [heldKeys, setHeldKeys] = useState<ReadonlySet<string>>(new Set())
   const containerRef = useRef<HTMLDivElement | null>(null)
   const [plotWidth, setPlotWidth] = useState(DEFAULT_WIDTH)
   const [rowHeight, setRowHeight] = useState(DEFAULT_ROW_HEIGHT)
@@ -676,6 +706,40 @@ export function SvgPlot() {
     }
   }, [file, variables, flagAppliedAt])
 
+  // A new file or variable set makes any stored climatology stale — it may
+  // no longer correspond to the same track/variables, and would otherwise
+  // stay on screen (misaligned) until the effect below's fetch resolves.
+  // Deliberately not keyed on flagAppliedAt — a flag apply's refetch below
+  // should replace the line in place, not blank it out and flicker on every
+  // apply.
+  useEffect(() => {
+    setClimatology(null)
+  }, [file, variables])
+
+  // Climatology is fetched only while "Show climatology" is on — same
+  // triggers as the data fetch above (file/variable change, a flag apply,
+  // or an audit revert). Unchecking drops the stored result so no stale
+  // line is drawn; a failed fetch drops it too, rather than leaving a
+  // (possibly now-stale) line from a prior successful fetch on screen.
+  useEffect(() => {
+    if (!climatologyVisible || !file || variables.length === 0) {
+      setClimatology(null)
+      return
+    }
+    let cancelled = false
+    getClimatology(file, variables)
+      .then((result) => {
+        if (!cancelled) setClimatology(result)
+      })
+      .catch((err) => {
+        console.error('climatology fetch failed', err)
+        if (!cancelled) setClimatology(null)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [climatologyVisible, file, variables, flagAppliedAt])
+
   // Only used for the dataset title (global `title` attr) — a failure here
   // shouldn't block plotting, which already renders fine without it.
   useEffect(() => {
@@ -744,17 +808,21 @@ export function SvgPlot() {
   }, [variables.length, data])
 
   useEffect(() => {
+    const modifierKeys = new Set(Object.values(MODIFIER_KEY))
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Shift') setShiftHeld(true)
-      if (e.key === 'Control') setCtrlHeld(true)
+      if (!modifierKeys.has(e.key)) return
+      setHeldKeys((prev) => (prev.has(e.key) ? prev : new Set(prev).add(e.key)))
     }
     const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.key === 'Shift') setShiftHeld(false)
-      if (e.key === 'Control') setCtrlHeld(false)
+      if (!modifierKeys.has(e.key)) return
+      setHeldKeys((prev) => {
+        const next = new Set(prev)
+        next.delete(e.key)
+        return next
+      })
     }
     const handleBlur = () => {
-      setShiftHeld(false)
-      setCtrlHeld(false)
+      setHeldKeys(new Set())
     }
     window.addEventListener('keydown', handleKeyDown)
     window.addEventListener('keyup', handleKeyUp)
@@ -955,7 +1023,7 @@ export function SvgPlot() {
     scaleMax: number
   ) => {
     setHoverTip(null)
-    if (e.shiftKey || e.button === 1) {
+    if (hasModifier(e, keybindings.x_zoom) || e.button === 1) {
       e.preventDefault()
       const rect = e.currentTarget.getBoundingClientRect()
       const startPx = e.clientX - rect.left
@@ -963,7 +1031,7 @@ export function SvgPlot() {
       setXDrag({ startPx, currentPx: startPx })
       return
     }
-    if (e.ctrlKey) {
+    if (hasModifier(e, keybindings.y_zoom)) {
       e.preventDefault()
       const rect = e.currentTarget.getBoundingClientRect()
       const startPx = e.clientY - rect.top
@@ -1041,11 +1109,22 @@ export function SvgPlot() {
     applySnapshot(next)
   }
 
-  // Right-click still works as a secondary trigger alongside Cmd+click/
-  // double-click below (shift+right-click for redo, matching the original
-  // pattern before the Cmd/Ctrl bindings were introduced).
+  // Right-click still works as a secondary trigger alongside the configurable
+  // undo/redo bindings (shift+right-click for redo, matching the original
+  // pattern before those bindings were introduced).
+  //
+  // macOS turns ctrl+click into a secondary click: it fires contextmenu here
+  // (on mousedown) instead of a click. So a ctrl+drag zoom must not be read
+  // as a right-click undo — or a second Y-zoom's mousedown would undo the
+  // first before the drag starts — and a Ctrl-bound undo/redo has to run
+  // from here, since no click event follows.
   const handleRowContextMenu = (e: ReactMouseEvent) => {
     e.preventDefault()
+    if (e.ctrlKey) {
+      if (IS_MAC && keybindings.undo === 'ctrl') undoOnce()
+      else if (IS_MAC && keybindings.redo === 'ctrl') redoOnce()
+      return
+    }
     if (e.shiftKey) redoOnce()
     else undoOnce()
   }
@@ -1053,6 +1132,8 @@ export function SvgPlot() {
   const hoverTipSeries = hoverTip ? data.variables[hoverTip.varName] : null
   const hoverTipValue = hoverTip && hoverTipSeries ? hoverTipSeries.values[hoverTip.idx] : null
   const hoverTipFlag = hoverTip && hoverTipSeries ? (hoverTipSeries.flags?.[hoverTip.idx] ?? null) : null
+  const hoverTipClim =
+    hoverTip && climatology ? (climatology.variables[hoverTip.varName]?.[hoverTip.idx] ?? null) : null
   const draggedIdx = tabDrag ? variables.indexOf(tabDrag.varName) : -1
 
   return (
@@ -1079,6 +1160,7 @@ export function SvgPlot() {
           <div>
             {hoverTip.varName}: {hoverTipValue != null ? hoverTipValue.toFixed(2) : hoverTipValue}
           </div>
+          {hoverTipClim != null && <div>clim: {hoverTipClim.toFixed(2)}</div>}
           {hoverTipFlag && (
             <div>
               Flags: {hoverTipFlag} — {FLAG_CODES.find((f) => f.code === hoverTipFlag)?.description ?? hoverTipFlag}
@@ -1144,15 +1226,21 @@ export function SvgPlot() {
               pointerEvents: isDraggedRow ? 'none' : undefined,
             }}
             onClick={(e) => {
-              if (e.metaKey) {
+              if (hasModifier(e, keybindings.undo)) {
                 undoOnce()
                 return
               }
-              if (!e.shiftKey && !e.ctrlKey) setActiveVariable(varName)
+              if (hasModifier(e, keybindings.redo)) {
+                redoOnce()
+                return
+              }
+              // Any other held modifier means this click ended a zoom drag.
+              if (!e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) setActiveVariable(varName)
             }}
             onDoubleClick={(e) => {
               e.preventDefault()
-              redoOnce()
+              if (keybindings.undo === 'dblclick') undoOnce()
+              else if (keybindings.redo === 'dblclick') redoOnce()
             }}
             onContextMenu={handleRowContextMenu}
             role="button"
@@ -1188,7 +1276,13 @@ export function SvgPlot() {
               onMouseDown={(e) => handleRowMouseDown(e, varName, scale.min, scale.max)}
               onMouseMove={(e) => handleRowMouseMove(e, varName, scale, series)}
               onMouseLeave={handleRowMouseLeave}
-              style={{ cursor: shiftHeld ? 'crosshair' : ctrlHeld ? 'ns-resize' : undefined }}
+              style={{
+                cursor: heldKeys.has(MODIFIER_KEY[keybindings.x_zoom])
+                  ? 'crosshair'
+                  : heldKeys.has(MODIFIER_KEY[keybindings.y_zoom])
+                    ? 'ns-resize'
+                    : undefined,
+              }}
             >
               <rect x={0} y={0} width={plotWidth} height={rowHeight} fill="#ffffff" />
 
@@ -1311,6 +1405,16 @@ export function SvgPlot() {
               )}
 
               <g clipPath={`url(#plot-clip-${rowIdx})`}>
+                {climatology?.variables[varName] && (
+                  <path
+                    data-testid={`climatology-${varName}`}
+                    d={buildGappedPath(climatology.variables[varName], scale, startIdx, endIdx)}
+                    fill="none"
+                    stroke={CLIMATOLOGY_COLOR}
+                    strokeWidth={1.5}
+                    strokeDasharray={CLIMATOLOGY_DASH}
+                  />
+                )}
                 {highlightRange && highlightBand && (
                   <rect
                     x={scale.x(highlightRange[0])}

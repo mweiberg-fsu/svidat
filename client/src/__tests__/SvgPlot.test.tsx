@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { SvgPlot } from '../components/SvgPlot'
 import { PlotSelectionProvider, usePlotSelection } from '../context/PlotSelectionContext'
@@ -7,6 +7,7 @@ import { EditSessionProvider, useEditSession } from '../context/EditSessionConte
 import { AuthProvider } from '../context/AuthContext'
 import { setToken } from '../api/client'
 import * as apiClient from '../api/client'
+import { DEFAULT_DOCUMENTATION, DEFAULT_KEYBINDINGS, applyConfig } from '../appConfig'
 
 function Setup({ file, variables }: { file: string; variables: string[] }) {
   const sel = usePlotSelection()
@@ -22,6 +23,15 @@ function Setup({ file, variables }: { file: string; variables: string[] }) {
   )
 }
 
+function ClimatologyToggle() {
+  const { toggleClimatologyVisible } = useEditSession()
+  return (
+    <button data-testid="toggle-clim" onClick={toggleClimatologyVisible}>
+      toggle clim
+    </button>
+  )
+}
+
 function renderSvgPlot(file: string, variables: string[]) {
   setToken('tok')
   localStorage.setItem('svidat_role', JSON.stringify(['qca']))
@@ -32,6 +42,7 @@ function renderSvgPlot(file: string, variables: string[]) {
         <PlotSelectionProvider>
           <EditSessionProvider>
             <Setup file={file} variables={variables} />
+            <ClimatologyToggle />
             <SvgPlot />
           </EditSessionProvider>
         </PlotSelectionProvider>
@@ -567,6 +578,82 @@ describe('SvgPlot', () => {
     // Redo #2: restores the Y-zoom on top.
     fireEvent.contextMenu(row, { shiftKey: true })
     expect(ticks()).toEqual(expect.arrayContaining(['7', '9', '11']))
+  })
+
+  it('successive ctrl+drags refine the Y-axis further (macOS ctrl+click also fires contextmenu)', async () => {
+    const time = hourlyTimes(18)
+    vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
+      time,
+      variables: { temperature: { values: time.map((_, i) => i), flags: time.map(() => 'Z') } },
+    })
+
+    const { container } = renderSvgPlot('FILE_A', ['temperature'])
+    await waitFor(() => expect(container.querySelector('svg')).toBeInTheDocument())
+
+    const svg = container.querySelector('svg')!
+    const row = container.querySelector('.svg-plot-row')!
+    const ticks = () => Array.from(svg.querySelectorAll('text')).map((t) => t.textContent)
+
+    // macOS treats ctrl+click as a secondary click: mousedown is followed by
+    // a contextmenu event carrying ctrlKey.
+    const macCtrlDrag = (fromY: number, toY: number) => {
+      fireEvent.mouseDown(svg, { clientY: fromY, ctrlKey: true })
+      fireEvent.contextMenu(row, { ctrlKey: true })
+      fireEvent.mouseMove(window, { clientY: toY })
+      fireEvent.mouseUp(window, { clientY: toY })
+    }
+
+    // 1st zoom: full [0, 20] range -> y ticks 4..16.
+    macCtrlDrag(60, 130)
+    expect(ticks()).toEqual(expect.arrayContaining(['4', '10', '16']))
+    expect(ticks()).not.toEqual(expect.arrayContaining(['0']))
+
+    // 2nd zoom refines within the 1st (6..14), instead of the contextmenu
+    // undoing the 1st zoom and the drag starting over from the full range.
+    macCtrlDrag(60, 130)
+    expect(ticks()).toEqual(expect.arrayContaining(['6', '10', '14']))
+    expect(ticks()).not.toEqual(expect.arrayContaining(['4']))
+    expect(ticks()).not.toEqual(expect.arrayContaining(['16']))
+
+    // Plain right-click undo still steps back one Y-zoom at a time.
+    fireEvent.contextMenu(row)
+    expect(ticks()).toEqual(expect.arrayContaining(['4', '10', '16']))
+  })
+
+  it('follows admin-configured zoom bindings (X on Alt, Y on Shift)', async () => {
+    const time = hourlyTimes(18)
+    vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
+      time,
+      variables: { temperature: { values: time.map((_, i) => i), flags: time.map(() => 'Z') } },
+    })
+    act(() =>
+      applyConfig({
+        keybindings: { ...DEFAULT_KEYBINDINGS, x_zoom: 'alt', y_zoom: 'shift' },
+        documentation: DEFAULT_DOCUMENTATION,
+      })
+    )
+    try {
+      const { container } = renderSvgPlot('FILE_A', ['temperature'])
+      await waitFor(() => expect(container.querySelector('svg')).toBeInTheDocument())
+      const svg = container.querySelector('svg')!
+      const segments = () => segmentCount(container.querySelector('path')?.getAttribute('d'))
+      const ticks = () => Array.from(svg.querySelectorAll('text')).map((t) => t.textContent)
+
+      // Shift now zooms Y, not X.
+      fireEvent.mouseDown(svg, { clientY: 60, shiftKey: true })
+      fireEvent.mouseMove(window, { clientY: 130 })
+      fireEvent.mouseUp(window, { clientY: 130 })
+      expect(segments()).toBe(18)
+      expect(ticks()).not.toEqual(expect.arrayContaining(['0']))
+
+      // Alt zooms X.
+      fireEvent.mouseDown(svg, { clientX: pxForIndex(4, 18), altKey: true })
+      fireEvent.mouseMove(window, { clientX: pxForIndex(14, 18) })
+      fireEvent.mouseUp(window, { clientX: pxForIndex(14, 18) })
+      expect(segments()).toBe(10)
+    } finally {
+      act(() => applyConfig({ keybindings: DEFAULT_KEYBINDINGS, documentation: DEFAULT_DOCUMENTATION }))
+    }
   })
 
   it('ctrl+drag shorter than the minimum drag distance is ignored', async () => {
@@ -1482,5 +1569,240 @@ describe('SvgPlot', () => {
     expect(screen.queryByTestId('hover-tooltip')).not.toBeInTheDocument()
 
     fireEvent.mouseUp(window, { clientX: pxForIndex(14, 18) })
+  })
+
+  it('does not fetch climatology while "Show climatology" is off', async () => {
+    const time = hourlyTimes(4)
+    vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
+      time,
+      variables: { T: { values: [1, 2, 3, 4, 5], flags: null } },
+    })
+    const climSpy = vi.spyOn(apiClient, 'getClimatology').mockResolvedValue({ variables: {} })
+
+    const { container } = renderSvgPlot('FILE_A', ['T'])
+    await waitFor(() => expect(container.querySelector('svg')).toBeInTheDocument())
+
+    expect(climSpy).not.toHaveBeenCalled()
+    expect(container.querySelector('[data-testid="climatology-T"]')).not.toBeInTheDocument()
+  })
+
+  it('draws a dashed climatology line only for variables in the response', async () => {
+    const time = hourlyTimes(4)
+    vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
+      time,
+      variables: {
+        T: { values: [1, 2, 3, 4, 5], flags: null },
+        DIR: { values: [10, 20, 30, 40, 50], flags: null },
+      },
+    })
+    const climSpy = vi
+      .spyOn(apiClient, 'getClimatology')
+      .mockResolvedValue({ variables: { T: [2, 2, 2, 2, 2] } })
+
+    const { container } = renderSvgPlot('FILE_A', ['T', 'DIR'])
+    await waitFor(() => expect(container.querySelector('svg')).toBeInTheDocument())
+    fireEvent.click(screen.getByTestId('toggle-clim'))
+
+    await waitFor(() =>
+      expect(container.querySelector('[data-testid="climatology-T"]')).toBeInTheDocument()
+    )
+    expect(climSpy).toHaveBeenCalledWith('FILE_A', ['T', 'DIR'])
+    const path = container.querySelector('[data-testid="climatology-T"]')!
+    expect(path.getAttribute('stroke-dasharray')).toBe('6 4')
+    expect(segmentCount(path.getAttribute('d'))).toBe(4)
+    expect(container.querySelector('[data-testid="climatology-DIR"]')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByTestId('toggle-clim'))
+    await waitFor(() =>
+      expect(container.querySelector('[data-testid="climatology-T"]')).not.toBeInTheDocument()
+    )
+  })
+
+  it('breaks the climatology line at null values', async () => {
+    const time = hourlyTimes(4)
+    vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
+      time,
+      variables: { T: { values: [1, 2, 3, 4, 5], flags: null } },
+    })
+    vi.spyOn(apiClient, 'getClimatology').mockResolvedValue({
+      variables: { T: [2, 2, null, 2, 2] },
+    })
+
+    const { container } = renderSvgPlot('FILE_A', ['T'])
+    await waitFor(() => expect(container.querySelector('svg')).toBeInTheDocument())
+    fireEvent.click(screen.getByTestId('toggle-clim'))
+
+    await waitFor(() =>
+      expect(container.querySelector('[data-testid="climatology-T"]')).toBeInTheDocument()
+    )
+    const d = container.querySelector('[data-testid="climatology-T"]')!.getAttribute('d') ?? ''
+    expect(d.match(/M/g)?.length).toBe(2)
+    expect(segmentCount(d)).toBe(2)
+  })
+
+  it('climatology does not change the Y auto-fit', async () => {
+    const time = hourlyTimes(4)
+    vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
+      time,
+      variables: { T: { values: [1, 2, 3, 4, 5], flags: null } },
+    })
+    vi.spyOn(apiClient, 'getClimatology').mockResolvedValue({
+      variables: { T: [500, 500, 500, 500, 500] },
+    })
+
+    const { container } = renderSvgPlot('FILE_A', ['T'])
+    await waitFor(() => expect(container.querySelector('svg')).toBeInTheDocument())
+    const ticksBefore = Array.from(container.querySelectorAll('svg text')).map((t) => t.textContent)
+    fireEvent.click(screen.getByTestId('toggle-clim'))
+    await waitFor(() =>
+      expect(container.querySelector('[data-testid="climatology-T"]')).toBeInTheDocument()
+    )
+    const ticksAfter = Array.from(container.querySelectorAll('svg text')).map((t) => t.textContent)
+    expect(ticksAfter).toEqual(ticksBefore)
+  })
+
+  it('clears the stale climatology line as soon as variables change, without waiting for the new fetch to resolve', async () => {
+    const time = hourlyTimes(4)
+    vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
+      time,
+      variables: { T: { values: [1, 2, 3, 4, 5], flags: null } },
+    })
+    const climSpy = vi
+      .spyOn(apiClient, 'getClimatology')
+      .mockResolvedValueOnce({ variables: { T: [2, 2, 2, 2, 2] } })
+
+    // Deliberately not the Setup/switch-file pattern used elsewhere in this
+    // file: PlotSelectionContext's setFile() clears `variables` to `[]` as a
+    // side effect, which already trips the climatology effect's own
+    // `variables.length === 0` guard — so a file-switch test can't tell
+    // whether the fix (a dedicated reset effect) is doing the clearing or
+    // that unrelated guard is. Re-selecting variables on the *same* file
+    // (a fresh array, same contents) isolates just the reset behavior.
+    function Reselect() {
+      const sel = usePlotSelection()
+      return (
+        <button data-testid="reselect-variables" onClick={() => sel.setVariables(['T'])}>
+          reselect
+        </button>
+      )
+    }
+
+    setToken('tok')
+    localStorage.setItem('svidat_role', JSON.stringify(['qca']))
+    localStorage.setItem('svidat_username', 'testuser')
+
+    const { container } = render(
+      <AuthProvider>
+        <MemoryRouter>
+          <PlotSelectionProvider>
+            <EditSessionProvider>
+              <Setup file="FILE_A" variables={['T']} />
+              <Reselect />
+              <ClimatologyToggle />
+              <SvgPlot />
+            </EditSessionProvider>
+          </PlotSelectionProvider>
+        </MemoryRouter>
+      </AuthProvider>
+    )
+    fireEvent.click(screen.getByTestId('set-file'))
+    fireEvent.click(screen.getByTestId('set-variables'))
+    await waitFor(() => expect(container.querySelector('svg')).toBeInTheDocument())
+    fireEvent.click(screen.getByTestId('toggle-clim'))
+    await waitFor(() =>
+      expect(container.querySelector('[data-testid="climatology-T"]')).toBeInTheDocument()
+    )
+
+    // The refetch triggered below never resolves — isolates the reset half
+    // of the fix (must clear synchronously on the [file, variables] change)
+    // from the catch half, covered separately below.
+    climSpy.mockImplementation(() => new Promise(() => {}))
+    fireEvent.click(screen.getByTestId('reselect-variables'))
+
+    expect(container.querySelector('[data-testid="climatology-T"]')).not.toBeInTheDocument()
+  })
+
+  it('clears the climatology line when a refetch (e.g. after a flag apply) fails, instead of leaving the stale line forever', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const time = hourlyTimes(4)
+    vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
+      time,
+      variables: { T: { values: [1, 2, 3, 4, 5], flags: null } },
+    })
+    const climSpy = vi
+      .spyOn(apiClient, 'getClimatology')
+      .mockResolvedValueOnce({ variables: { T: [2, 2, 2, 2, 2] } })
+
+    // notifyFlagged bumps flagAppliedAt only — file/variables stay the same,
+    // so this can't be satisfied by the reset effect (deliberately not keyed
+    // on flagAppliedAt) or the variables.length===0 guard. Only the .catch
+    // clearing itself can pass this.
+    function NotifyButton() {
+      const { notifyFlagged } = useEditSession()
+      return (
+        <button data-testid="notify-flagged" onClick={() => notifyFlagged()}>
+          notify flagged
+        </button>
+      )
+    }
+
+    setToken('tok')
+    localStorage.setItem('svidat_role', JSON.stringify(['qca']))
+    localStorage.setItem('svidat_username', 'testuser')
+
+    const { container } = render(
+      <AuthProvider>
+        <MemoryRouter>
+          <PlotSelectionProvider>
+            <EditSessionProvider>
+              <Setup file="FILE_A" variables={['T']} />
+              <NotifyButton />
+              <ClimatologyToggle />
+              <SvgPlot />
+            </EditSessionProvider>
+          </PlotSelectionProvider>
+        </MemoryRouter>
+      </AuthProvider>
+    )
+    fireEvent.click(screen.getByTestId('set-file'))
+    fireEvent.click(screen.getByTestId('set-variables'))
+    await waitFor(() => expect(container.querySelector('svg')).toBeInTheDocument())
+    fireEvent.click(screen.getByTestId('toggle-clim'))
+    await waitFor(() =>
+      expect(container.querySelector('[data-testid="climatology-T"]')).toBeInTheDocument()
+    )
+
+    climSpy.mockRejectedValue(new Error('boom'))
+    fireEvent.click(screen.getByTestId('notify-flagged'))
+
+    await waitFor(() =>
+      expect(container.querySelector('[data-testid="climatology-T"]')).not.toBeInTheDocument()
+    )
+    expect(consoleErrorSpy).toHaveBeenCalled()
+  })
+
+  it('adds the climatology value to the tooltip when shown', async () => {
+    const time = hourlyTimes(18)
+    vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
+      time,
+      variables: { T: { values: time.map((_, i) => i), flags: null } },
+    })
+    vi.spyOn(apiClient, 'getClimatology').mockResolvedValue({
+      variables: { T: time.map(() => 7.25) },
+    })
+
+    const { container } = renderSvgPlot('FILE_A', ['T'])
+    await waitFor(() => expect(container.querySelector('svg')).toBeInTheDocument())
+
+    const svg = container.querySelector('svg')!
+    fireEvent.mouseMove(svg, { clientX: pxForIndex(5, 18), clientY: pyForValue(5, 0, 20) })
+    expect(screen.getByTestId('hover-tooltip')).not.toHaveTextContent('clim:')
+
+    fireEvent.click(screen.getByTestId('toggle-clim'))
+    await waitFor(() =>
+      expect(container.querySelector('[data-testid="climatology-T"]')).toBeInTheDocument()
+    )
+    fireEvent.mouseMove(svg, { clientX: pxForIndex(5, 18), clientY: pyForValue(5, 0, 20) })
+    expect(screen.getByTestId('hover-tooltip')).toHaveTextContent('clim: 7.25')
   })
 })

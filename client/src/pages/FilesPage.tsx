@@ -3,9 +3,11 @@ import { publishFile, saveDraft } from '../api/client'
 import { usePlotSelection } from '../context/PlotSelectionContext'
 import { useEditSession } from '../context/EditSessionContext'
 import { SvgPlot } from '../components/SvgPlot'
+import { useBranding } from '../theme'
 
 export function FilesPage() {
   const { file } = usePlotSelection()
+  const { saveDraftLabel, publishLabel } = useBranding()
   const {
     sessionOpen,
     canEdit,
@@ -63,10 +65,10 @@ export function FilesPage() {
               </div>
               <div className="files-toolbar-right">
                 <button onClick={handleSave} disabled={submitting}>
-                  Save draft (v250)
+                  {saveDraftLabel}
                 </button>
                 <button onClick={handlePublish} disabled={submitting}>
-                  Publish (v300)
+                  {publishLabel}
                 </button>
               </div>
             </div>

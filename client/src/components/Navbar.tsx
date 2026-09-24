@@ -1,12 +1,16 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAvatar } from '../hooks/useAvatar'
+import { useLogo } from '../hooks/useLogo'
 import { useAuth } from '../context/AuthContext'
+import { DEFAULT_SITE_NAME, useBranding } from '../theme'
 
 export function Navbar() {
   const { username, roles, id, avatarVersion, logout } = useAuth()
   const [open, setOpen] = useState(false)
   const avatarUrl = useAvatar(id, avatarVersion)
+  const { siteName, hasLogo, logoVersion } = useBranding()
+  const logoUrl = useLogo(hasLogo, logoVersion)
   const navigate = useNavigate()
 
   const goTo = (path: string) => {
@@ -22,7 +26,14 @@ export function Navbar() {
   return (
     <nav className="navbar">
       <button className="navbar-logo" onClick={() => goTo('/files')}>
-        SVI<span>DAT</span>
+        {logoUrl && <img className="navbar-logo-img" src={logoUrl} alt="" height={28} />}
+        {siteName === DEFAULT_SITE_NAME ? (
+          <span>
+            SVI<span className="navbar-logo-accent">DAT</span>
+          </span>
+        ) : (
+          <span>{siteName}</span>
+        )}
       </button>
       <div className="navbar-account">
         <button className="navbar-trigger" onClick={() => setOpen((o) => !o)}>

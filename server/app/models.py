@@ -11,6 +11,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
+    Text,
     UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
@@ -113,3 +114,23 @@ class ThemeSettings(Base):
     primary_color = Column(String, nullable=False, default="#ed1f21")
     secondary_color = Column(String, nullable=False, default="#5e6cb3")
     tertiary_color = Column(String, nullable=False, default="#cbe3f5")
+    site_name = Column(String, nullable=False, default="SVIDAT")
+    save_draft_label = Column(String, nullable=False, default="Save draft (v250)")
+    publish_label = Column(String, nullable=False, default="Publish (v300)")
+    logo_path = Column(String, nullable=True)
+
+    @property
+    def has_logo(self) -> bool:
+        return bool(self.logo_path)
+
+
+class AppConfig(Base):
+    """Site-wide configuration edited from the admin panel's Configuration
+    section. Single row; both columns hold JSON (see app/app_config.py for the
+    shapes and defaults)."""
+
+    __tablename__ = "app_config"
+
+    id = Column(Integer, primary_key=True)
+    keybindings = Column(Text, nullable=False)
+    documentation = Column(Text, nullable=False)

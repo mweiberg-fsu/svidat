@@ -1,8 +1,33 @@
-import { describe, expect, it, vi } from 'vitest'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { describe, expect, it, vi, afterEach } from 'vitest'
+import { act, render, screen, fireEvent } from '@testing-library/react'
 import { DocumentationModal } from '../components/DocumentationModal'
+import { DEFAULT_DOCUMENTATION, DEFAULT_KEYBINDINGS, applyConfig } from '../appConfig'
 
 describe('DocumentationModal', () => {
+  afterEach(() => {
+    applyConfig({ keybindings: DEFAULT_KEYBINDINGS, documentation: DEFAULT_DOCUMENTATION })
+  })
+
+  it('shows admin-configured tabs and fills in the current keybindings', () => {
+    render(<DocumentationModal onClose={vi.fn()} />)
+
+    act(() =>
+      applyConfig({
+        keybindings: { ...DEFAULT_KEYBINDINGS, x_zoom: 'alt', y_zoom: 'shift' },
+        documentation: [
+          { title: 'Start', body: '## Welcome\n\n- **bold** item' },
+          { title: 'Keys', body: 'Zoom X with {{x_zoom}}, Y with {{y_zoom}}.' },
+        ],
+      })
+    )
+
+    expect(screen.queryByRole('tab', { name: 'Overview' })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Welcome' })).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Keys' }))
+    expect(screen.getByText(/Zoom X with (Alt|Option)\+drag, Y with Shift\+drag\./)).toBeInTheDocument()
+  })
+
   it('shows the Overview tab by default', () => {
     render(<DocumentationModal onClose={vi.fn()} />)
 

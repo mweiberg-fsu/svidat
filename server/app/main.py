@@ -5,7 +5,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 from app.database import Base, engine, run_migrations
-from app.routers import admin, audit, auth, edit, files, session, theme, users, workflow
+from app.routers import admin, audit, auth, config, edit, files, session, theme, users, workflow
 
 Base.metadata.create_all(bind=engine)
 run_migrations()
@@ -50,6 +50,7 @@ app.include_router(edit.router)
 app.include_router(workflow.router)
 app.include_router(audit.router)
 app.include_router(theme.router)
+app.include_router(config.router)
 
 
 @app.get("/health")

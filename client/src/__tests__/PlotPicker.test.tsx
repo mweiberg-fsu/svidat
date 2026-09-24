@@ -140,4 +140,78 @@ describe('PlotPicker', () => {
     const optionValues = Array.from(variablesSelect.options).map((o) => o.value)
     expect(optionValues).toEqual(['temperature'])
   })
+
+  it('lists variables in netCDF file order, not alphabetically', async () => {
+    vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({
+      KAQP: { '2025': ['KAQP_20250101v20001'] },
+    })
+    vi.spyOn(apiClient, 'getFileMetadata').mockResolvedValue({
+      variables: {
+        lat: { dims: ['time'], shape: [5], dtype: 'float32', attrs: {} },
+        lon: { dims: ['time'], shape: [5], dtype: 'float32', attrs: {} },
+        PL_HD: { dims: ['time'], shape: [5], dtype: 'float32', attrs: {} },
+        DIR: { dims: ['time'], shape: [5], dtype: 'float32', attrs: {} },
+        T: { dims: ['time'], shape: [5], dtype: 'float32', attrs: {} },
+      },
+      dimensions: { time: 5 },
+    })
+    renderPicker()
+
+    await waitFor(() => expect(screen.getByLabelText('Ship')).toBeInTheDocument())
+    fireEvent.change(screen.getByLabelText('Ship'), { target: { value: 'KAQP' } })
+    fireEvent.change(screen.getByLabelText('Year'), { target: { value: '2025' } })
+    fireEvent.change(screen.getByLabelText('File'), { target: { value: 'KAQP_20250101v20001' } })
+
+    await waitFor(() => expect(screen.getByLabelText('Variables')).toBeInTheDocument())
+    const variablesSelect = screen.getByLabelText('Variables') as HTMLSelectElement
+    const optionValues = Array.from(variablesSelect.options).map((o) => o.value)
+    expect(optionValues).toEqual(['lat', 'lon', 'PL_HD', 'DIR', 'T'])
+  })
+
+  it('shows a multi-select hint next to the Variables label', async () => {
+    vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({
+      KAQP: { '2025': ['KAQP_20250101v20001'] },
+    })
+    vi.spyOn(apiClient, 'getFileMetadata').mockResolvedValue({
+      variables: { T: { dims: ['time'], shape: [5], dtype: 'float32', attrs: {} } },
+      dimensions: { time: 5 },
+    })
+    renderPicker()
+
+    await waitFor(() => expect(screen.getByLabelText('Ship')).toBeInTheDocument())
+    fireEvent.change(screen.getByLabelText('Ship'), { target: { value: 'KAQP' } })
+    fireEvent.change(screen.getByLabelText('Year'), { target: { value: '2025' } })
+    fireEvent.change(screen.getByLabelText('File'), { target: { value: 'KAQP_20250101v20001' } })
+
+    const icon = await screen.findByRole('img', { name: 'How to select multiple variables' })
+    expect(icon).toHaveAccessibleDescription(/(Cmd|Ctrl)\+click to select multiple/)
+    expect(icon).toHaveAccessibleDescription(/Click-and-drag/)
+  })
+
+  it('hides variables with qcindex = 1 (date, time, time_of_day)', async () => {
+    vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({
+      KAQP: { '2025': ['KAQP_20250101v20001'] },
+    })
+    vi.spyOn(apiClient, 'getFileMetadata').mockResolvedValue({
+      variables: {
+        date: { dims: ['time'], shape: [5], dtype: 'int32', attrs: { qcindex: 1 } },
+        time: { dims: ['time'], shape: [5], dtype: 'int32', attrs: { qcindex: 1 } },
+        time_of_day: { dims: ['time'], shape: [5], dtype: 'int32', attrs: { qcindex: [1] } },
+        lat: { dims: ['time'], shape: [5], dtype: 'float32', attrs: { qcindex: 2 } },
+        T: { dims: ['time'], shape: [5], dtype: 'float32', attrs: {} },
+      },
+      dimensions: { time: 5 },
+    })
+    renderPicker()
+
+    await waitFor(() => expect(screen.getByLabelText('Ship')).toBeInTheDocument())
+    fireEvent.change(screen.getByLabelText('Ship'), { target: { value: 'KAQP' } })
+    fireEvent.change(screen.getByLabelText('Year'), { target: { value: '2025' } })
+    fireEvent.change(screen.getByLabelText('File'), { target: { value: 'KAQP_20250101v20001' } })
+
+    await waitFor(() => expect(screen.getByLabelText('Variables')).toBeInTheDocument())
+    const variablesSelect = screen.getByLabelText('Variables') as HTMLSelectElement
+    const optionValues = Array.from(variablesSelect.options).map((o) => o.value)
+    expect(optionValues).toEqual(['lat', 'T'])
+  })
 })

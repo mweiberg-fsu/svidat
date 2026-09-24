@@ -8,6 +8,8 @@ import {
   setToken,
 } from '../api/client'
 import { useAuth } from '../context/AuthContext'
+import { useLogo } from '../hooks/useLogo'
+import { DEFAULT_SITE_NAME, useBranding } from '../theme'
 import { renderGoogleButton } from '../auth/googleSignIn'
 import { signInWithMicrosoft } from '../auth/microsoftSignIn'
 import type { LoginResponse } from '../api/types'
@@ -18,6 +20,8 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
   const auth = useAuth()
+  const { siteName, hasLogo, logoVersion } = useBranding()
+  const logoUrl = useLogo(hasLogo, logoVersion)
   const navigate = useNavigate()
   const googleButtonRef = useRef<HTMLDivElement>(null)
 
@@ -83,7 +87,14 @@ export function LoginPage() {
 
       <form className="login-card" onSubmit={handleSubmit}>
         <div className="login-logo">
-          svi<span>dat</span>
+          {logoUrl && <img className="login-logo-img" src={logoUrl} alt="" height={36} />}
+          {siteName === DEFAULT_SITE_NAME ? (
+            <span>
+              svi<span className="login-logo-accent">dat</span>
+            </span>
+          ) : (
+            <span>{siteName}</span>
+          )}
         </div>
         <p className="login-subtitle">USER LOGIN</p>
 

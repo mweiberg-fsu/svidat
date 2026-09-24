@@ -1,11 +1,12 @@
 import re
 from collections import defaultdict
+from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app import netcdf_ops, storage
+from app import climatology, netcdf_ops, storage
 from app.database import get_db
 from app.deps import get_current_user
 from app.file_locks import file_write_lock
@@ -81,18 +82,7 @@ def file_metadata(filename: str, _: User = Depends(get_current_user)):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
 
-@router.get("/{filename}/data")
-def file_data(
-    filename: str,
-    vars: str,
-    db: Session = Depends(get_db),
-    user: User = Depends(get_current_user),
-):
-    var_names = [v for v in vars.split(",") if v]
-    if not var_names:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="vars is required"
-        )
+def _resolve_read_path(filename: str, db: Session, user: User) -> Path:
     try:
         path = storage.raw_path(filename)
         # If the requesting user has an open edit session for this file,
@@ -114,6 +104,22 @@ def file_data(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="file not found"
         )
+    return path
+
+
+@router.get("/{filename}/data")
+def file_data(
+    filename: str,
+    vars: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    var_names = [v for v in vars.split(",") if v]
+    if not var_names:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="vars is required"
+        )
+    path = _resolve_read_path(filename, db, user)
     try:
         # Same lock key convention as the write-side background jobs
         # (point/bulk/flag edits) — makes this read mutually exclusive with
@@ -125,3 +131,25 @@ def file_data(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail=f"unknown variable: {exc}"
         )
+
+
+@router.get("/{filename}/climatology")
+def file_climatology(
+    filename: str,
+    vars: str,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    var_names = [v for v in vars.split(",") if v]
+    if not var_names:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="vars is required"
+        )
+    path = _resolve_read_path(filename, db, user)
+    try:
+        # Same mutex as /data — lat/lon may be mid-write by an edit job.
+        with file_write_lock(f"nc:{filename}"):
+            track = netcdf_ops.get_track(path)
+    except KeyError:
+        return {"variables": {}}
+    return {"variables": climatology.series_for_track(track, var_names)}

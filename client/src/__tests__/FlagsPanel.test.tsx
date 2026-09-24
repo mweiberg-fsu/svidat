@@ -18,6 +18,7 @@ function Driver() {
     openSession,
     setFlagSelection,
     flagsVisible,
+    climatologyVisible,
     bulkEdit,
     toggleBulkEdit,
     flagAppliedAt,
@@ -27,6 +28,7 @@ function Driver() {
   return (
     <div>
       <span data-testid="flags-visible">{String(flagsVisible)}</span>
+      <span data-testid="climatology-visible">{String(climatologyVisible)}</span>
       <span data-testid="bulk-edit">{String(bulkEdit)}</span>
       <span data-testid="flag-applied-at">{flagAppliedAt}</span>
       <span data-testid="selected-variables">{selectedVariables.join(',')}</span>
@@ -204,6 +206,21 @@ describe('FlagsPanel', () => {
 
     fireEvent.click(screen.getByLabelText('Show flags'))
     expect(screen.getByTestId('flags-visible')).toHaveTextContent('true')
+  })
+
+  it('renders "Show climatology" unchecked by default', () => {
+    renderPanel()
+    const box = screen.getByLabelText('Show climatology') as HTMLInputElement
+    expect(box.checked).toBe(false)
+  })
+
+  it('clicking "Show climatology" toggles climatologyVisible', () => {
+    renderPanel()
+    expect(screen.getByTestId('climatology-visible')).toHaveTextContent('false')
+    fireEvent.click(screen.getByLabelText('Show climatology'))
+    expect(screen.getByTestId('climatology-visible')).toHaveTextContent('true')
+    fireEvent.click(screen.getByLabelText('Show climatology'))
+    expect(screen.getByTestId('climatology-visible')).toHaveTextContent('false')
   })
 
   it('with bulk edit off, applying a code still calls applyFlag only for the selected variable', async () => {

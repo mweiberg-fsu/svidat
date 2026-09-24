@@ -125,7 +125,7 @@ export function FlagsPanel() {
             checked={climatologyVisible}
             onChange={toggleClimatologyVisible}
           />
-          Show climatology
+          Show Climo
         </label>
       </div>
       <p className="sidebar-flags-panel-status">

@@ -555,8 +555,7 @@ code {
 
 .sidebar-flags-panel-modes {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  gap: 14px;
   align-self: flex-start;
 }
 

@@ -208,18 +208,18 @@ describe('FlagsPanel', () => {
     expect(screen.getByTestId('flags-visible')).toHaveTextContent('true')
   })
 
-  it('renders "Show climatology" unchecked by default', () => {
+  it('renders "Show Climo" unchecked by default', () => {
     renderPanel()
-    const box = screen.getByLabelText('Show climatology') as HTMLInputElement
+    const box = screen.getByLabelText('Show Climo') as HTMLInputElement
     expect(box.checked).toBe(false)
   })
 
-  it('clicking "Show climatology" toggles climatologyVisible', () => {
+  it('clicking "Show Climo" toggles climatologyVisible', () => {
     renderPanel()
     expect(screen.getByTestId('climatology-visible')).toHaveTextContent('false')
-    fireEvent.click(screen.getByLabelText('Show climatology'))
+    fireEvent.click(screen.getByLabelText('Show Climo'))
     expect(screen.getByTestId('climatology-visible')).toHaveTextContent('true')
-    fireEvent.click(screen.getByLabelText('Show climatology'))
+    fireEvent.click(screen.getByLabelText('Show Climo'))
     expect(screen.getByTestId('climatology-visible')).toHaveTextContent('false')
   })
 

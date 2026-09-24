@@ -1571,7 +1571,7 @@ describe('SvgPlot', () => {
     fireEvent.mouseUp(window, { clientX: pxForIndex(14, 18) })
   })
 
-  it('does not fetch climatology while "Show climatology" is off', async () => {
+  it('does not fetch climatology while "Show Climo" is off', async () => {
     const time = hourlyTimes(4)
     vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
       time,

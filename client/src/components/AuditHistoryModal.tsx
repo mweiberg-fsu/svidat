@@ -1,8 +1,9 @@
-import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react'
+import { useEffect, useState } from 'react'
 import { getAuditHistory, revertAuditEntry } from '../api/client'
 import type { AuditEntry } from '../api/types'
 import { useEditSession } from '../context/EditSessionContext'
 import { usePlotSelection } from '../context/PlotSelectionContext'
+import { useFloatingPanel } from '../hooks/useFloatingPanel'
 
 const DEFAULT_WIDTH = 600
 const DEFAULT_HEIGHT = 420
@@ -15,13 +16,12 @@ export function AuditHistoryModal({ onClose }: { onClose: () => void }) {
   const [entries, setEntries] = useState<AuditEntry[]>([])
   const [status, setStatus] = useState<string | null>(null)
   const [revertingId, setRevertingId] = useState<number | null>(null)
-  const [position, setPosition] = useState(() => ({
-    top: Math.max(0, (window.innerHeight - DEFAULT_HEIGHT) / 2),
-    left: Math.max(0, (window.innerWidth - DEFAULT_WIDTH) / 2),
-  }))
-  const [size, setSize] = useState({ width: DEFAULT_WIDTH, height: DEFAULT_HEIGHT })
-  const draggingRef = useRef(false)
-  const resizingRef = useRef(false)
+  const panel = useFloatingPanel({
+    width: DEFAULT_WIDTH,
+    height: DEFAULT_HEIGHT,
+    minWidth: MIN_WIDTH,
+    minHeight: MIN_HEIGHT,
+  })
 
   const refresh = () => {
     setStatus(null)
@@ -51,63 +51,13 @@ export function AuditHistoryModal({ onClose }: { onClose: () => void }) {
     }
   }
 
-  const handleHeaderMouseDown = (e: ReactMouseEvent) => {
-    draggingRef.current = true
-    const startX = e.clientX
-    const startY = e.clientY
-    const startTop = position.top
-    const startLeft = position.left
-    const handleMouseMove = (ev: MouseEvent) => {
-      if (!draggingRef.current) return
-      const deltaX = ev.clientX - startX
-      const deltaY = ev.clientY - startY
-      const maxLeft = window.innerWidth - 40
-      const maxTop = window.innerHeight - 40
-      setPosition({
-        top: Math.min(maxTop, Math.max(0, startTop + deltaY)),
-        left: Math.min(maxLeft, Math.max(0, startLeft + deltaX)),
-      })
-    }
-    const handleMouseUp = () => {
-      draggingRef.current = false
-      window.removeEventListener('mousemove', handleMouseMove)
-      window.removeEventListener('mouseup', handleMouseUp)
-    }
-    window.addEventListener('mousemove', handleMouseMove)
-    window.addEventListener('mouseup', handleMouseUp)
-  }
-
-  const handleResizeMouseDown = (e: ReactMouseEvent) => {
-    e.stopPropagation()
-    resizingRef.current = true
-    const startX = e.clientX
-    const startY = e.clientY
-    const startWidth = size.width
-    const startHeight = size.height
-    const handleMouseMove = (ev: MouseEvent) => {
-      if (!resizingRef.current) return
-      const deltaX = ev.clientX - startX
-      const deltaY = ev.clientY - startY
-      setSize({
-        width: Math.max(MIN_WIDTH, startWidth + deltaX),
-        height: Math.max(MIN_HEIGHT, startHeight + deltaY),
-      })
-    }
-    const handleMouseUp = () => {
-      resizingRef.current = false
-      window.removeEventListener('mousemove', handleMouseMove)
-      window.removeEventListener('mouseup', handleMouseUp)
-    }
-    window.addEventListener('mousemove', handleMouseMove)
-    window.addEventListener('mouseup', handleMouseUp)
-  }
-
   return (
     <div
       className="audit-history-modal"
-      style={{ top: position.top, left: position.left, width: size.width, height: size.height }}
+      style={panel.style}
+      onMouseDownCapture={panel.onPanelMouseDown}
     >
-      <div className="audit-history-modal-header" onMouseDown={handleHeaderMouseDown}>
+      <div className="audit-history-modal-header" onMouseDown={panel.onHeaderMouseDown}>
         <span>Audit History</span>
         <button
           type="button"
@@ -151,7 +101,7 @@ export function AuditHistoryModal({ onClose }: { onClose: () => void }) {
         )}
         {status && <p role="status">{status}</p>}
       </div>
-      <div className="audit-history-modal-resize-handle" onMouseDown={handleResizeMouseDown} />
+      <div className="audit-history-modal-resize-handle" onMouseDown={panel.onResizeMouseDown} />
     </div>
   )
 }

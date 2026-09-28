@@ -52,6 +52,9 @@ export interface CurrentUser {
 
 export type Catalog = Record<string, Record<string, string[]>>
 
+// Call sign -> ship name (null when the ship's files don't record one).
+export type ShipNames = Record<string, string | null>
+
 export interface VariableSeries {
   values: (number | null)[]
   flags: string[] | null

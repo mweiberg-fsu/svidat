@@ -5,6 +5,10 @@ import { useCatalog } from '../hooks/useCatalog'
 import type { FileMetadata } from '../api/types'
 import { MULTI_SELECT_KEY } from '../platform'
 
+// Value of the "Select all" entry at the top of the Variables list; chosen
+// to be distinct from any SAMOS variable name.
+const SELECT_ALL_VALUE = '__all__'
+
 // SAMOS files give date/time/time_of_day `qcindex = 1`: they share a flag
 // column that's never hand-edited, so they don't belong in the picker. Real
 // files spell it `qcindex`; `qc_index` is accepted too in case other sources
@@ -15,13 +19,18 @@ function isUnflaggable(qcIndex: unknown): boolean {
 }
 
 export function PlotPicker() {
-  const { catalog, error: catalogError } = useCatalog()
+  const { catalog, shipNames, error: catalogError } = useCatalog()
   const { ship, year, file, variables, setShip, setYear, setFile, setVariables } =
     usePlotSelection()
   const [metadata, setMetadata] = useState<FileMetadata | null>(null)
   const [metadataError, setMetadataError] = useState<string | null>(null)
 
-  const ships = catalog ? Object.keys(catalog).sort() : []
+  // "NAME (CALLSIGN)" when the ship's files record a name, else the call sign;
+  // listed alphabetically by that label.
+  const shipLabel = (s: string) => (shipNames[s] ? `${shipNames[s]} (${s})` : s)
+  const ships = catalog
+    ? Object.keys(catalog).sort((a, b) => shipLabel(a).localeCompare(shipLabel(b)))
+    : []
   const years = ship && catalog ? Object.keys(catalog[ship] ?? {}).sort() : []
   const files = ship && year && catalog ? catalog[ship]?.[year] ?? [] : []
   // Keep the server's key order — it mirrors the variable order in the
@@ -70,8 +79,19 @@ export function PlotPicker() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [file])
 
+  const allSelected =
+    variableNames.length > 0 && variableNames.every((v) => variables.includes(v))
+
+  // The top "Select all" option toggles everything; it's never left
+  // highlighted itself (it isn't in `value`), so a later Ctrl/Cmd-click on a
+  // single variable doesn't drag a stale "select all" along with it.
   const handleVariablesChange = (e: ChangeEvent<HTMLSelectElement>) => {
-    setVariables(Array.from(e.target.selectedOptions).map((o) => o.value))
+    const chosen = Array.from(e.target.selectedOptions).map((o) => o.value)
+    if (chosen.includes(SELECT_ALL_VALUE)) {
+      setVariables(allSelected ? [] : variableNames)
+      return
+    }
+    setVariables(chosen)
   }
 
   return (
@@ -85,7 +105,7 @@ export function PlotPicker() {
               <option value="">Select ship</option>
               {ships.map((s) => (
                 <option key={s} value={s}>
-                  {s}
+                  {shipLabel(s)}
                 </option>
               ))}
             </select>
@@ -156,8 +176,11 @@ export function PlotPicker() {
             multiple
             value={variables}
             onChange={handleVariablesChange}
-            size={Math.min(8, Math.max(3, variableNames.length))}
+            size={Math.min(8, Math.max(3, variableNames.length + 1))}
           >
+            <option value={SELECT_ALL_VALUE} className="plot-picker-select-all">
+              {allSelected ? 'Deselect all' : 'Select all'}
+            </option>
             {variableNames.map((v) => (
               <option key={v} value={v}>
                 {v}

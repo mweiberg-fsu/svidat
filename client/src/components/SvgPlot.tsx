@@ -27,6 +27,18 @@ const BOTTOM_PADDING = 24
 
 const MARGIN = { top: 26, right: 20, bottom: 36, left: 70 }
 const Y_TICK_COUNT = 5
+
+// Latitude/longitude Y tick labels are shown to 3 decimal places, so their
+// ticks are kept at least 0.001 apart — finer steps would print duplicate
+// labels.
+const COORD_DECIMALS = 3
+const COORD_MIN_TICK_STEP = 10 ** -COORD_DECIMALS
+function isCoordVariable(varName: string): boolean {
+  return /^(lat|lon|latitude|longitude)$/i.test(varName)
+}
+function yTickMinStep(varName: string): number {
+  return isCoordVariable(varName) ? COORD_MIN_TICK_STEP : 0
+}
 const MIN_DRAG_PX = 4
 
 const AXIS_COLOR = '#444444'
@@ -35,6 +47,8 @@ const TICK_LABEL_COLOR = '#444444'
 const LINE_COLOR = '#000000'
 const ACTIVE_COLOR = '#2563eb'
 const ZOOM_BOX_FILL = 'rgba(37, 99, 235, 0.15)'
+// Radius of the per-sample markers drawn while "Show points" is on.
+const POINT_RADIUS = 1.5
 const FLAG_MARKER_COLORS = [
   '#dc2626',
   '#ea580c',
@@ -59,6 +73,14 @@ const CLIMATOLOGY_DASH = '6 4'
 // full extent — every row zooms to the same window since they share one
 // timeline, so this lives once at the top rather than per-row.
 type XRange = [number, number] | null
+
+// A row's pinned Y range. Drag-zooms are rounded outward to nice tick values
+// like auto-fit; a range typed into the navbar's Y min/max inputs is `exact`
+// and used as-is, so the plot shows precisely what was typed.
+interface YOverride {
+  range: [number, number]
+  exact: boolean
+}
 
 interface Scale {
   min: number
@@ -87,7 +109,8 @@ function buildScale(
   endIdx: number,
   width: number,
   height: number,
-  yOverride?: [number, number]
+  yOverride?: YOverride,
+  minTickStep = 0
 ): Scale {
   const innerWidth = width - MARGIN.left - MARGIN.right
   const innerHeight = height - MARGIN.top - MARGIN.bottom
@@ -96,7 +119,7 @@ function buildScale(
   let rawMin: number
   let rawMax: number
   if (yOverride) {
-    ;[rawMin, rawMax] = yOverride
+    ;[rawMin, rawMax] = yOverride.range
   } else {
     const windowValues = values.slice(startIdx, endIdx + 1)
     const numeric = windowValues.filter((v): v is number => v !== null)
@@ -104,7 +127,15 @@ function buildScale(
     rawMax = numeric.length ? Math.max(...numeric) : 1
   }
 
-  const { ticks: yTicks, min, max } = niceTicks(rawMin, rawMax, Y_TICK_COUNT)
+  const nice = niceTicks(rawMin, rawMax, Y_TICK_COUNT, minTickStep)
+  let { ticks: yTicks, min, max } = nice
+  if (yOverride?.exact) {
+    // Keep the typed domain; drop the nice ticks that fall outside it.
+    min = rawMin
+    max = rawMax
+    const epsilon = (max - min) * 1e-9
+    yTicks = nice.ticks.filter((t) => t >= min - epsilon && t <= max + epsilon)
+  }
   const range = max - min || 1
 
   return {
@@ -169,6 +200,16 @@ function pxToIdx(
   const span = endIdx - startIdx || 1
   const idx = startIdx + Math.round(((px - MARGIN.left) / innerWidth) * span)
   return Math.max(0, Math.min(idx, dataLength - 1))
+}
+
+// Converts a pixel offset (within one row's height) back to a data value on
+// a [scaleMin, scaleMax] Y scale, clamped to the plot area. Shared by the
+// Y-zoom and box-zoom mouseup handlers.
+function pxToValue(py: number, scaleMin: number, scaleMax: number, rowHeight: number): number {
+  const innerHeight = rowHeight - MARGIN.top - MARGIN.bottom
+  const range = scaleMax - scaleMin || 1
+  const clamped = Math.max(MARGIN.top, Math.min(py, rowHeight - MARGIN.bottom))
+  return scaleMin + ((innerHeight - (clamped - MARGIN.top)) / innerHeight) * range
 }
 
 interface FlagMarker {
@@ -337,9 +378,10 @@ function niceNum(range: number, round: boolean): number {
 function niceTicks(
   min: number,
   max: number,
-  tickCount: number
+  tickCount: number,
+  minStep = 0
 ): { ticks: number[]; min: number; max: number } {
-  const step = niceNum((max - min || 1) / (tickCount - 1), true)
+  const step = Math.max(niceNum((max - min || 1) / (tickCount - 1), true), minStep)
   const niceMin = Math.floor(min / step) * step
   const niceMax = Math.ceil(max / step) * step
   const ticks: number[] = []
@@ -350,10 +392,21 @@ function niceTicks(
   return { ticks, min: niceMin, max: niceMax }
 }
 
+// Times come from the files' `time` variable, whose units are always
+// "... since <date> UTC" — so labels carry the Zulu suffix.
 function formatTimeTick(iso: string, showDate: boolean, showSeconds: boolean): string {
   const date = iso.slice(0, 10)
   const time = showSeconds ? iso.slice(11, 19) : iso.slice(11, 16)
-  return showDate ? `${date} ${time}` : time
+  return showDate ? `${date} ${time}Z` : `${time}Z`
+}
+
+// A variable's descriptive `long_name` attribute, when it has one that adds
+// something beyond the short name.
+function longNameOf(metadata: FileMetadata | null, varName: string): string | null {
+  const longName = metadata?.variables[varName]?.attrs.long_name
+  return typeof longName === 'string' && longName.trim() && longName !== varName
+    ? longName.trim()
+    : null
 }
 
 // Finds the data index closest to a target timestamp via binary search —
@@ -518,6 +571,21 @@ interface YDragStart {
   scaleMax: number
 }
 
+// One X-zoom + Y-zoom modifier drag (default Shift+Ctrl) — a 2D box zoom:
+// the shared X range and the dragged row's Y override both change at once.
+// Combines XDragStart and YDragStart's fields.
+interface BoxDragStart {
+  varName: string
+  originLeft: number
+  originTop: number
+  startX: number
+  startY: number
+  startIdx: number
+  endIdx: number
+  scaleMin: number
+  scaleMax: number
+}
+
 // Same idea for one plain-drag (flag-select) gesture — no modifier key,
 // armed whenever `canEdit` is true (role permits editing), independent of
 // whether a session is already open — a drag that commits while no session
@@ -539,7 +607,10 @@ interface FlagDragStart {
 // regardless of whether each step was an X-zoom or a Y-zoom.
 type ViewSnapshot =
   | { kind: 'x'; value: XRange }
-  | { kind: 'y'; varName: string; value: [number, number] | null }
+  | { kind: 'y'; varName: string; value: YOverride | null }
+  | { kind: 'xy'; x: XRange; varName: string; y: YOverride | null }
+  // Whole view — an X zoom that also cleared typed Y ranges.
+  | { kind: 'view'; x: XRange; y: Record<string, YOverride | null> }
 
 export function SvgPlot() {
   const { file, variables, setVariables } = usePlotSelection()
@@ -552,6 +623,13 @@ export function SvgPlot() {
     flagAppliedAt,
     flagsVisible,
     climatologyVisible,
+    pointsVisible,
+    setActiveYRange,
+    setXWindow,
+    timeMarker,
+    setTimeMarker,
+    yRangeRequest,
+    bulkEdit,
     selectedVariables,
     toggleVariableSelected,
   } = useEditSession()
@@ -560,7 +638,7 @@ export function SvgPlot() {
   const [metadata, setMetadata] = useState<FileMetadata | null>(null)
   const [activeVariable, setActiveVariable] = useState<string | null>(null)
   const [xRange, setXRange] = useState<XRange>(null)
-  const [yOverrides, setYOverrides] = useState<Record<string, [number, number] | null>>({})
+  const [yOverrides, setYOverrides] = useState<Record<string, YOverride | null>>({})
   const { keybindings } = useAppConfig()
   // KeyboardEvent.key of each modifier currently held, for the zoom cursors.
   const [heldKeys, setHeldKeys] = useState<ReadonlySet<string>>(new Set())
@@ -575,6 +653,14 @@ export function SvgPlot() {
   } | null>(null)
   const xDragStartRef = useRef<XDragStart | null>(null)
   const yDragStartRef = useRef<YDragStart | null>(null)
+  const [boxDrag, setBoxDrag] = useState<{
+    varName: string
+    startX: number
+    startY: number
+    currentX: number
+    currentY: number
+  } | null>(null)
+  const boxDragStartRef = useRef<BoxDragStart | null>(null)
   const undoStackRef = useRef<ViewSnapshot[]>([])
   const redoStackRef = useRef<ViewSnapshot[]>([])
   const flagDragStartRef = useRef<FlagDragStart | null>(null)
@@ -760,7 +846,8 @@ export function SvgPlot() {
 
   useEffect(() => {
     setActiveVariable(null)
-  }, [file])
+    setTimeMarker(null)
+  }, [file, setTimeMarker])
 
   // A new file or variable set makes any prior zoom window meaningless — the
   // underlying index range (and any per-row Y overrides) no longer
@@ -869,9 +956,17 @@ export function SvgPlot() {
       )
       if (newEnd - newStart < 1) return
 
-      undoStackRef.current.push({ kind: 'x', value: xRange })
+      // A new X window supersedes ranges typed into the Y min/max inputs:
+      // those rows go back to auto-fitting. Drag-zoomed Y ranges are kept.
+      const hasTyped = Object.values(yOverrides).some((o) => o?.exact)
+      undoStackRef.current.push(
+        hasTyped ? { kind: 'view', x: xRange, y: yOverrides } : { kind: 'x', value: xRange }
+      )
       redoStackRef.current = []
       setXRange([newStart, newEnd])
+      if (hasTyped) {
+        setYOverrides((y) => Object.fromEntries(Object.entries(y).filter(([, o]) => !o?.exact)))
+      }
     }
     window.addEventListener('mousemove', handleMouseMove)
     window.addEventListener('mouseup', handleMouseUp)
@@ -903,12 +998,7 @@ export function SvgPlot() {
       const currentPx = e.clientY - start.originTop
       if (Math.abs(currentPx - start.startPx) < MIN_DRAG_PX) return
 
-      const innerHeight = rowHeight - MARGIN.top - MARGIN.bottom
-      const range = start.scaleMax - start.scaleMin || 1
-      const valueAtPx = (py: number) => {
-        const clamped = Math.max(MARGIN.top, Math.min(py, rowHeight - MARGIN.bottom))
-        return start.scaleMin + ((innerHeight - (clamped - MARGIN.top)) / innerHeight) * range
-      }
+      const valueAtPx = (py: number) => pxToValue(py, start.scaleMin, start.scaleMax, rowHeight)
       // Smaller pixel Y is higher on screen, which is the larger value.
       const newMax = valueAtPx(Math.min(start.startPx, currentPx))
       const newMin = valueAtPx(Math.max(start.startPx, currentPx))
@@ -920,7 +1010,7 @@ export function SvgPlot() {
         value: yOverrides[start.varName] ?? null,
       })
       redoStackRef.current = []
-      setYOverrides((y) => ({ ...y, [start.varName]: [newMin, newMax] }))
+      setYOverrides((y) => ({ ...y, [start.varName]: { range: [newMin, newMax], exact: false } }))
     }
     window.addEventListener('mousemove', handleMouseMove)
     window.addEventListener('mouseup', handleMouseUp)
@@ -930,6 +1020,65 @@ export function SvgPlot() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [yDrag])
+
+  // Runs for the duration of one box-zoom gesture — the X-zoom and Y-zoom
+  // effects above combined, committed as a single 'xy' undo step so one undo
+  // restores both axes.
+  useEffect(() => {
+    if (!boxDrag) return
+    const handleMouseMove = (e: MouseEvent) => {
+      const start = boxDragStartRef.current
+      if (!start) return
+      setBoxDrag({
+        varName: start.varName,
+        startX: start.startX,
+        startY: start.startY,
+        currentX: e.clientX - start.originLeft,
+        currentY: e.clientY - start.originTop,
+      })
+    }
+    const handleMouseUp = (e: MouseEvent) => {
+      const start = boxDragStartRef.current
+      boxDragStartRef.current = null
+      setBoxDrag(null)
+      if (!start || !data) return
+      const currentX = e.clientX - start.originLeft
+      const currentY = e.clientY - start.originTop
+      if (
+        Math.abs(currentX - start.startX) < MIN_DRAG_PX ||
+        Math.abs(currentY - start.startY) < MIN_DRAG_PX
+      ) {
+        return
+      }
+
+      const toIdx = (px: number) =>
+        pxToIdx(px, start.startIdx, start.endIdx, plotWidth, data.time.length)
+      const newStart = toIdx(Math.min(start.startX, currentX))
+      const newEnd = toIdx(Math.max(start.startX, currentX))
+      const toValue = (py: number) => pxToValue(py, start.scaleMin, start.scaleMax, rowHeight)
+      // Smaller pixel Y is higher on screen, which is the larger value.
+      const newMax = toValue(Math.min(start.startY, currentY))
+      const newMin = toValue(Math.max(start.startY, currentY))
+      if (newEnd - newStart < 1 || newMax - newMin <= 0) return
+
+      undoStackRef.current.push({
+        kind: 'xy',
+        x: xRange,
+        varName: start.varName,
+        y: yOverrides[start.varName] ?? null,
+      })
+      redoStackRef.current = []
+      setXRange([newStart, newEnd])
+      setYOverrides((y) => ({ ...y, [start.varName]: { range: [newMin, newMax], exact: false } }))
+    }
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [boxDrag])
 
   // Runs for the duration of one plain-drag (flag-select) gesture — same
   // shape as the X/Y-zoom effects above, but sets a flag *selection* in
@@ -1003,6 +1152,57 @@ export function SvgPlot() {
     }
   }, [canEdit, setFlagSelection])
 
+  // Publishes the selected row's displayed Y range for the navbar's Y min/max
+  // inputs — recomputed from the same inputs the row's own scale uses.
+  useEffect(() => {
+    const series = activeVariable ? data?.variables[activeVariable] : undefined
+    if (!data || !activeVariable || !series) {
+      setActiveYRange(null)
+      return
+    }
+    const [start, end] = xRange ?? [0, data.time.length - 1]
+    const scale = buildScale(
+      series.values,
+      start,
+      end,
+      plotWidth,
+      rowHeight,
+      yOverrides[activeVariable] ?? undefined,
+      yTickMinStep(activeVariable)
+    )
+    setActiveYRange({ varName: activeVariable, min: scale.min, max: scale.max })
+  }, [data, activeVariable, xRange, yOverrides, plotWidth, rowHeight, setActiveYRange])
+
+  useEffect(() => () => setActiveYRange(null), [setActiveYRange])
+
+  // Publishes the X zoom window for the Ship Track map's highlight.
+  useEffect(() => {
+    setXWindow(xRange)
+  }, [xRange, setXWindow])
+
+  useEffect(() => () => setXWindow(null), [setXWindow])
+
+  // Esc clears a time marker picked on the Ship Track map.
+  useEffect(() => {
+    if (timeMarker === null) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setTimeMarker(null)
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [timeMarker, setTimeMarker])
+
+  // Applies a range typed into the navbar as an exact Y override, recorded on
+  // the same undo stack as a Ctrl+drag Y-zoom.
+  useEffect(() => {
+    if (!yRangeRequest) return
+    const { varName, min, max } = yRangeRequest
+    undoStackRef.current.push({ kind: 'y', varName, value: yOverrides[varName] ?? null })
+    redoStackRef.current = []
+    setYOverrides((y) => ({ ...y, [varName]: { range: [min, max], exact: true } }))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [yRangeRequest])
+
   if (!file || variables.length === 0) {
     return <p>Select variables in the sidebar to view plots.</p>
   }
@@ -1023,6 +1223,27 @@ export function SvgPlot() {
     scaleMax: number
   ) => {
     setHoverTip(null)
+    // Checked first: holding both zoom modifiers would otherwise match the
+    // X-zoom branch alone.
+    if (hasModifier(e, keybindings.x_zoom) && hasModifier(e, keybindings.y_zoom)) {
+      e.preventDefault()
+      const rect = e.currentTarget.getBoundingClientRect()
+      const startX = e.clientX - rect.left
+      const startY = e.clientY - rect.top
+      boxDragStartRef.current = {
+        varName,
+        originLeft: rect.left,
+        originTop: rect.top,
+        startX,
+        startY,
+        startIdx,
+        endIdx,
+        scaleMin,
+        scaleMax,
+      }
+      setBoxDrag({ varName, startX, startY, currentX: startX, currentY: startY })
+      return
+    }
     if (hasModifier(e, keybindings.x_zoom) || e.button === 1) {
       e.preventDefault()
       const rect = e.currentTarget.getBoundingClientRect()
@@ -1061,7 +1282,7 @@ export function SvgPlot() {
     scale: Scale,
     series: VariableSeries
   ) => {
-    if (xDrag || yDrag || flagDrag) return
+    if (xDrag || yDrag || boxDrag || flagDrag) return
     const rect = e.currentTarget.getBoundingClientRect()
     const px = e.clientX - rect.left
     const py = e.clientY - rect.top
@@ -1082,16 +1303,35 @@ export function SvgPlot() {
   // build the inverse entry pushed onto the other stack, so undo and redo
   // stay exact mirrors of each other regardless of how many X/Y zooms are
   // interleaved.
-  const currentSnapshotFor = (entry: ViewSnapshot): ViewSnapshot =>
-    entry.kind === 'x'
-      ? { kind: 'x', value: xRange }
-      : { kind: 'y', varName: entry.varName, value: yOverrides[entry.varName] ?? null }
+  const currentSnapshotFor = (entry: ViewSnapshot): ViewSnapshot => {
+    switch (entry.kind) {
+      case 'x':
+        return { kind: 'x', value: xRange }
+      case 'y':
+        return { kind: 'y', varName: entry.varName, value: yOverrides[entry.varName] ?? null }
+      case 'xy':
+        return { kind: 'xy', x: xRange, varName: entry.varName, y: yOverrides[entry.varName] ?? null }
+      case 'view':
+        return { kind: 'view', x: xRange, y: yOverrides }
+    }
+  }
 
   const applySnapshot = (entry: ViewSnapshot) => {
-    if (entry.kind === 'x') {
-      setXRange(entry.value)
-    } else {
-      setYOverrides((y) => ({ ...y, [entry.varName]: entry.value }))
+    switch (entry.kind) {
+      case 'x':
+        setXRange(entry.value)
+        break
+      case 'y':
+        setYOverrides((y) => ({ ...y, [entry.varName]: entry.value }))
+        break
+      case 'xy':
+        setXRange(entry.x)
+        setYOverrides((y) => ({ ...y, [entry.varName]: entry.y }))
+        break
+      case 'view':
+        setXRange(entry.x)
+        setYOverrides(entry.y)
+        break
     }
   }
 
@@ -1177,7 +1417,8 @@ export function SvgPlot() {
           endIdx,
           plotWidth,
           rowHeight,
-          yOverrides[varName] ?? undefined
+          yOverrides[varName] ?? undefined,
+          yTickMinStep(varName)
         )
         const flagMarkers = buildFlagMarkers(series.flags, series.values, startIdx, endIdx)
         const flagSegments = buildFlagSegments(series.flags, series.values, scale, startIdx, endIdx)
@@ -1191,11 +1432,13 @@ export function SvgPlot() {
           ? computeTightBand(series.values, highlightRange[0], highlightRange[1], scale, rowHeight)
           : null
         const yTicks = scale.yTicks
-        const isLastRow = rowIdx === variables.length - 1
         const isActive = varName === activeVariable
         const axisColor = isActive ? ACTIVE_COLOR : AXIS_COLOR
         const tickLabelColor = isActive ? ACTIVE_COLOR : TICK_LABEL_COLOR
         const lineColor = isActive ? ACTIVE_COLOR : LINE_COLOR
+        const longName = longNameOf(metadata, varName)
+        const titleName = longName ? `${varName} (${longName})` : varName
+        const plotTitle = titlePrefix ? `${titlePrefix}: ${titleName}` : titleName
 
         const isDraggedRow = tabDrag?.varName === varName
         // Highlights the slot the dragged row would land in: the row
@@ -1258,16 +1501,18 @@ export function SvgPlot() {
             >
               <span className="svg-plot-tab-grip">⠿</span>
               {varName}
-              <span
-                role="checkbox"
-                aria-checked={selectedVariables.includes(varName)}
-                className={`svg-plot-tab-select${selectedVariables.includes(varName) ? ' selected' : ''}`}
-                onMouseDown={(e) => e.stopPropagation()}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  toggleVariableSelected(varName)
-                }}
-              />
+              {bulkEdit && (
+                <span
+                  role="checkbox"
+                  aria-checked={selectedVariables.includes(varName)}
+                  className={`svg-plot-tab-select${selectedVariables.includes(varName) ? ' selected' : ''}`}
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    toggleVariableSelected(varName)
+                  }}
+                />
+              )}
             </div>
             <svg
               width={plotWidth}
@@ -1277,11 +1522,15 @@ export function SvgPlot() {
               onMouseMove={(e) => handleRowMouseMove(e, varName, scale, series)}
               onMouseLeave={handleRowMouseLeave}
               style={{
-                cursor: heldKeys.has(MODIFIER_KEY[keybindings.x_zoom])
-                  ? 'crosshair'
-                  : heldKeys.has(MODIFIER_KEY[keybindings.y_zoom])
-                    ? 'ns-resize'
-                    : undefined,
+                cursor:
+                  heldKeys.has(MODIFIER_KEY[keybindings.x_zoom]) &&
+                  heldKeys.has(MODIFIER_KEY[keybindings.y_zoom])
+                    ? 'cell'
+                    : heldKeys.has(MODIFIER_KEY[keybindings.x_zoom])
+                      ? 'crosshair'
+                      : heldKeys.has(MODIFIER_KEY[keybindings.y_zoom])
+                        ? 'ns-resize'
+                        : undefined,
               }}
             >
               <rect x={0} y={0} width={plotWidth} height={rowHeight} fill="#ffffff" />
@@ -1304,7 +1553,7 @@ export function SvgPlot() {
                 fontSize={13}
                 fill={axisColor}
               >
-                {titlePrefix ? `${titlePrefix}: ${varName}` : varName}
+                {plotTitle}
               </text>
 
 
@@ -1326,7 +1575,7 @@ export function SvgPlot() {
                     fontSize={11}
                     fill={tickLabelColor}
                   >
-                    {t}
+                    {isCoordVariable(varName) ? t.toFixed(COORD_DECIMALS) : t}
                   </text>
                 </g>
               ))}
@@ -1392,17 +1641,15 @@ export function SvgPlot() {
               >
                 {varName}
               </text>
-              {isLastRow && (
-                <text
-                  x={MARGIN.left + (plotWidth - MARGIN.left - MARGIN.right) / 2}
-                  y={rowHeight - 4}
-                  textAnchor="middle"
-                  fontSize={12}
-                  fill={tickLabelColor}
-                >
-                  Time
-                </text>
-              )}
+              <text
+                x={MARGIN.left + (plotWidth - MARGIN.left - MARGIN.right) / 2}
+                y={rowHeight - 4}
+                textAnchor="middle"
+                fontSize={12}
+                fill={tickLabelColor}
+              >
+                Time (UTC)
+              </text>
 
               <g clipPath={`url(#plot-clip-${rowIdx})`}>
                 {climatology?.variables[varName] && (
@@ -1417,6 +1664,7 @@ export function SvgPlot() {
                 )}
                 {highlightRange && highlightBand && (
                   <rect
+                    data-export="skip"
                     x={scale.x(highlightRange[0])}
                     y={highlightBand.y}
                     width={scale.x(highlightRange[1]) - scale.x(highlightRange[0])}
@@ -1434,6 +1682,7 @@ export function SvgPlot() {
                     if (v === null || v === undefined) return null
                     return (
                       <circle
+                        data-export="skip"
                         key={`sel-pt-${idx}`}
                         cx={scale.x(idx)}
                         cy={scale.y(v)}
@@ -1448,6 +1697,34 @@ export function SvgPlot() {
                   stroke={lineColor}
                   strokeWidth={1}
                 />
+
+                {timeMarker !== null && timeMarker >= startIdx && timeMarker <= endIdx && (
+                  <line
+                    data-testid="time-marker-line"
+                    data-export="skip"
+                    x1={scale.x(timeMarker)}
+                    x2={scale.x(timeMarker)}
+                    y1={MARGIN.top}
+                    y2={rowHeight - MARGIN.bottom}
+                    stroke={ACTIVE_COLOR}
+                    strokeWidth={1}
+                    strokeDasharray="4 3"
+                  />
+                )}
+
+                {/* One marker per sample in the window, under the flag markers
+                    so off-flag points keep their colour on top. */}
+                {pointsVisible && (
+                  <g data-testid="data-points" fill={lineColor}>
+                    {Array.from({ length: endIdx - startIdx + 1 }, (_, i) => startIdx + i).map(
+                      (idx) => {
+                        const v = series.values[idx]
+                        if (v === null || v === undefined) return null
+                        return <circle key={idx} cx={scale.x(idx)} cy={scale.y(v)} r={POINT_RADIUS} />
+                      }
+                    )}
+                  </g>
+                )}
 
                 {flagsVisible &&
                   flagSegments.map((d, i) => (
@@ -1473,6 +1750,7 @@ export function SvgPlot() {
 
                 {xDrag && (
                   <rect
+                    data-export="skip"
                     x={Math.min(xDrag.startPx, xDrag.currentPx)}
                     y={MARGIN.top}
                     width={Math.abs(xDrag.currentPx - xDrag.startPx)}
@@ -1483,8 +1761,22 @@ export function SvgPlot() {
                   />
                 )}
 
+                {boxDrag && boxDrag.varName === varName && (
+                  <rect
+                    data-export="skip"
+                    x={Math.min(boxDrag.startX, boxDrag.currentX)}
+                    y={Math.min(boxDrag.startY, boxDrag.currentY)}
+                    width={Math.abs(boxDrag.currentX - boxDrag.startX)}
+                    height={Math.abs(boxDrag.currentY - boxDrag.startY)}
+                    fill={ZOOM_BOX_FILL}
+                    stroke={ACTIVE_COLOR}
+                    strokeDasharray="4 2"
+                  />
+                )}
+
                 {yDrag && yDrag.varName === varName && (
                   <rect
+                    data-export="skip"
                     x={MARGIN.left}
                     y={Math.min(yDrag.startPx, yDrag.currentPx)}
                     width={plotWidth - MARGIN.left - MARGIN.right}

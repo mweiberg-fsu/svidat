@@ -8,8 +8,12 @@ import { PlotPicker } from './PlotPicker'
 import { FlagsPanel } from './FlagsPanel'
 import { AuditHistoryModal } from './AuditHistoryModal'
 import { DocumentationModal } from './DocumentationModal'
+import { KeybindsModal } from './KeybindsModal'
+import { ShipTrackModal } from './ShipTrackModal'
 import { ResumeSessionModal } from './ResumeSessionModal'
+import { ColorModeSwitch } from './ColorModeSwitch'
 import { discardSession } from '../api/client'
+import { PLOT_PATH } from '../routes'
 
 const MIN_WIDTH = 200
 const MAX_WIDTH = 400
@@ -18,7 +22,7 @@ const DEFAULT_WIDTH = 250
 type SidebarTab = 'files' | 'flags'
 
 export function Sidebar() {
-  const { username, roles, id, avatarVersion, resumableSessions, removeResumableSession } = useAuth()
+  const { username, id, avatarVersion, resumableSessions, removeResumableSession } = useAuth()
   const { flagSelection, sessionOpen, openSession } = useEditSession()
   const { setFile } = usePlotSelection()
   const avatarUrl = useAvatar(id, avatarVersion)
@@ -28,6 +32,8 @@ export function Sidebar() {
   const [activeTab, setActiveTab] = useState<SidebarTab>('files')
   const [showAuditHistory, setShowAuditHistory] = useState(false)
   const [showDocs, setShowDocs] = useState(false)
+  const [showKeybinds, setShowKeybinds] = useState(false)
+  const [showShipTrack, setShowShipTrack] = useState(false)
   const draggingRef = useRef(false)
 
   // Mirrors the old popover's "appears once you resolve a drag" behavior —
@@ -43,34 +49,26 @@ export function Sidebar() {
     if (!sessionOpen) setActiveTab('files')
   }, [sessionOpen])
 
+  // Expose the current width so the navbar can start its tabs exactly where
+  // the sidebar ends (tracks live resizing too).
+  useEffect(() => {
+    const root = document.documentElement
+    root.style.setProperty('--sidebar-width', `${width}px`)
+    return () => {
+      root.style.removeProperty('--sidebar-width')
+    }
+  }, [width])
+
   const handleContinueSession = async (filename: string) => {
     setFile(filename)
     await openSession(filename)
     removeResumableSession(filename)
-    if (location.pathname !== '/files') navigate('/files')
+    if (location.pathname !== PLOT_PATH) navigate(PLOT_PATH)
   }
 
   const handleDiscardSession = async (filename: string) => {
     await discardSession(filename)
     removeResumableSession(filename)
-  }
-
-  const handleNavClick = (path: string) => {
-    // Already here — e.g. re-clicking "Plots" while on /files — navigating
-    // to the bare path would drop the current ship/year/file/vars query
-    // params and reset the page. Nothing to do.
-    if (location.pathname === path) return
-    if (sessionOpen) {
-      if (!window.confirm('You have an open edit session. Leave without closing it?')) {
-        return
-      }
-    }
-    if (resumableSessions.length > 0) {
-      if (!window.confirm('You have unresolved edits to continue or discard. Leave anyway?')) {
-        return
-      }
-    }
-    navigate(path)
   }
 
   const handleMouseDown = () => {
@@ -100,47 +98,16 @@ export function Sidebar() {
         <div className="sidebar-welcome-text">
           Welcome
           <b>{username}</b>
+          <ColorModeSwitch className="sidebar-color-mode" />
         </div>
       </div>
       <div className="sidebar-links">
-        <a
-          href="/files"
-          className={location.pathname === '/files' ? 'active' : undefined}
-          onClick={(e) => {
-            e.preventDefault()
-            handleNavClick('/files')
-          }}
-        >
-          Plots
-        </a>
-        {roles.includes('admin') && (
-          <a
-            href="/admin/users"
-            className={location.pathname === '/admin/users' ? 'active' : undefined}
-            onClick={(e) => {
-              e.preventDefault()
-              handleNavClick('/admin/users')
-            }}
-          >
-            Admin
-          </a>
-        )}
-        <a
-          href="/profile"
-          className={location.pathname === '/profile' ? 'active' : undefined}
-          onClick={(e) => {
-            e.preventDefault()
-            handleNavClick('/profile')
-          }}
-        >
-          Profile
-        </a>
+        <h3 className="sidebar-section-heading">Widgets</h3>
         <button
           type="button"
           className="sidebar-audit-history-link"
           onClick={() => {
             setShowAuditHistory(true)
-            setShowDocs(false)
           }}
         >
           Audit History
@@ -150,13 +117,30 @@ export function Sidebar() {
           className="sidebar-docs-link"
           onClick={() => {
             setShowDocs(true)
-            setShowAuditHistory(false)
           }}
         >
           Documentation
         </button>
+        <button
+          type="button"
+          className="sidebar-keybinds-link"
+          onClick={() => {
+            setShowKeybinds(true)
+          }}
+        >
+          Keybinds
+        </button>
+        <button
+          type="button"
+          className="sidebar-ship-track-link"
+          onClick={() => {
+            setShowShipTrack(true)
+          }}
+        >
+          Ship Track
+        </button>
       </div>
-      {location.pathname === '/files' && (
+      {location.pathname === PLOT_PATH && (
         <>
           <div className="sidebar-tabs" role="tablist">
             <button
@@ -188,6 +172,8 @@ export function Sidebar() {
         <AuditHistoryModal onClose={() => setShowAuditHistory(false)} />
       )}
       {showDocs && <DocumentationModal onClose={() => setShowDocs(false)} />}
+      {showKeybinds && <KeybindsModal onClose={() => setShowKeybinds(false)} />}
+      {showShipTrack && <ShipTrackModal onClose={() => setShowShipTrack(false)} />}
       {resumableSessions.length > 0 && (
         <ResumeSessionModal
           entries={resumableSessions}

@@ -1,9 +1,14 @@
 :root {
   --text: #6b6375;
   --text-h: #08060d;
+  /* Sidebar widget links: same as --text in light mode, a bit brighter in dark. */
+  --link: var(--text);
   --bg: #fff;
   --border: #e5e4e7;
   --code-bg: #f4f3ec;
+  /* Secondary navbar: the main navbar color nudged toward the text color, so
+     it reads as a separate bar in both themes. */
+  --subnav-bg: color-mix(in srgb, var(--code-bg) 95%, var(--text-h));
   --accent: #ed1f21;
   --accent-bg: color-mix(in srgb, var(--accent) 10%, transparent);
   --accent-border: color-mix(in srgb, var(--accent) 50%, transparent);
@@ -32,10 +37,33 @@
   }
 }
 
+/* Dark palette: data-theme="dark" (set by colorMode.ts from the user toggle
+   or OS preference), with a media-query fallback before JS sets it. */
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --text: #9ca3af;
+  --text-h: #f3f4f6;
+  --link: #c9ced6;
+  --bg: #16171d;
+  --border: #2e303a;
+  --code-bg: #1f2028;
+  --accent: #ed1f21;
+  --accent-bg: color-mix(in srgb, var(--accent) 15%, transparent);
+  --accent-border: color-mix(in srgb, var(--accent) 50%, transparent);
+  --social-bg: rgba(47, 48, 58, 0.5);
+  --shadow:
+    rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
+}
+
+:root[data-theme='light'] {
+  color-scheme: light;
+}
+
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme]) {
     --text: #9ca3af;
     --text-h: #f3f4f6;
+    --link: #c9ced6;
     --bg: #16171d;
     --border: #2e303a;
     --code-bg: #1f2028;
@@ -46,10 +74,10 @@
     --shadow:
       rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
   }
+}
 
-  #social .button-icon {
-    filter: invert(1) brightness(2);
-  }
+:root[data-theme='dark'] #social .button-icon {
+  filter: invert(1) brightness(2);
 }
 
 #root {
@@ -117,6 +145,140 @@ code {
   padding: 12px 24px;
   border-bottom: 1px solid var(--border);
   background: var(--code-bg);
+}
+
+/* First column reserves the sidebar's width (minus .navbar's 24px left
+   padding) so the navbar tabs start where the sidebar ends; minmax keeps an
+   unusually wide logo/site name from overlapping the tabs. */
+.navbar-left {
+  display: grid;
+  grid-template-columns: minmax(max-content, calc(var(--sidebar-width, 250px) - 24px)) auto;
+  align-items: center;
+  align-self: stretch;
+}
+
+.navbar-left > .navbar-logo {
+  justify-self: start;
+}
+
+.navbar-tabs {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  align-self: stretch;
+  /* Cancel .navbar's vertical padding so tabs span its full height and the
+     selected underline sits flush on the navbar's bottom edge. */
+  margin: -12px 0;
+}
+
+.navbar-session-actions {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+}
+
+/* Tab-style navbar buttons: icon above label, accent + underline bar when
+   selected. */
+.navbar-tab {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 84px;
+  padding: 8px 14px;
+  background: none;
+  border: none;
+  color: var(--text);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.navbar-tab:hover:not(:disabled) {
+  color: var(--text-h);
+}
+
+.navbar-tab.open,
+.navbar-tab.active {
+  color: var(--accent);
+}
+
+.navbar-tab.open::after,
+.navbar-tab.active::after {
+  content: '';
+  position: absolute;
+  left: 10px;
+  right: 10px;
+  bottom: 0;
+  height: 4px;
+  border-radius: 4px 4px 0 0;
+  background: var(--accent);
+}
+
+.navbar-tab:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.navbar-tab-menu {
+  position: relative;
+  display: flex;
+}
+
+/* Reuses .navbar-dropdown's panel look; anchored under the tab. */
+.navbar-tab-dropdown {
+  left: 0;
+  right: auto;
+}
+
+.navbar-dropdown-item:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.navbar-dropdown.navbar-image-dropdown {
+  width: 300px;
+}
+
+/* Two columns so a long list of plots stays short. */
+.navbar-image-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  column-gap: 8px;
+}
+
+.navbar-image-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--text-h);
+  font-size: 13px;
+  padding: 6px 4px;
+  cursor: pointer;
+}
+
+.navbar-image-empty {
+  color: var(--text);
+  font-size: 13px;
+  margin: 4px;
+}
+
+.navbar-image-save {
+  margin-top: 6px;
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 6px 6px;
+  font-weight: 600;
+}
+
+.navbar-session-status {
+  align-self: center;
+  margin-left: 8px;
+  font-size: 12px;
+  color: var(--text);
 }
 
 .navbar-logo {
@@ -306,11 +468,43 @@ code {
   min-height: 0;
 }
 
+/* Right of the sidebar: fixed secondary navbar, then the scrolling page. */
+.app-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .app-main {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   padding: 24px;
   overflow: auto;
+}
+
+.secondary-navbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 8px 24px;
+  border-bottom: 1px solid var(--border);
+  background: var(--subnav-bg);
+}
+
+.secondary-navbar-left,
+.secondary-navbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.secondary-navbar-status {
+  font-size: 12px;
+  color: var(--text);
 }
 
 .sidebar {
@@ -336,7 +530,9 @@ code {
 
 .sidebar-welcome {
   display: flex;
-  align-items: center;
+  /* Avatar lines up with the top "Welcome" line, not the middle of the
+     Welcome / username / Dark mode column. */
+  align-items: flex-start;
   gap: 10px;
   padding: 16px;
   border-bottom: 1px solid var(--border);
@@ -365,12 +561,83 @@ code {
   font-size: 14px;
 }
 
+.color-mode-switch.sidebar-color-mode {
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.profile-color-mode {
+  margin-top: 12px;
+}
+
+.color-mode-switch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text-h);
+}
+
+.color-mode-switch input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.color-mode-switch-track {
+  position: relative;
+  flex: none;
+  width: 34px;
+  height: 18px;
+  border-radius: 9px;
+  background: var(--border);
+  transition: background 0.15s;
+}
+
+.color-mode-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--bg);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  transition: transform 0.15s;
+}
+
+.color-mode-switch input:checked + .color-mode-switch-track {
+  background: var(--accent);
+}
+
+.color-mode-switch input:checked + .color-mode-switch-track .color-mode-switch-thumb {
+  transform: translateX(16px);
+}
+
+.color-mode-switch input:focus-visible + .color-mode-switch-track {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .sidebar-links {
   display: flex;
   flex-direction: column;
   gap: 8px;
   padding: 12px 16px;
   border-bottom: 1px solid var(--border);
+}
+
+/* Section label, styled like the sidebar tabs (uppercase, small, spaced). */
+.sidebar-section-heading {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text);
 }
 
 .sidebar-links a {
@@ -389,10 +656,12 @@ code {
 }
 
 .sidebar-audit-history-link,
-.sidebar-docs-link {
+.sidebar-docs-link,
+.sidebar-keybinds-link,
+.sidebar-ship-track-link {
   background: none;
   border: none;
-  color: var(--text);
+  color: var(--link);
   font-size: 13px;
   cursor: pointer;
   padding: 0;
@@ -401,7 +670,9 @@ code {
 }
 
 .sidebar-audit-history-link:hover,
-.sidebar-docs-link:hover {
+.sidebar-docs-link:hover,
+.sidebar-keybinds-link:hover,
+.sidebar-ship-track-link:hover {
   color: var(--text-h);
 }
 
@@ -488,7 +759,8 @@ code {
   display: inline-block;
   width: 12px;
   height: 12px;
-  border: 1px solid var(--border);
+  /* --text, not --border: --border is near-invisible against the dark-mode tab. */
+  border: 1px solid var(--text);
   border-radius: 3px;
   cursor: pointer;
   flex-shrink: 0;
@@ -551,30 +823,6 @@ code {
   display: flex;
   flex-direction: column;
   gap: 10px;
-}
-
-.sidebar-flags-panel-modes {
-  display: flex;
-  gap: 14px;
-  align-self: flex-start;
-}
-
-.sidebar-flags-panel-modes label {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-size: 12px;
-  color: var(--text-h);
-  cursor: pointer;
-}
-
-.sidebar-flags-panel-modes input[type='checkbox'] {
-  margin: 0;
-  cursor: pointer;
-}
-
-.sidebar-flags-panel-modes input[type='checkbox']:disabled {
-  cursor: not-allowed;
 }
 
 .sidebar-flags-panel-status {
@@ -671,6 +919,9 @@ code {
   border: none;
   padding: 0;
   margin: 0;
+  /* Fieldsets default to min-width: min-content, which would let a long
+     option (e.g. a ship name) push the panel wider than the sidebar. */
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -679,6 +930,7 @@ code {
 .sidebar-tab-panel label {
   display: flex;
   flex-direction: column;
+  min-width: 0;
   gap: 4px;
   font-size: 11px;
   text-transform: uppercase;
@@ -687,6 +939,12 @@ code {
 }
 
 .sidebar-tab-panel select {
+  /* Always exactly the sidebar's width, whatever the longest option; the
+     closed control truncates, the open list still shows full labels. */
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  text-overflow: ellipsis;
   background: var(--code-bg);
   border: 1px solid var(--border);
   color: var(--text-h);
@@ -695,6 +953,11 @@ code {
   font-size: 13px;
   text-transform: none;
   letter-spacing: normal;
+}
+
+.plot-picker-select-all {
+  font-style: italic;
+  border-bottom: 1px solid var(--border);
 }
 
 .plot-picker-label-row {
@@ -899,22 +1162,8 @@ code {
   background: var(--accent-bg);
 }
 
-.files-toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  flex-wrap: wrap;
-}
-
-.files-toolbar-left,
-.files-toolbar-right {
-  display: flex;
-  gap: 8px;
-}
-
-.files-toolbar-left button,
-.files-toolbar-right button {
+.secondary-navbar-left button,
+.secondary-navbar-right button {
   padding: 7px 14px;
   border: 1px solid var(--border);
   background: var(--code-bg);
@@ -925,13 +1174,32 @@ code {
   transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 
-.files-toolbar-left button:hover:not(:disabled),
-.files-toolbar-right button:hover:not(:disabled) {
+.secondary-navbar-left button:hover:not(:disabled),
+.secondary-navbar-right button:hover:not(:disabled) {
   background: var(--social-bg);
 }
 
-.files-toolbar-left button:disabled,
-.files-toolbar-right button:disabled {
+.secondary-navbar-left button:disabled,
+.secondary-navbar-right button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.secondary-navbar-yinput {
+  width: 84px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  background: var(--code-bg);
+  color: var(--text-h);
+  border-radius: 6px;
+  font-size: 13px;
+}
+
+.secondary-navbar-yinput[aria-invalid='true'] {
+  border-color: #dc2626;
+}
+
+.secondary-navbar-yinput:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -982,7 +1250,8 @@ code {
   border-bottom: none;
 }
 
-.audit-history-modal {
+.audit-history-modal,
+.keybinds-modal {
   position: fixed;
   display: flex;
   flex-direction: column;
@@ -994,7 +1263,8 @@ code {
   overflow: hidden;
 }
 
-.audit-history-modal-header {
+.audit-history-modal-header,
+.keybinds-modal-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1007,7 +1277,8 @@ code {
   user-select: none;
 }
 
-.audit-history-modal-close {
+.audit-history-modal-close,
+.keybinds-modal-close {
   background: none;
   border: none;
   font-size: 16px;
@@ -1016,11 +1287,13 @@ code {
   color: var(--text);
 }
 
-.audit-history-modal-close:hover {
+.audit-history-modal-close:hover,
+.keybinds-modal-close:hover {
   color: var(--text-h);
 }
 
-.audit-history-modal-body {
+.audit-history-modal-body,
+.keybinds-modal-body {
   flex: 1;
   overflow-y: auto;
   padding: 10px 12px;
@@ -1073,7 +1346,9 @@ code {
   font-size: 11px;
 }
 
-.audit-history-modal-resize-handle {
+.audit-history-modal-resize-handle,
+.keybinds-modal-resize-handle,
+.documentation-modal-resize-handle {
   position: absolute;
   right: 0;
   bottom: 0;
@@ -1082,16 +1357,90 @@ code {
   cursor: nwse-resize;
 }
 
+/* Ship Track map fills the modal body edge to edge. */
+.ship-track-modal-body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+}
+
+.ship-track-map {
+  position: absolute;
+  inset: 0;
+}
+
+.ship-track-message {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 13px;
+  z-index: 500; /* above Leaflet panes */
+}
+
+.ship-track-tooltip {
+  position: absolute;
+  z-index: 600;
+  pointer-events: none;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  color: var(--text-h);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* Leaflet's corner controls (attribution) sit at z-index 1000, so the resize
+   handle must be above them or the attribution swallows the drag. A visible
+   grip, since an invisible corner is hard to find on top of a map. */
+.ship-track-modal .keybinds-modal-resize-handle {
+  z-index: 1100;
+  width: 16px;
+  height: 16px;
+  background:
+    linear-gradient(135deg, transparent 45%, var(--text) 45%, var(--text) 52%, transparent 52%,
+      transparent 68%, var(--text) 68%, var(--text) 75%, transparent 75%),
+    var(--bg);
+  border-top-left-radius: 4px;
+  opacity: 0.85;
+}
+
+/* Keybinds quick reference: keys column, then action. */
+.keybinds-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.keybinds-table th,
+.keybinds-table td {
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+
+.keybinds-table th {
+  padding-right: 10px;
+  font-weight: 600;
+  color: var(--text-h);
+  white-space: nowrap;
+}
+
+.keybinds-table tr:last-child th,
+.keybinds-table tr:last-child td {
+  border-bottom: none;
+}
+
 .documentation-modal {
+  /* Position, size and z-index come from useFloatingPanel (inline style). */
   position: fixed;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
   display: flex;
   flex-direction: column;
-  width: 520px;
-  max-width: calc(100vw - 32px);
-  max-height: 80vh;
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -1109,6 +1458,8 @@ code {
   font-weight: bold;
   font-size: 13px;
   color: var(--text-h);
+  cursor: move;
+  user-select: none;
 }
 
 .documentation-modal-close {
@@ -1177,7 +1528,8 @@ code {
   padding: 2px 0;
 }
 
-.resume-session-modal {
+.resume-session-modal,
+.confirm-modal {
   position: fixed;
   top: 50%;
   left: 50%;
@@ -1191,11 +1543,13 @@ code {
   border: 1px solid var(--border);
   border-radius: 8px;
   box-shadow: var(--shadow);
-  z-index: 100;
+  /* Above the widget modals, which stack from z-index 100 upward. */
+  z-index: 1000;
   overflow: hidden;
 }
 
-.resume-session-modal-header {
+.resume-session-modal-header,
+.confirm-modal-header {
   padding: 10px 12px;
   border-bottom: 1px solid var(--border);
   font-weight: bold;
@@ -1203,7 +1557,8 @@ code {
   color: var(--text-h);
 }
 
-.resume-session-modal-body {
+.resume-session-modal-body,
+.confirm-modal-body {
   flex: 1;
   overflow-y: auto;
   padding: 12px 16px;
@@ -1236,10 +1591,22 @@ code {
   flex-shrink: 0;
 }
 
-.resume-session-discard-btn:hover:not(:disabled) {
+.resume-session-discard-btn:hover:not(:disabled),
+.confirm-modal-danger-btn:hover:not(:disabled) {
   border-color: #ef4444;
   background: rgba(239, 68, 68, 0.1);
   color: #ef4444;
+}
+
+.confirm-modal-body p {
+  margin: 0;
+}
+
+.confirm-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 12px;
 }
 
 /* Login page */

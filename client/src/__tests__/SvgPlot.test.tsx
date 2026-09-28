@@ -2,6 +2,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
 import { act, render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { SvgPlot } from '../components/SvgPlot'
+import { SecondaryNavbar } from '../components/SecondaryNavbar'
 import { PlotSelectionProvider, usePlotSelection } from '../context/PlotSelectionContext'
 import { EditSessionProvider, useEditSession } from '../context/EditSessionContext'
 import { AuthProvider } from '../context/AuthContext'
@@ -24,15 +25,27 @@ function Setup({ file, variables }: { file: string; variables: string[] }) {
 }
 
 function ClimatologyToggle() {
-  const { toggleClimatologyVisible } = useEditSession()
+  const { toggleClimatologyVisible, toggleBulkEdit, togglePointsVisible, xWindow, timeMarker, setTimeMarker } =
+    useEditSession()
   return (
-    <button data-testid="toggle-clim" onClick={toggleClimatologyVisible}>
-      toggle clim
-    </button>
+    <>
+      <button data-testid="toggle-points" onClick={togglePointsVisible}>
+        toggle points
+      </button>
+      <button data-testid="toggle-clim" onClick={toggleClimatologyVisible}>
+        toggle clim
+      </button>
+      <button data-testid="toggle-bulk" onClick={toggleBulkEdit}>
+        toggle bulk
+      </button>
+      <span data-testid="x-window">{xWindow ? xWindow.join(',') : 'none'}</span>
+      <span data-testid="time-marker">{timeMarker ?? 'none'}</span>
+      <button data-testid="set-marker-9" onClick={() => setTimeMarker(9)}>marker 9</button>
+    </>
   )
 }
 
-function renderSvgPlot(file: string, variables: string[]) {
+function renderSvgPlot(file: string, variables: string[], { withNavbar = false } = {}) {
   setToken('tok')
   localStorage.setItem('svidat_role', JSON.stringify(['qca']))
   localStorage.setItem('svidat_username', 'testuser')
@@ -43,6 +56,7 @@ function renderSvgPlot(file: string, variables: string[]) {
           <EditSessionProvider>
             <Setup file={file} variables={variables} />
             <ClimatologyToggle />
+            {withNavbar && <SecondaryNavbar />}
             <SvgPlot />
           </EditSessionProvider>
         </PlotSelectionProvider>
@@ -208,10 +222,10 @@ describe('SvgPlot', () => {
     const { container } = renderSvgPlot('FILE_A', ['temperature'])
     await waitFor(() => expect(container.querySelector('svg')).toBeInTheDocument())
 
-    expect(screen.getByText('2025-01-01 00:00')).toBeInTheDocument()
-    expect(screen.getByText('06:00')).toBeInTheDocument()
-    expect(screen.getByText('12:00')).toBeInTheDocument()
-    expect(screen.getByText('18:00')).toBeInTheDocument()
+    expect(screen.getByText('2025-01-01 00:00Z')).toBeInTheDocument()
+    expect(screen.getByText('06:00Z')).toBeInTheDocument()
+    expect(screen.getByText('12:00Z')).toBeInTheDocument()
+    expect(screen.getByText('18:00Z')).toBeInTheDocument()
   })
 
   it('adds a final edge tick for the next day when the data stops short of it', async () => {
@@ -226,13 +240,13 @@ describe('SvgPlot', () => {
     const { container } = renderSvgPlot('FILE_A', ['temperature'])
     await waitFor(() => expect(container.querySelector('svg')).toBeInTheDocument())
 
-    expect(screen.getByText('2025-01-01 00:00')).toBeInTheDocument()
-    expect(screen.getByText('06:00')).toBeInTheDocument()
-    expect(screen.getByText('12:00')).toBeInTheDocument()
-    expect(screen.getByText('18:00')).toBeInTheDocument()
+    expect(screen.getByText('2025-01-01 00:00Z')).toBeInTheDocument()
+    expect(screen.getByText('06:00Z')).toBeInTheDocument()
+    expect(screen.getByText('12:00Z')).toBeInTheDocument()
+    expect(screen.getByText('18:00Z')).toBeInTheDocument()
     // The synthetic edge tick — next day's 00:00, not the real last sample
     // (23:00) — and it carries a date since it's a different calendar day.
-    expect(screen.getByText('2025-01-02 00:00')).toBeInTheDocument()
+    expect(screen.getByText('2025-01-02 00:00Z')).toBeInTheDocument()
 
     const texts = Array.from(container.querySelectorAll('svg text')).map((t) => t.textContent)
     expect(texts).not.toContain('23:00')
@@ -264,9 +278,9 @@ describe('SvgPlot', () => {
 
     // 30-minute ticks (00:00, 00:30, 01:00, 01:30, 02:00) — not the old fixed
     // 6-hour interval, which would've collapsed to just the two edges.
-    expect(screen.getByText('00:30')).toBeInTheDocument()
-    expect(screen.getByText('01:00')).toBeInTheDocument()
-    expect(screen.getByText('01:30')).toBeInTheDocument()
+    expect(screen.getByText('00:30Z')).toBeInTheDocument()
+    expect(screen.getByText('01:00Z')).toBeInTheDocument()
+    expect(screen.getByText('01:30Z')).toBeInTheDocument()
   })
 
   it('clicking a row recolors its axes and line from black to blue, leaving other rows black', async () => {
@@ -654,6 +668,388 @@ describe('SvgPlot', () => {
     } finally {
       act(() => applyConfig({ keybindings: DEFAULT_KEYBINDINGS, documentation: DEFAULT_DOCUMENTATION }))
     }
+  })
+
+  it('shift+ctrl+drag box-zooms X and the dragged row\'s Y together, undone in one step', async () => {
+    const time = hourlyTimes(18)
+    vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
+      time,
+      variables: {
+        temperature: { values: time.map((_, i) => i), flags: time.map(() => 'Z') },
+        salinity: { values: time.map((_, i) => i), flags: time.map(() => 'Z') },
+      },
+    })
+
+    const { container } = renderSvgPlot('FILE_A', ['temperature', 'salinity'])
+    await waitFor(() => expect(container.querySelectorAll('svg').length).toBe(2))
+
+    const svgs = container.querySelectorAll('svg')
+    const row = container.querySelector('.svg-plot-row')!
+    const ticksOf = (svg: Element) =>
+      Array.from(svg.querySelectorAll('text')).map((t) => t.textContent)
+    const segments = () => segmentCount(container.querySelectorAll('path')[0].getAttribute('d'))
+
+    // Box: X indices [1, 7], Y pixels 60..130 on the full [0, 20] scale.
+    // An X-only zoom to [1, 7] would auto-fit Y to ~1..7; the box keeps the
+    // dragged Y window instead (ticks 4..16, as in the Y-zoom tests).
+    fireEvent.mouseDown(svgs[0], { clientX: pxForIndex(1, 18), clientY: 60, shiftKey: true, ctrlKey: true })
+    // macOS ctrl+click also fires contextmenu — must not undo anything.
+    fireEvent.contextMenu(row, { shiftKey: true, ctrlKey: true })
+    fireEvent.mouseMove(window, { clientX: pxForIndex(7, 18), clientY: 130 })
+    fireEvent.mouseUp(window, { clientX: pxForIndex(7, 18), clientY: 130 })
+
+    expect(segments()).toBe(6)
+    expect(ticksOf(svgs[0])).toEqual(expect.arrayContaining(['4', '10', '16']))
+    expect(ticksOf(svgs[0])).not.toEqual(expect.arrayContaining(['0']))
+    // Other row shares the X zoom but keeps its auto-fit Y (no '16').
+    expect(ticksOf(svgs[1])).not.toEqual(expect.arrayContaining(['16']))
+
+    // A single undo restores both X and Y.
+    fireEvent.contextMenu(row)
+    expect(segments()).toBe(18)
+    expect(ticksOf(svgs[0])).toEqual(expect.arrayContaining(['0', '5', '10', '15', '20']))
+
+    // And a single redo reapplies both.
+    fireEvent.contextMenu(row, { shiftKey: true })
+    expect(segments()).toBe(6)
+    expect(ticksOf(svgs[0])).toEqual(expect.arrayContaining(['4', '10', '16']))
+  })
+
+  it('shift+ctrl+drag with no vertical extent is ignored', async () => {
+    const time = hourlyTimes(18)
+    vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
+      time,
+      variables: { temperature: { values: time.map((_, i) => i), flags: time.map(() => 'Z') } },
+    })
+
+    const { container } = renderSvgPlot('FILE_A', ['temperature'])
+    await waitFor(() => expect(container.querySelector('svg')).toBeInTheDocument())
+
+    const svg = container.querySelector('svg')!
+    fireEvent.mouseDown(svg, { clientX: pxForIndex(4, 18), clientY: 60, shiftKey: true, ctrlKey: true })
+    fireEvent.mouseMove(window, { clientX: pxForIndex(14, 18), clientY: 61 })
+    fireEvent.mouseUp(window, { clientX: pxForIndex(14, 18), clientY: 61 })
+
+    expect(segmentCount(container.querySelector('path')?.getAttribute('d'))).toBe(18)
+  })
+
+  it('draws a marker at every non-null data point in the window only while Show points is on', async () => {
+    const time = hourlyTimes(18) // 19 samples
+    const values: (number | null)[] = time.map((_, i) => i)
+    values[5] = null
+    vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
+      time,
+      variables: { temperature: { values, flags: time.map(() => 'Z') } },
+    })
+
+    const { container } = renderSvgPlot('FILE_A', ['temperature'])
+    await waitFor(() => expect(container.querySelector('svg')).toBeInTheDocument())
+    const points = () => container.querySelectorAll('[data-testid="data-points"] circle')
+    expect(points()).toHaveLength(0)
+
+    fireEvent.click(screen.getByTestId('toggle-points'))
+    expect(points()).toHaveLength(18) // 19 samples minus the null
+
+    // Only points inside the zoomed window are drawn.
+    const svg = container.querySelector('svg')!
+    fireEvent.mouseDown(svg, { clientX: pxForIndex(10, 18), shiftKey: true })
+    fireEvent.mouseMove(window, { clientX: pxForIndex(14, 18) })
+    fireEvent.mouseUp(window, { clientX: pxForIndex(14, 18) })
+    expect(points()).toHaveLength(5) // indices 10..14
+
+    fireEvent.click(screen.getByTestId('toggle-points'))
+    expect(points()).toHaveLength(0)
+  })
+
+  it('gives every plot a "Time (UTC)" x-axis title', async () => {
+    const time = hourlyTimes(18)
+    vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
+      time,
+      variables: {
+        temperature: { values: time.map((_, i) => i), flags: time.map(() => 'Z') },
+        salinity: { values: time.map((_, i) => i), flags: time.map(() => 'Z') },
+      },
+    })
+    const { container } = renderSvgPlot('FILE_A', ['temperature', 'salinity'])
+    await waitFor(() => expect(container.querySelectorAll('.svg-plot-row svg').length).toBe(2))
+    container.querySelectorAll('.svg-plot-row svg').forEach((svg) => {
+      const texts = Array.from(svg.querySelectorAll('text')).map((t) => t.textContent)
+      expect(texts).toContain('Time (UTC)')
+    })
+  })
+
+  it('adds each variable\'s long_name in parentheses to its plot title', async () => {
+    const time = hourlyTimes(18)
+    vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
+      time,
+      variables: {
+        T: { values: time.map((_, i) => i), flags: time.map(() => 'Z') },
+        RH: { values: time.map((_, i) => i), flags: time.map(() => 'Z') },
+      },
+    })
+    vi.spyOn(apiClient, 'getFileMetadata').mockResolvedValue({
+      variables: {
+        T: { dims: ['time'], shape: [19], dtype: 'float32', attrs: { long_name: 'air temperature' } },
+        RH: { dims: ['time'], shape: [19], dtype: 'float32', attrs: {} },
+      },
+      dimensions: { time: 19 },
+      global_attrs: { title: 'BULK Test Data' },
+    })
+    renderSvgPlot('FILE_A', ['T', 'RH'])
+    expect(await screen.findByText('BULK Test Data: T (air temperature)')).toBeInTheDocument()
+    // No long_name — title stays as before.
+    expect(screen.getByText('BULK Test Data: RH')).toBeInTheDocument()
+  })
+
+  it('labels latitude/longitude Y ticks with 3 decimals, one label per tick', async () => {
+    const time = hourlyTimes(18)
+    vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
+      time,
+      variables: {
+        lat: { values: time.map((_, i) => 28.871 + i * 0.0001), flags: time.map(() => 'Z') },
+        LONGITUDE: { values: time.map((_, i) => 270.6788 + i * 0.0001), flags: time.map(() => 'Z') },
+        temperature: { values: time.map((_, i) => i), flags: time.map(() => 'Z') },
+      },
+    })
+    const { container } = renderSvgPlot('FILE_A', ['lat', 'LONGITUDE', 'temperature'])
+    await waitFor(() => expect(container.querySelectorAll('.svg-plot-row svg').length).toBe(3))
+    const svgs = container.querySelectorAll('.svg-plot-row svg')
+    // Y tick labels are the numeric-looking <text>s (title/time labels aren't).
+    const yLabels = (svg: Element) =>
+      Array.from(svg.querySelectorAll('text'))
+        .map((t) => t.textContent ?? '')
+        .filter((t) => /^-?\d+(\.\d+)?$/.test(t))
+
+    for (const svg of [svgs[0], svgs[1]]) {
+      const labels = yLabels(svg)
+      expect(labels.length).toBeGreaterThan(1)
+      labels.forEach((l) => expect(l).toMatch(/^-?\d+\.\d{3}$/))
+      expect(new Set(labels).size).toBe(labels.length)
+    }
+    // Other variables keep their plain labels.
+    expect(yLabels(svgs[2])).toEqual(expect.arrayContaining(['0', '20']))
+  })
+
+  describe('Y min / Y max inputs', () => {
+    const setup = async () => {
+      const time = hourlyTimes(18)
+      vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
+        time,
+        variables: {
+          temperature: { values: time.map((_, i) => i), flags: time.map(() => 'Z') }, // 0..18
+          salinity: { values: time.map((_, i) => i), flags: time.map(() => 'Z') },
+        },
+      })
+      const utils = renderSvgPlot('FILE_A', ['temperature', 'salinity'], { withNavbar: true })
+      await waitFor(() => expect(utils.container.querySelectorAll('.svg-plot-row svg').length).toBe(2))
+      const svgs = utils.container.querySelectorAll('.svg-plot-row svg')
+      return {
+        ...utils,
+        svgs,
+        rows: utils.container.querySelectorAll('.svg-plot-row'),
+        yMin: screen.getByRole('spinbutton', { name: 'Y min' }) as HTMLInputElement,
+        yMax: screen.getByRole('spinbutton', { name: 'Y max' }) as HTMLInputElement,
+        ticksOf: (svg: Element) => Array.from(svg.querySelectorAll('text')).map((t) => t.textContent),
+      }
+    }
+
+    it('are disabled until a plot is selected, then show its displayed Y range', async () => {
+      const { rows, yMin, yMax } = await setup()
+      expect(yMin).toBeDisabled()
+      expect(yMax).toBeDisabled()
+
+      fireEvent.click(rows[0])
+      expect(yMin).toBeEnabled()
+      expect(yMin.value).toBe('0')
+      expect(yMax.value).toBe('20')
+    })
+
+    it('pressing Enter pins exactly the typed range on the selected plot only', async () => {
+      const { rows, svgs, yMin, yMax, ticksOf } = await setup()
+      fireEvent.click(rows[0])
+
+      fireEvent.change(yMin, { target: { value: '5' } })
+      fireEvent.change(yMax, { target: { value: '13' } })
+      fireEvent.keyDown(yMax, { key: 'Enter' })
+
+      // Exact domain [5, 13] — nice ticks inside it, none rounded outward.
+      expect(ticksOf(svgs[0])).toEqual(expect.arrayContaining(['6', '8', '10', '12']))
+      expect(ticksOf(svgs[0])).not.toEqual(expect.arrayContaining(['4']))
+      expect(ticksOf(svgs[0])).not.toEqual(expect.arrayContaining(['14']))
+      expect(yMin.value).toBe('5')
+      expect(yMax.value).toBe('13')
+      // Other plot untouched.
+      expect(ticksOf(svgs[1])).toEqual(expect.arrayContaining(['0', '20']))
+    })
+
+    it('applies on blur too', async () => {
+      const { rows, svgs, yMin, ticksOf } = await setup()
+      fireEvent.click(rows[0])
+      fireEvent.change(yMin, { target: { value: '10' } })
+      fireEvent.blur(yMin)
+      expect(ticksOf(svgs[0])).not.toEqual(expect.arrayContaining(['0']))
+      expect(yMin.value).toBe('10')
+    })
+
+    it('moves the range past the current bounds: min first, tab to max, then Enter', async () => {
+      const { rows, svgs, yMin, yMax, ticksOf } = await setup()
+      fireEvent.click(rows[0]) // displayed 0..20
+
+      // 30 > current max (20): leaving Y min for Y max must neither apply nor revert.
+      fireEvent.change(yMin, { target: { value: '30' } })
+      fireEvent.blur(yMin, { relatedTarget: yMax })
+      expect(yMin.value).toBe('30')
+      expect(ticksOf(svgs[0])).toEqual(expect.arrayContaining(['0', '20']))
+
+      fireEvent.change(yMax, { target: { value: '40' } })
+      fireEvent.keyDown(yMax, { key: 'Enter' })
+      expect(ticksOf(svgs[0])).toEqual(expect.arrayContaining(['30', '40']))
+      expect(yMin.value).toBe('30')
+      expect(yMax.value).toBe('40')
+    })
+
+    it('each bound zooms independently, leaving the other bound unchanged', async () => {
+      const { rows, svgs, yMin, yMax, ticksOf } = await setup()
+      fireEvent.click(rows[0]) // displayed 0..20
+
+      // Zoom in from below.
+      fireEvent.change(yMin, { target: { value: '5' } })
+      fireEvent.keyDown(yMin, { key: 'Enter' })
+      expect(yMin.value).toBe('5')
+      expect(yMax.value).toBe('20')
+
+      // Zoom out above, far past the data.
+      fireEvent.change(yMax, { target: { value: '500' } })
+      fireEvent.blur(yMax)
+      expect(yMin.value).toBe('5')
+      expect(yMax.value).toBe('500')
+      expect(ticksOf(svgs[0])).toEqual(expect.arrayContaining(['500']))
+
+      // A min past the max is flagged, not applied — and the max stays put.
+      fireEvent.change(yMin, { target: { value: '600' } })
+      fireEvent.keyDown(yMin, { key: 'Enter' })
+      expect(yMin).toHaveAttribute('aria-invalid', 'true')
+      expect(yMax.value).toBe('500')
+      expect(ticksOf(svgs[0])).toEqual(expect.arrayContaining(['500']))
+    })
+
+    it('an X zoom resets a typed Y range to auto-fit; one undo restores both', async () => {
+      const { rows, svgs, yMin, yMax, ticksOf } = await setup()
+      fireEvent.click(rows[0])
+      fireEvent.change(yMin, { target: { value: '5' } })
+      fireEvent.change(yMax, { target: { value: '100' } })
+      fireEvent.keyDown(yMax, { key: 'Enter' })
+      expect(ticksOf(svgs[0])).toEqual(expect.arrayContaining(['100']))
+
+      fireEvent.mouseDown(svgs[0], { clientX: pxForIndex(4, 18), shiftKey: true })
+      fireEvent.mouseMove(window, { clientX: pxForIndex(14, 18) })
+      fireEvent.mouseUp(window, { clientX: pxForIndex(14, 18) })
+      // Auto-fit to the zoomed window's values (4..14).
+      expect(yMin.value).toBe('4')
+      expect(yMax.value).toBe('14')
+      expect(ticksOf(svgs[0])).not.toEqual(expect.arrayContaining(['100']))
+
+      fireEvent.contextMenu(rows[0])
+      expect(segmentCount(svgs[0].querySelector('path')?.getAttribute('d'))).toBe(18)
+      expect(yMin.value).toBe('5')
+      expect(yMax.value).toBe('100')
+
+      fireEvent.contextMenu(rows[0], { shiftKey: true })
+      expect(yMin.value).toBe('4')
+      expect(yMax.value).toBe('14')
+    })
+
+    it('an X zoom keeps a Ctrl+drag Y zoom', async () => {
+      const { rows, svgs, ticksOf } = await setup()
+      fireEvent.click(rows[0])
+      fireEvent.mouseDown(svgs[0], { clientY: 60, ctrlKey: true })
+      fireEvent.mouseMove(window, { clientY: 130 })
+      fireEvent.mouseUp(window, { clientY: 130 }) // ticks 4..16
+      fireEvent.mouseDown(svgs[0], { clientX: pxForIndex(0, 18), shiftKey: true })
+      fireEvent.mouseMove(window, { clientX: pxForIndex(6, 18) })
+      fireEvent.mouseUp(window, { clientX: pxForIndex(6, 18) })
+      expect(ticksOf(svgs[0])).toEqual(expect.arrayContaining(['4', '10', '16']))
+    })
+
+    it('keeps an invalid pair as typed and marks it, without changing the plot', async () => {
+      const { rows, svgs, yMin, yMax, ticksOf } = await setup()
+      fireEvent.click(rows[0])
+
+      fireEvent.change(yMin, { target: { value: '15' } })
+      fireEvent.change(yMax, { target: { value: '3' } })
+      fireEvent.keyDown(yMax, { key: 'Enter' })
+      expect(yMin.value).toBe('15')
+      expect(yMax.value).toBe('3')
+      expect(yMin).toHaveAttribute('aria-invalid', 'true')
+      expect(yMax).toHaveAttribute('aria-invalid', 'true')
+      expect(ticksOf(svgs[0])).toEqual(expect.arrayContaining(['0', '20']))
+
+      // Fixing the other bound applies.
+      fireEvent.change(yMax, { target: { value: '18' } })
+      fireEvent.keyDown(yMax, { key: 'Enter' })
+      expect(yMin).toHaveAttribute('aria-invalid', 'false')
+      expect(ticksOf(svgs[0])).not.toEqual(expect.arrayContaining(['0']))
+    })
+
+    it('Escape reverts the inputs to the displayed range', async () => {
+      const { rows, yMin, yMax } = await setup()
+      fireEvent.click(rows[0])
+      fireEvent.change(yMin, { target: { value: '' } })
+      fireEvent.keyDown(yMin, { key: 'Escape' })
+      expect(yMin.value).toBe('0')
+      expect(yMax.value).toBe('20')
+      expect(yMin).toHaveAttribute('aria-invalid', 'false')
+    })
+
+    it('a typed range is undone by right-click like any Y-zoom', async () => {
+      const { rows, svgs, yMin, yMax, ticksOf } = await setup()
+      fireEvent.click(rows[0])
+      fireEvent.change(yMin, { target: { value: '5' } })
+      fireEvent.change(yMax, { target: { value: '13' } })
+      fireEvent.keyDown(yMax, { key: 'Enter' })
+
+      fireEvent.contextMenu(rows[0])
+      expect(ticksOf(svgs[0])).toEqual(expect.arrayContaining(['0', '20']))
+      expect(yMin.value).toBe('0')
+      expect(yMax.value).toBe('20')
+    })
+
+    it('follow the selected plot as the selection and X zoom change', async () => {
+      const { rows, svgs, yMin, yMax } = await setup()
+      fireEvent.click(rows[0])
+      fireEvent.change(yMin, { target: { value: '5' } })
+      fireEvent.change(yMax, { target: { value: '13' } })
+      fireEvent.keyDown(yMax, { key: 'Enter' })
+
+      // Selecting the other plot shows its own (auto-fit) range.
+      fireEvent.click(rows[1])
+      expect(yMin.value).toBe('0')
+      expect(yMax.value).toBe('20')
+
+      // An X zoom re-fits that plot's Y, and the inputs follow.
+      fireEvent.mouseDown(svgs[1], { clientX: pxForIndex(4, 18), shiftKey: true })
+      fireEvent.mouseMove(window, { clientX: pxForIndex(14, 18) })
+      fireEvent.mouseUp(window, { clientX: pxForIndex(14, 18) })
+      expect(yMin.value).toBe('4')
+      expect(yMax.value).toBe('14')
+    })
+  })
+
+  it('tags the in-progress zoom box as excluded from image export', async () => {
+    const time = hourlyTimes(18)
+    vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
+      time,
+      variables: { temperature: { values: time.map((_, i) => i), flags: time.map(() => 'Z') } },
+    })
+
+    const { container } = renderSvgPlot('FILE_A', ['temperature'])
+    await waitFor(() => expect(container.querySelector('svg')).toBeInTheDocument())
+    const svg = container.querySelector('svg')!
+
+    fireEvent.mouseDown(svg, { clientX: pxForIndex(4, 18), shiftKey: true })
+    fireEvent.mouseMove(window, { clientX: pxForIndex(14, 18) })
+    expect(svg.querySelector('rect[stroke-dasharray]')?.getAttribute('data-export')).toBe('skip')
+    fireEvent.mouseUp(window, { clientX: pxForIndex(14, 18) })
   })
 
   it('ctrl+drag shorter than the minimum drag distance is ignored', async () => {
@@ -1347,6 +1743,7 @@ describe('SvgPlot', () => {
     await waitFor(() => expect(container.querySelectorAll('svg').length).toBe(2))
 
     const selectControls = () => container.querySelectorAll('[role="checkbox"]')
+    fireEvent.click(screen.getByTestId('toggle-bulk'))
     expect(selectControls()).toHaveLength(2)
     expect(selectControls()[0]).toHaveAttribute('aria-checked', 'false')
 
@@ -1360,6 +1757,35 @@ describe('SvgPlot', () => {
     expect(tabs()[0]).not.toHaveClass('active')
 
     fireEvent.click(selectControls()[0])
+    expect(selectControls()[0]).toHaveAttribute('aria-checked', 'false')
+  })
+
+  it('shows panel select controls only while bulk edit is on', async () => {
+    const time = hourlyTimes(4)
+    vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
+      time,
+      variables: {
+        temperature: { values: time.map((_, i) => i), flags: time.map(() => 'Z') },
+        salinity: { values: time.map((_, i) => i * 2), flags: time.map(() => 'Z') },
+      },
+    })
+
+    const { container } = renderSvgPlot('FILE_A', ['temperature', 'salinity'])
+    await waitFor(() => expect(container.querySelectorAll('svg').length).toBe(2))
+    const selectControls = () => container.querySelectorAll('[role="checkbox"]')
+
+    expect(selectControls()).toHaveLength(0)
+
+    fireEvent.click(screen.getByTestId('toggle-bulk'))
+    expect(selectControls()).toHaveLength(2)
+    fireEvent.click(selectControls()[0])
+    expect(selectControls()[0]).toHaveAttribute('aria-checked', 'true')
+
+    fireEvent.click(screen.getByTestId('toggle-bulk'))
+    expect(selectControls()).toHaveLength(0)
+
+    // Turning bulk edit back on starts from a clean selection.
+    fireEvent.click(screen.getByTestId('toggle-bulk'))
     expect(selectControls()[0]).toHaveAttribute('aria-checked', 'false')
   })
 
@@ -1571,7 +1997,7 @@ describe('SvgPlot', () => {
     fireEvent.mouseUp(window, { clientX: pxForIndex(14, 18) })
   })
 
-  it('does not fetch climatology while "Show Climo" is off', async () => {
+  it('does not fetch climatology while "Show climo" is off', async () => {
     const time = hourlyTimes(4)
     vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
       time,
@@ -1804,5 +2230,72 @@ describe('SvgPlot', () => {
     )
     fireEvent.mouseMove(svg, { clientX: pxForIndex(5, 18), clientY: pyForValue(5, 0, 20) })
     expect(screen.getByTestId('hover-tooltip')).toHaveTextContent('clim: 7.25')
+  })
+
+  it('publishes the X zoom window (null when unzoomed) for the ship track map', async () => {
+    const time = hourlyTimes(18)
+    vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
+      time,
+      variables: { temperature: { values: time.map((_, i) => i), flags: time.map(() => 'Z') } },
+    })
+    const { container } = renderSvgPlot('FILE_A', ['temperature'])
+    await waitFor(() => expect(container.querySelector('svg')).toBeInTheDocument())
+    expect(screen.getByTestId('x-window')).toHaveTextContent('none')
+
+    const svg = container.querySelector('svg')!
+    fireEvent.mouseDown(svg, { clientX: pxForIndex(4, 18), shiftKey: true })
+    fireEvent.mouseMove(window, { clientX: pxForIndex(14, 18) })
+    fireEvent.mouseUp(window, { clientX: pxForIndex(14, 18) })
+    expect(screen.getByTestId('x-window')).toHaveTextContent('4,14')
+  })
+
+  it('draws the time marker as a dashed line on every plot, skipped by image export', async () => {
+    const time = hourlyTimes(18)
+    vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
+      time,
+      variables: {
+        temperature: { values: time.map((_, i) => i), flags: time.map(() => 'Z') },
+        salinity: { values: time.map((_, i) => i), flags: time.map(() => 'Z') },
+      },
+    })
+    const { container } = renderSvgPlot('FILE_A', ['temperature', 'salinity'])
+    await waitFor(() => expect(container.querySelectorAll('.svg-plot-row svg').length).toBe(2))
+    expect(container.querySelectorAll('[data-testid="time-marker-line"]')).toHaveLength(0)
+
+    fireEvent.click(screen.getByTestId('set-marker-9'))
+    const lines = container.querySelectorAll('[data-testid="time-marker-line"]')
+    expect(lines).toHaveLength(2)
+    expect(Number(lines[0].getAttribute('x1'))).toBeCloseTo(pxForIndex(9, 18))
+    expect(lines[0].getAttribute('data-export')).toBe('skip')
+  })
+
+  it('hides the time marker when it falls outside the X zoom window', async () => {
+    const time = hourlyTimes(18)
+    vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
+      time,
+      variables: { temperature: { values: time.map((_, i) => i), flags: time.map(() => 'Z') } },
+    })
+    const { container } = renderSvgPlot('FILE_A', ['temperature'])
+    await waitFor(() => expect(container.querySelector('svg')).toBeInTheDocument())
+    fireEvent.click(screen.getByTestId('set-marker-9'))
+    const svg = container.querySelector('svg')!
+    fireEvent.mouseDown(svg, { clientX: pxForIndex(0, 18), shiftKey: true })
+    fireEvent.mouseMove(window, { clientX: pxForIndex(5, 18) })
+    fireEvent.mouseUp(window, { clientX: pxForIndex(5, 18) })
+    expect(container.querySelectorAll('[data-testid="time-marker-line"]')).toHaveLength(0)
+  })
+
+  it('Escape clears the time marker', async () => {
+    const time = hourlyTimes(18)
+    vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
+      time,
+      variables: { temperature: { values: time.map((_, i) => i), flags: time.map(() => 'Z') } },
+    })
+    const { container } = renderSvgPlot('FILE_A', ['temperature'])
+    await waitFor(() => expect(container.querySelector('svg')).toBeInTheDocument())
+    fireEvent.click(screen.getByTestId('set-marker-9'))
+    expect(screen.getByTestId('time-marker')).toHaveTextContent('9')
+    fireEvent.keyDown(window, { key: 'Escape' })
+    expect(screen.getByTestId('time-marker')).toHaveTextContent('none')
   })
 })

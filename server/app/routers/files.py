@@ -66,6 +66,36 @@ def file_catalog(_: User = Depends(get_current_user)):
     }
 
 
+# Ship display names, keyed by call sign and cached against the file they
+# were read from — a newer file for that ship (possibly after a rename)
+# invalidates the entry on the next request.
+_ship_name_cache: dict[str, tuple[str, Optional[str]]] = {}
+
+
+@router.get("/ships")
+def ship_names(_: User = Depends(get_current_user)):
+    """Call sign -> ship name (the `site` global attribute of that ship's
+    latest raw file, or None if it has none)."""
+    raw_dir = storage.base_dir() / "raw"
+    if not raw_dir.exists():
+        return {}
+
+    latest: dict[str, str] = {}
+    for path in raw_dir.glob("*.nc"):
+        match = CATALOG_FILENAME_RE.match(path.stem)
+        if match and path.stem > latest.get(match.group(1), ""):
+            latest[match.group(1)] = path.stem
+
+    names: dict[str, Optional[str]] = {}
+    for ship, stem in sorted(latest.items()):
+        cached = _ship_name_cache.get(ship)
+        if cached is None or cached[0] != stem:
+            cached = (stem, netcdf_ops.read_site_name(raw_dir / f"{stem}.nc"))
+            _ship_name_cache[ship] = cached
+        names[ship] = cached[1]
+    return names
+
+
 @router.get("/{filename}/metadata")
 def file_metadata(filename: str, _: User = Depends(get_current_user)):
     try:

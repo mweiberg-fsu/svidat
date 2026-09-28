@@ -50,6 +50,7 @@ export const DEFAULT_DOCUMENTATION: DocTab[] = [
       '- Drag on a row (admin/qca only) — select a point range and open the flag toolbar.',
       '- {{x_zoom}} — zoom the X axis.',
       '- {{y_zoom}} — zoom the Y axis.',
+      '- Hold both zoom modifiers and drag — box-zoom the X axis and that row\'s Y axis together.',
       '- {{undo}} or right-click — undo the last zoom.',
       '- {{redo}} or Shift+right-click — redo zoom.',
       '- Escape — cancel an open flag-selection popover.',

@@ -56,6 +56,37 @@ describe('DocumentationModal', () => {
     expect(screen.getByText(/Shift\+drag/)).toBeInTheDocument()
   })
 
+  it('moves by dragging the header', () => {
+    render(<DocumentationModal onClose={() => {}} />)
+    const m = document.querySelector<HTMLElement>('.documentation-modal')!
+    const left = parseFloat(m.style.left)
+    const top = parseFloat(m.style.top)
+    fireEvent.mouseDown(screen.getByText('Documentation'), { clientX: 100, clientY: 100 })
+    fireEvent.mouseMove(window, { clientX: 150, clientY: 130 })
+    fireEvent.mouseUp(window)
+    expect(parseFloat(m.style.left)).toBeCloseTo(left + 50, 1)
+    expect(parseFloat(m.style.top)).toBeCloseTo(top + 30, 1)
+  })
+
+  it('resizes from the corner handle, not below its minimum size', () => {
+    render(<DocumentationModal onClose={() => {}} />)
+    const m = document.querySelector<HTMLElement>('.documentation-modal')!
+    const width = parseFloat(m.style.width)
+    const height = parseFloat(m.style.height)
+    const handle = m.querySelector('.documentation-modal-resize-handle')!
+    fireEvent.mouseDown(handle, { clientX: 0, clientY: 0 })
+    fireEvent.mouseMove(window, { clientX: 80, clientY: 40 })
+    fireEvent.mouseUp(window)
+    expect(parseFloat(m.style.width)).toBeCloseTo(width + 80, 1)
+    expect(parseFloat(m.style.height)).toBeCloseTo(height + 40, 1)
+
+    fireEvent.mouseDown(handle, { clientX: 0, clientY: 0 })
+    fireEvent.mouseMove(window, { clientX: -5000, clientY: -5000 })
+    fireEvent.mouseUp(window)
+    expect(parseFloat(m.style.width)).toBeGreaterThanOrEqual(320)
+    expect(parseFloat(m.style.height)).toBeGreaterThanOrEqual(240)
+  })
+
   it('calls onClose when the close button is clicked', () => {
     const onClose = vi.fn()
     render(<DocumentationModal onClose={onClose} />)

@@ -389,6 +389,16 @@ describe('EditSessionContext', () => {
     expect(screen.getByText('selectedVariables:humidity')).toBeInTheDocument()
   })
 
+  it('turning bulk edit off clears selectedVariables', () => {
+    renderWithRole('qca')
+    fireEvent.click(screen.getByText('toggle bulk'))
+    fireEvent.click(screen.getByText('toggle temperature'))
+    expect(screen.getByText('selectedVariables:temperature')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByText('toggle bulk'))
+    expect(screen.getByText('selectedVariables:none')).toBeInTheDocument()
+  })
+
   it('changing the file resets selectedVariables', async () => {
     renderWithRole('qca')
     fireEvent.click(screen.getByTestId('set-file'))

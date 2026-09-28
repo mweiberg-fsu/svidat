@@ -17,8 +17,6 @@ function Driver() {
   const {
     openSession,
     setFlagSelection,
-    flagsVisible,
-    climatologyVisible,
     bulkEdit,
     toggleBulkEdit,
     flagAppliedAt,
@@ -27,8 +25,6 @@ function Driver() {
   } = useEditSession()
   return (
     <div>
-      <span data-testid="flags-visible">{String(flagsVisible)}</span>
-      <span data-testid="climatology-visible">{String(climatologyVisible)}</span>
       <span data-testid="bulk-edit">{String(bulkEdit)}</span>
       <span data-testid="flag-applied-at">{flagAppliedAt}</span>
       <span data-testid="selected-variables">{selectedVariables.join(',')}</span>
@@ -190,37 +186,10 @@ describe('FlagsPanel', () => {
     expect(applyFlagSpy).not.toHaveBeenCalled()
   })
 
-  it('renders the mode row: Show flags checked by default', () => {
+  it('no longer renders the Show flags / Show climo toggles (moved to the secondary navbar)', () => {
     renderPanel()
-    const showFlags = screen.getByLabelText('Show flags') as HTMLInputElement
-    expect(showFlags.checked).toBe(true)
-    expect(screen.queryByLabelText(/^Bulk edit/)).not.toBeInTheDocument()
-  })
-
-  it('clicking "Show flags" toggles flagsVisible', () => {
-    renderPanel()
-    expect(screen.getByTestId('flags-visible')).toHaveTextContent('true')
-
-    fireEvent.click(screen.getByLabelText('Show flags'))
-    expect(screen.getByTestId('flags-visible')).toHaveTextContent('false')
-
-    fireEvent.click(screen.getByLabelText('Show flags'))
-    expect(screen.getByTestId('flags-visible')).toHaveTextContent('true')
-  })
-
-  it('renders "Show Climo" unchecked by default', () => {
-    renderPanel()
-    const box = screen.getByLabelText('Show Climo') as HTMLInputElement
-    expect(box.checked).toBe(false)
-  })
-
-  it('clicking "Show Climo" toggles climatologyVisible', () => {
-    renderPanel()
-    expect(screen.getByTestId('climatology-visible')).toHaveTextContent('false')
-    fireEvent.click(screen.getByLabelText('Show Climo'))
-    expect(screen.getByTestId('climatology-visible')).toHaveTextContent('true')
-    fireEvent.click(screen.getByLabelText('Show Climo'))
-    expect(screen.getByTestId('climatology-visible')).toHaveTextContent('false')
+    expect(screen.queryByLabelText('Show flags')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Show climo')).not.toBeInTheDocument()
   })
 
   it('with bulk edit off, applying a code still calls applyFlag only for the selected variable', async () => {

@@ -48,10 +48,6 @@ export function FlagsPanel() {
     flagSelection,
     setFlagSelection,
     notifyFlagged,
-    flagsVisible,
-    toggleFlagsVisible,
-    climatologyVisible,
-    toggleClimatologyVisible,
     bulkEdit,
     selectedVariables,
   } = useEditSession()
@@ -114,20 +110,6 @@ export function FlagsPanel() {
 
   return (
     <div className="sidebar-flags-panel">
-      <div className="sidebar-flags-panel-modes">
-        <label>
-          <input type="checkbox" checked={flagsVisible} onChange={toggleFlagsVisible} />
-          Show flags
-        </label>
-        <label>
-          <input
-            type="checkbox"
-            checked={climatologyVisible}
-            onChange={toggleClimatologyVisible}
-          />
-          Show Climo
-        </label>
-      </div>
       <p className="sidebar-flags-panel-status">
         {flagSelection
           ? `${flagSelection.rangeLabel} — ${pointCount} points selected`

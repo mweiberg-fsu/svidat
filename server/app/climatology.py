@@ -5,12 +5,19 @@ Source files are sparse: each lists only ocean cells of a 1x1 degree grid
 scattered onto a dense (12, 180, 360) grid once per process and cached.
 Missing cells are gap-filled from the nearest populated cell within
 FILL_RADIUS_CELLS so ship tracks near coasts/ports still get a value.
+
+Most SAMOS variables map to one file directly. A few are converted (RRATE)
+or derived per observation from several files' looked-up values (DIR from
+the mean wind vector, TD from mean specific humidity + pressure) -- these
+are approximations: a quantity of monthly means is not the monthly mean of
+the quantity.
 """
 import logging
 import re
 import threading
 from pathlib import Path
-from typing import Dict, List, Optional
+from dataclasses import dataclass
+from typing import Callable, Dict, List, Optional, Tuple
 
 import netCDF4
 import numpy as np
@@ -19,14 +26,55 @@ from app import storage
 
 logger = logging.getLogger(__name__)
 
-VAR_TO_FILE = {
-    "T": "atemp.nc",
-    "RH": "RH.NC",
-    "P": "SLP.NC",
-    "TS": "SST.NC",
-    "SPD": "W3.NC",
-}
 FILL_RADIUS_CELLS = 2
+# Below this mean-vector speed (m/s) the mean direction is meaningless.
+MIN_MEAN_WIND_FOR_DIR = 0.5
+# Raw int16 values the packed files use for overflow/missing.
+_INT16_SENTINELS = (32767, -32768)
+
+
+def _identity(values: np.ndarray) -> np.ndarray:
+    return values
+
+
+def _mm_per_3h_to_mm_per_min(values: np.ndarray) -> np.ndarray:
+    return values / 180.0
+
+
+def _wind_from_direction(u: np.ndarray, v: np.ndarray) -> np.ndarray:
+    """Meteorological (blowing-FROM, clockwise from north) mean-wind direction."""
+    direction = np.degrees(np.arctan2(-u, -v)) % 360
+    return np.where(np.hypot(u, v) < MIN_MEAN_WIND_FOR_DIR, np.nan, direction)
+
+
+def _dewpoint(q_g_per_kg: np.ndarray, p_mb: np.ndarray) -> np.ndarray:
+    """Dew point (C) from specific humidity and pressure, Magnus formula."""
+    q = q_g_per_kg / 1000.0
+    vapor_pressure = q * p_mb / (0.622 + 0.378 * q)
+    with np.errstate(divide="ignore", invalid="ignore"):
+        x = np.log(vapor_pressure / 6.112)
+        td = 243.5 * x / (17.67 - x)
+    return np.where(q_g_per_kg > 0, td, np.nan)
+
+
+@dataclass(frozen=True)
+class Source:
+    files: Tuple[str, ...]
+    # Receives one looked-up array per file, in `files` order.
+    combine: Callable[..., np.ndarray] = _identity
+
+
+SOURCES: Dict[str, Source] = {
+    "T": Source(("atemp.nc",)),
+    "RH": Source(("RH.NC",)),
+    "P": Source(("SLP.NC",)),
+    "TS": Source(("SST.NC",)),
+    "SPD": Source(("W3.NC",)),
+    "RAD_SW": Source(("SHORTRAD.NC",)),
+    "RRATE": Source(("PRECIP6.NC",), _mm_per_3h_to_mm_per_min),
+    "DIR": Source(("U3.NC", "V3.NC"), _wind_from_direction),
+    "TD": Source(("QAIR.NC", "SLP.NC"), _dewpoint),
+}
 
 _cache: Dict[Path, np.ndarray] = {}
 _cache_lock = threading.Lock()
@@ -36,9 +84,9 @@ def climatology_dir() -> Path:
     return storage.base_dir() / "climatology"
 
 
-def climatology_key(var_name: str) -> Optional[str]:
-    """Climatology filename for a SAMOS variable (`T2` -> `atemp.nc`)."""
-    return VAR_TO_FILE.get(re.sub(r"\d+$", "", var_name))
+def climatology_source(var_name: str) -> Optional[Source]:
+    """Climatology source for a SAMOS variable (`T2` -> same as `T`)."""
+    return SOURCES.get(re.sub(r"\d+$", "", var_name))
 
 
 def clear_cache() -> None:
@@ -74,7 +122,11 @@ def _build_grid(path: Path) -> np.ndarray:
         ds.set_auto_mask(False)
         lat = np.asarray(ds.variables["lat"][:], dtype=float)
         lon = np.asarray(ds.variables["lon"][:], dtype=float)
-        clm = np.asarray(ds.variables["clm"][:], dtype=float)
+        clm_var = ds.variables["clm"]
+        clm = np.asarray(clm_var[:], dtype=float)
+        clm_var.set_auto_scale(False)
+        raw = np.asarray(clm_var[:])
+    clm[np.isin(raw, _INT16_SENTINELS)] = np.nan
 
     rows = np.rint(lat + 89.5).astype(int)
     cols = np.rint(lon - 0.5).astype(int) % 360
@@ -129,19 +181,23 @@ def series_for_track(
     """Per-obs climatology for each supported var; unsupported/missing omitted."""
     result: Dict[str, List[Optional[float]]] = {}
     for name in var_names:
-        filename = climatology_key(name)
-        if filename is None:
+        source = climatology_source(name)
+        if source is None:
             continue
         try:
-            grid = get_grid(filename)
+            grids = [get_grid(filename) for filename in source.files]
         except (OSError, KeyError):
             logger.warning(
-                "failed to load climatology grid %s for var %r", filename, name,
+                "failed to load climatology for var %r (%s)", name, source.files,
                 exc_info=True,
             )
             continue
-        if grid is None:
+        if any(grid is None for grid in grids):
             continue
-        values = lookup(grid, track["lat"], track["lon"], track["month"])
+        parts = [
+            lookup(grid, track["lat"], track["lon"], track["month"]) for grid in grids
+        ]
+        with np.errstate(invalid="ignore"):
+            values = source.combine(*parts)
         result[name] = [None if np.isnan(v) else float(v) for v in values]
     return result

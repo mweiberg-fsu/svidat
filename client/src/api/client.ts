@@ -1,4 +1,4 @@
-import type { AppConfig, CurrentUser, Catalog, ClimatologyResponse, OAuthSettings, TempSessionEntry, VariableDataResponse, ThemeSettings, ThemeSettingsUpdate } from './types'
+import type { AppConfig, CurrentUser, Catalog, ClimatologyResponse, ShipNames, OAuthSettings, TempSessionEntry, VariableDataResponse, ThemeSettings, ThemeSettingsUpdate } from './types'
 
 const BASE_URL = 'http://localhost:8000'
 const TOKEN_KEY = 'svidat_token'
@@ -240,6 +240,9 @@ export const fetchAvatarBlobUrl = async (userId: number): Promise<string | null>
 }
 
 export const getCatalog = (): Promise<Catalog> => apiFetch('/files/catalog').then((r) => r.json())
+
+export const getShipNames = (): Promise<ShipNames> =>
+  apiFetch('/files/ships').then((r) => r.json())
 
 export const getVariableData = (
   filename: string,

@@ -58,6 +58,7 @@ DEFAULT_DOCUMENTATION: List[Dict[str, str]] = [
             "- Drag on a row (admin/qca only) — select a point range and open the flag toolbar.\n"
             "- {{x_zoom}} — zoom the X axis.\n"
             "- {{y_zoom}} — zoom the Y axis.\n"
+            "- Hold both zoom modifiers and drag — box-zoom the X axis and that row's Y axis together.\n"
             "- {{undo}} or right-click — undo the last zoom.\n"
             "- {{redo}} or Shift+right-click — redo zoom.\n"
             "- Escape — cancel an open flag-selection popover.\n"

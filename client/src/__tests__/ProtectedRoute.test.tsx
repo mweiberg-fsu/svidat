@@ -63,4 +63,17 @@ describe('ProtectedRoute', () => {
     renderProtected(['/private'], ['admin'])
     expect(screen.getByText('login page')).toBeInTheDocument()
   })
+
+  it('lays out a secondary navbar above the page content, beside the sidebar', () => {
+    setToken('abc123')
+    localStorage.setItem('svidat_role', JSON.stringify(['qca']))
+    renderProtected(['/private'])
+    const content = screen.getByText('private content')
+    const main = content.closest('.app-main')!
+    const column = main.parentElement!
+    expect(column).toHaveClass('app-content')
+    expect(column.firstElementChild).toHaveClass('secondary-navbar')
+    // The column sits next to the sidebar inside .app-body.
+    expect(column.previousElementSibling).toHaveClass('sidebar')
+  })
 })

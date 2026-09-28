@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { Sidebar } from '../components/Sidebar'
 import { AuthProvider } from '../context/AuthContext'
@@ -8,16 +8,9 @@ import { EditSessionProvider, useEditSession } from '../context/EditSessionConte
 import { setToken } from '../api/client'
 import * as apiClient from '../api/client'
 
-function SessionDriver() {
-  const sel = usePlotSelection()
-  const { openSession } = useEditSession()
-  return (
-    <>
-      <button onClick={() => sel.setFile('FILE_A')}>set file</button>
-      <button onClick={() => openSession()}>open session</button>
-    </>
-  )
-}
+vi.mock('../components/ShipTrackModal', () => ({
+  ShipTrackModal: () => <div>ship-track-modal</div>,
+}))
 
 function renderSidebar(role: string) {
   localStorage.clear()
@@ -45,23 +38,43 @@ describe('Sidebar', () => {
     vi.spyOn(apiClient, 'getMySessions').mockResolvedValue([])
   })
 
+  it('publishes its width as --sidebar-width so the navbar can align to it', () => {
+    const { container } = renderSidebar('qca')
+    const root = document.documentElement
+    expect(root.style.getPropertyValue('--sidebar-width')).toBe('250px')
+
+    const handle = container.querySelector('.sidebar-resize-handle')!
+    fireEvent.mouseDown(handle)
+    fireEvent.mouseMove(window, { clientX: 320 })
+    fireEvent.mouseUp(window)
+    expect(root.style.getPropertyValue('--sidebar-width')).toBe('320px')
+  })
+
+  it('no longer has Plots, Profile or Admin links (they live in the navbar)', () => {
+    vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
+    renderSidebar('admin')
+    expect(screen.queryByText('Plots')).not.toBeInTheDocument()
+    expect(screen.queryByText('Profile')).not.toBeInTheDocument()
+    expect(screen.queryByText('Admin')).not.toBeInTheDocument()
+  })
+
+  it('shows a labelled Dark mode switch on the line below the username', () => {
+    const { container } = renderSidebar('qca')
+    const textBlock = container.querySelector('.sidebar-welcome-text')!
+    const switchLabel = textBlock.querySelector('.color-mode-switch')!
+    // Comes after the username in the same column.
+    const username = textBlock.querySelector('b')!
+    expect(username.compareDocumentPosition(switchLabel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(switchLabel.querySelector('[role="switch"]')).toHaveAccessibleName('Dark mode')
+    // Visible text, not just a screen-reader label.
+    expect(container.querySelector('.sidebar-color-mode .color-mode-switch-label')).toHaveTextContent('Dark mode')
+  })
+
   it('shows welcome message with username', () => {
     vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
     renderSidebar('qca')
     expect(screen.getByText('testuser')).toBeInTheDocument()
     expect(screen.getByText('Welcome')).toBeInTheDocument()
-  })
-
-  it('shows Admin link only for admin role', () => {
-    vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
-    renderSidebar('admin')
-    expect(screen.getByText('Admin')).toBeInTheDocument()
-  })
-
-  it('hides Admin link for non-admin role', () => {
-    vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
-    renderSidebar('qca')
-    expect(screen.queryByText('Admin')).not.toBeInTheDocument()
   })
 
   it('shows an Audit History link for every role, including user', () => {
@@ -90,6 +103,59 @@ describe('Sidebar', () => {
     expect(screen.queryByRole('tab', { name: 'Overview' })).not.toBeInTheDocument()
   })
 
+  it('groups Audit History, Documentation and Keybinds under a WIDGETS header', () => {
+    vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
+    renderSidebar('user')
+    const heading = screen.getByRole('heading', { name: 'Widgets' })
+    expect(heading).toHaveClass('sidebar-section-heading')
+    const section = heading.parentElement!
+    expect(
+      Array.from(section.querySelectorAll('button')).map((b) => b.textContent)
+    ).toEqual(['Audit History', 'Documentation', 'Keybinds', 'Ship Track'])
+    expect(section.firstElementChild).toBe(heading)
+  })
+
+  it('opening one widget modal leaves the others open', () => {
+    vi.spyOn(apiClient, 'getAuditHistory').mockResolvedValue([])
+    const { container } = renderSidebar('qca')
+    fireEvent.click(screen.getByText('Keybinds'))
+    fireEvent.click(screen.getByText('Ship Track'))
+    fireEvent.click(screen.getByText('Documentation'))
+    expect(container.querySelector('.keybinds-modal')).not.toBeNull()
+    expect(screen.getByText('ship-track-modal')).toBeInTheDocument()
+    expect(container.querySelector('.documentation-modal')).not.toBeNull()
+  })
+
+  it('has a Ship Track link under Keybinds that opens the Ship Track modal', () => {
+    vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
+    renderSidebar('user')
+    const links = Array.from(document.querySelectorAll('.sidebar-links button')).map((b) => b.textContent)
+    expect(links.slice(-2)).toEqual(['Keybinds', 'Ship Track'])
+    fireEvent.click(screen.getByText('Ship Track'))
+    expect(screen.getByText('ship-track-modal')).toBeInTheDocument()
+  })
+
+  it('shows a Keybinds link right under Documentation that opens the keybinds panel', () => {
+    vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
+    renderSidebar('user')
+    const docs = screen.getByText('Documentation')
+    const keybinds = screen.getByText('Keybinds')
+    expect(docs.nextElementSibling).toBe(keybinds)
+
+    fireEvent.click(keybinds)
+    expect(document.querySelector('.keybinds-modal')).toBeInTheDocument()
+
+    // Panels can be open together; each closes on its own.
+    fireEvent.click(docs)
+    expect(document.querySelector('.keybinds-modal')).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Overview' })).toBeInTheDocument()
+
+    const keybindsModal = document.querySelector<HTMLElement>('.keybinds-modal')!
+    fireEvent.click(within(keybindsModal).getByLabelText('Close'))
+    expect(document.querySelector('.keybinds-modal')).not.toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Overview' })).toBeInTheDocument()
+  })
+
   it('opens the audit history modal when the link is clicked, and closes it', async () => {
     vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
     renderSidebar('qca')
@@ -104,7 +170,7 @@ describe('Sidebar', () => {
     expect(screen.queryByText('Select a file to view its audit history.')).not.toBeInTheDocument()
   })
 
-  it('closes the audit history modal when the documentation link is clicked', async () => {
+  it('keeps the audit history modal open when the documentation link is clicked', async () => {
     vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
     renderSidebar('qca')
 
@@ -114,10 +180,10 @@ describe('Sidebar', () => {
     fireEvent.click(screen.getByText('Documentation'))
 
     expect(screen.getByRole('tab', { name: 'Overview' })).toBeInTheDocument()
-    expect(screen.queryByText('Select a file to view its audit history.')).not.toBeInTheDocument()
+    expect(screen.getByText('Select a file to view its audit history.')).toBeInTheDocument()
   })
 
-  it('closes the documentation modal when the audit history link is clicked', async () => {
+  it('keeps the documentation modal open when the audit history link is clicked', async () => {
     vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
     renderSidebar('qca')
 
@@ -127,7 +193,7 @@ describe('Sidebar', () => {
     fireEvent.click(screen.getByText('Audit History'))
 
     await waitFor(() => expect(screen.getByText('Select a file to view its audit history.')).toBeInTheDocument())
-    expect(screen.queryByRole('tab', { name: 'Overview' })).not.toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Overview' })).toBeInTheDocument()
   })
 
   it('renders no tabs outside /files', async () => {
@@ -151,7 +217,7 @@ describe('Sidebar', () => {
     expect(screen.queryByRole('tab', { name: 'File Selection' })).not.toBeInTheDocument()
   })
 
-  it('renders File Selection and Flags tabs on /files, File Selection active by default', async () => {
+  it('renders File Selection and Flags tabs on /plot, File Selection active by default', async () => {
     vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
     localStorage.clear()
     setToken('tok')
@@ -159,7 +225,7 @@ describe('Sidebar', () => {
     localStorage.setItem('svidat_username', 'testuser')
     render(
       <AuthProvider>
-        <MemoryRouter initialEntries={['/files']}>
+        <MemoryRouter initialEntries={['/plot']}>
           <PlotSelectionProvider>
             <EditSessionProvider>
               <Sidebar />
@@ -184,7 +250,7 @@ describe('Sidebar', () => {
     localStorage.setItem('svidat_username', 'testuser')
     render(
       <AuthProvider>
-        <MemoryRouter initialEntries={['/files']}>
+        <MemoryRouter initialEntries={['/plot']}>
           <PlotSelectionProvider>
             <EditSessionProvider>
               <Sidebar />
@@ -224,7 +290,7 @@ describe('Sidebar', () => {
 
     render(
       <AuthProvider>
-        <MemoryRouter initialEntries={['/files']}>
+        <MemoryRouter initialEntries={['/plot']}>
           <PlotSelectionProvider>
             <EditSessionProvider>
               <SelectDriver />
@@ -273,7 +339,7 @@ describe('Sidebar', () => {
 
     render(
       <AuthProvider>
-        <MemoryRouter initialEntries={['/files']}>
+        <MemoryRouter initialEntries={['/plot']}>
           <PlotSelectionProvider>
             <EditSessionProvider>
               <CloseDriver />
@@ -296,182 +362,6 @@ describe('Sidebar', () => {
     await waitFor(() =>
       expect(screen.getByRole('tab', { name: 'File Selection' })).toHaveAttribute('aria-selected', 'true')
     )
-  })
-
-  it('highlights the Plots link when on /files', async () => {
-    vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
-    localStorage.clear()
-    setToken('tok')
-    localStorage.setItem('svidat_role', JSON.stringify(['qca']))
-    localStorage.setItem('svidat_username', 'testuser')
-    render(
-      <AuthProvider>
-        <MemoryRouter initialEntries={['/files']}>
-          <PlotSelectionProvider>
-            <EditSessionProvider>
-              <Sidebar />
-            </EditSessionProvider>
-          </PlotSelectionProvider>
-        </MemoryRouter>
-      </AuthProvider>
-    )
-    await waitFor(() => expect(screen.getByText('Plots')).toHaveClass('active'))
-    expect(screen.getByText('Profile')).not.toHaveClass('active')
-  })
-
-  it('highlights the Profile link when on /profile', async () => {
-    vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
-    localStorage.clear()
-    setToken('tok')
-    localStorage.setItem('svidat_role', JSON.stringify(['qca']))
-    localStorage.setItem('svidat_username', 'testuser')
-    render(
-      <AuthProvider>
-        <MemoryRouter initialEntries={['/profile']}>
-          <PlotSelectionProvider>
-            <EditSessionProvider>
-              <Sidebar />
-            </EditSessionProvider>
-          </PlotSelectionProvider>
-        </MemoryRouter>
-      </AuthProvider>
-    )
-    await waitFor(() => expect(screen.getByText('Profile')).toHaveClass('active'))
-    expect(screen.getByText('Plots')).not.toHaveClass('active')
-  })
-
-  it('highlights the Admin link when on /admin/users', async () => {
-    vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
-    localStorage.clear()
-    setToken('tok')
-    localStorage.setItem('svidat_role', JSON.stringify(['admin']))
-    localStorage.setItem('svidat_username', 'testuser')
-    render(
-      <AuthProvider>
-        <MemoryRouter initialEntries={['/admin/users']}>
-          <PlotSelectionProvider>
-            <EditSessionProvider>
-              <Sidebar />
-            </EditSessionProvider>
-          </PlotSelectionProvider>
-        </MemoryRouter>
-      </AuthProvider>
-    )
-    await waitFor(() => expect(screen.getByText('Admin')).toHaveClass('active'))
-    expect(screen.getByText('Plots')).not.toHaveClass('active')
-  })
-
-  it('confirms before navigating when a session is open, and only navigates if confirmed', async () => {
-    vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
-    vi.spyOn(apiClient, 'openSession').mockResolvedValue({ status: 'opened' })
-    localStorage.clear()
-    setToken('tok')
-    localStorage.setItem('svidat_role', JSON.stringify(['qca']))
-    localStorage.setItem('svidat_username', 'testuser')
-    render(
-      <AuthProvider>
-        <MemoryRouter initialEntries={['/files']}>
-          <PlotSelectionProvider>
-            <EditSessionProvider>
-              <SessionDriver />
-              <Sidebar />
-            </EditSessionProvider>
-          </PlotSelectionProvider>
-        </MemoryRouter>
-      </AuthProvider>
-    )
-    fireEvent.click(screen.getByText('set file'))
-    fireEvent.click(screen.getByText('open session'))
-    await waitFor(() => expect(apiClient.openSession).toHaveBeenCalled())
-
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
-    fireEvent.click(screen.getByText('Profile'))
-    expect(confirmSpy).toHaveBeenCalledWith(
-      'You have an open edit session. Leave without closing it?'
-    )
-    // Cancelled — still on /files.
-    expect(screen.getByText('Plots')).toHaveClass('active')
-
-    confirmSpy.mockReturnValue(true)
-    fireEvent.click(screen.getByText('Profile'))
-    await waitFor(() => expect(screen.getByText('Profile')).toHaveClass('active'))
-  })
-
-  it('navigates without prompting when no session is open', async () => {
-    vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
-    const confirmSpy = vi.spyOn(window, 'confirm')
-    renderSidebar('qca')
-
-    fireEvent.click(screen.getByText('Plots'))
-
-    expect(confirmSpy).not.toHaveBeenCalled()
-    await waitFor(() => expect(screen.getByText('Plots')).toHaveClass('active'))
-  })
-
-  it('clicking the Plots link while already on /files does not reset the current file/query params', async () => {
-    vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
-    localStorage.clear()
-    setToken('tok')
-    localStorage.setItem('svidat_role', JSON.stringify(['qca']))
-    localStorage.setItem('svidat_username', 'testuser')
-
-    function FileReader() {
-      const sel = usePlotSelection()
-      return <span data-testid="current-file">{sel.file}</span>
-    }
-
-    render(
-      <AuthProvider>
-        <MemoryRouter initialEntries={['/files?ship=KAOU&year=2011&file=FILE_A&vars=temperature']}>
-          <PlotSelectionProvider>
-            <EditSessionProvider>
-              <FileReader />
-              <Sidebar />
-            </EditSessionProvider>
-          </PlotSelectionProvider>
-        </MemoryRouter>
-      </AuthProvider>
-    )
-    await waitFor(() => expect(screen.getByTestId('current-file')).toHaveTextContent('FILE_A'))
-
-    fireEvent.click(screen.getByText('Plots'))
-
-    expect(screen.getByTestId('current-file')).toHaveTextContent('FILE_A')
-  })
-
-  it('confirms before navigating when there are unresolved resumable sessions, and only navigates if confirmed', async () => {
-    vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({})
-    vi.spyOn(apiClient, 'getMySessions').mockResolvedValue([
-      { filename: 'shipx_2026-08-01', created_at: '2026-08-01T10:00:00', last_edited_at: '2026-08-01T10:05:00' },
-    ])
-    localStorage.clear()
-    setToken('tok')
-    localStorage.setItem('svidat_role', JSON.stringify(['qca']))
-    localStorage.setItem('svidat_username', 'testuser')
-    render(
-      <AuthProvider>
-        <MemoryRouter initialEntries={['/files']}>
-          <PlotSelectionProvider>
-            <EditSessionProvider>
-              <Sidebar />
-            </EditSessionProvider>
-          </PlotSelectionProvider>
-        </MemoryRouter>
-      </AuthProvider>
-    )
-    await waitFor(() => expect(screen.getByText('Continue editing?')).toBeInTheDocument())
-
-    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(false)
-    fireEvent.click(screen.getByText('Profile'))
-    expect(confirmSpy).toHaveBeenCalledWith(
-      'You have unresolved edits to continue or discard. Leave anyway?'
-    )
-    // Cancelled — still on /files.
-    expect(screen.getByText('Plots')).toHaveClass('active')
-
-    confirmSpy.mockReturnValue(true)
-    fireEvent.click(screen.getByText('Profile'))
-    await waitFor(() => expect(screen.getByText('Profile')).toHaveClass('active'))
   })
 
   it('does not show the resume prompt when there are no resumable sessions', async () => {
@@ -543,7 +433,7 @@ describe('Sidebar', () => {
 
     const { rerender } = render(
       <AuthProvider>
-        <MemoryRouter initialEntries={['/files']}>
+        <MemoryRouter initialEntries={['/plot']}>
           <PlotSelectionProvider>
             <EditSessionProvider>
               <Sidebar key="first" />
@@ -565,7 +455,7 @@ describe('Sidebar', () => {
     // the per-route ProtectedRoute -> Sidebar tree is.
     rerender(
       <AuthProvider>
-        <MemoryRouter initialEntries={['/files']}>
+        <MemoryRouter initialEntries={['/plot']}>
           <PlotSelectionProvider>
             <EditSessionProvider>
               <Sidebar key="second" />

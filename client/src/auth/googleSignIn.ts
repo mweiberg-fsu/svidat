@@ -57,7 +57,7 @@ export async function renderGoogleButton(
   // container (e.g. React StrictMode's double-invoked effect) would stack duplicate buttons.
   // Clear the container first to make this function idempotent for callers.
   container.innerHTML = ''
-  const isDark = window.matchMedia?.('(prefers-color-scheme: dark)').matches
+  const isDark = document.documentElement.dataset.theme === 'dark'
   window.google!.accounts.id.renderButton(container, {
     theme: isDark ? 'filled_black' : 'outline',
     size: 'large',

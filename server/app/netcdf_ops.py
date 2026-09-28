@@ -1,5 +1,5 @@
 import re
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import netCDF4
 import numpy as np
@@ -25,6 +25,19 @@ def _to_native(value):
     if isinstance(value, np.generic):
         return value.item()
     return value
+
+
+def read_site_name(path) -> Optional[str]:
+    """The file's `site` global attribute (the ship's name), or None if it's
+    missing, blank, or the file can't be read."""
+    try:
+        with netCDF4.Dataset(path, "r") as ds:
+            site = getattr(ds, "site", None)
+    except OSError:
+        return None
+    if not isinstance(site, str) or not site.strip():
+        return None
+    return site.strip()
 
 
 def get_metadata(path) -> Dict[str, Any]:

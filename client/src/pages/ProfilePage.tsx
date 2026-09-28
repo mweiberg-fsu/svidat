@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { ColorModeSwitch } from '../components/ColorModeSwitch'
 import { getMyAuditHistory, getMySessions, listDrafts, revertAuditEntry, uploadAvatar } from '../api/client'
 import type { AuditEntry } from '../api/types'
 import { useAvatar } from '../hooks/useAvatar'
 import { useAuth } from '../context/AuthContext'
+import { PLOT_PATH } from '../routes'
 
 const REVERTIBLE_ACTIONS = new Set(['point_edit', 'bulk_edit', 'flag_edit'])
 
@@ -144,6 +146,7 @@ export function ProfilePage() {
           />
         </label>
         {status && <p role="status" className="profile-status">{status}</p>}
+        <ColorModeSwitch className="profile-color-mode" />
       </div>
       {roles.includes('qca') && (
         <section className="profile-drafts">
@@ -153,10 +156,10 @@ export function ProfilePage() {
             {drafts.map((f) => (
               <li key={f}>
                 <a
-                  href={`/files?file=${encodeURIComponent(f)}&source=draft`}
+                  href={`${PLOT_PATH}?file=${encodeURIComponent(f)}&source=draft`}
                   onClick={(e) => {
                     e.preventDefault()
-                    navigate(`/files?file=${encodeURIComponent(f)}&source=draft`)
+                    navigate(`${PLOT_PATH}?file=${encodeURIComponent(f)}&source=draft`)
                   }}
                 >
                   {f}
@@ -209,10 +212,10 @@ export function ProfilePage() {
                   {files.map((f) => (
                     <li key={f}>
                       <a
-                        href={`/files?file=${encodeURIComponent(f)}`}
+                        href={`${PLOT_PATH}?file=${encodeURIComponent(f)}`}
                         onClick={(e) => {
                           e.preventDefault()
-                          navigate(`/files?file=${encodeURIComponent(f)}`)
+                          navigate(`${PLOT_PATH}?file=${encodeURIComponent(f)}`)
                         }}
                       >
                         {f}
@@ -256,10 +259,10 @@ export function ProfilePage() {
                 <span className="audit-history-entry-details">
                   {e.timestamp} —{' '}
                   <a
-                    href={`/files?file=${encodeURIComponent(e.filename ?? '')}`}
+                    href={`${PLOT_PATH}?file=${encodeURIComponent(e.filename ?? '')}`}
                     onClick={(ev) => {
                       ev.preventDefault()
-                      navigate(`/files?file=${encodeURIComponent(e.filename ?? '')}`)
+                      navigate(`${PLOT_PATH}?file=${encodeURIComponent(e.filename ?? '')}`)
                     }}
                   >
                     {e.filename}

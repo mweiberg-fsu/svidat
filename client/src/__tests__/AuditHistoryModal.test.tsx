@@ -98,7 +98,7 @@ describe('AuditHistoryModal', () => {
 
   it('fetches entries scoped to the selected file with no session filter when no session is open', async () => {
     const historySpy = vi.spyOn(apiClient, 'getAuditHistory').mockResolvedValue(entries)
-    renderModal('/files?file=shipx_2026-08-01')
+    renderModal('/plot?file=shipx_2026-08-01')
 
     await waitFor(() =>
       expect(historySpy).toHaveBeenCalledWith('shipx_2026-08-01', undefined)
@@ -113,7 +113,7 @@ describe('AuditHistoryModal', () => {
       session_started_at: '2026-09-14T10:00:00',
     })
     const historySpy = vi.spyOn(apiClient, 'getAuditHistory').mockResolvedValue(entries)
-    renderModal('/files?file=shipx_2026-08-01')
+    renderModal('/plot?file=shipx_2026-08-01')
     await waitFor(() =>
       expect(historySpy).toHaveBeenCalledWith('shipx_2026-08-01', undefined)
     )
@@ -127,7 +127,7 @@ describe('AuditHistoryModal', () => {
 
   it('no longer shows a filename link on each row (scope is implied by the single active file)', async () => {
     vi.spyOn(apiClient, 'getAuditHistory').mockResolvedValue(entries)
-    renderModal('/files?file=shipx_2026-08-01')
+    renderModal('/plot?file=shipx_2026-08-01')
 
     await waitFor(() => expect(screen.getByText(/salinity/)).toBeInTheDocument())
     expect(screen.queryByText('shipx_2026-08-01')).not.toBeInTheDocument()
@@ -135,7 +135,7 @@ describe('AuditHistoryModal', () => {
 
   it('shows Revert for a non-reverted point_edit and Reverted for an already-reverted entry', async () => {
     vi.spyOn(apiClient, 'getAuditHistory').mockResolvedValue(entries)
-    renderModal('/files?file=shipx_2026-08-01')
+    renderModal('/plot?file=shipx_2026-08-01')
 
     await waitFor(() => expect(screen.getAllByText('Revert')[0]).toBeInTheDocument())
     expect(screen.getByText('Reverted')).toBeInTheDocument()
@@ -143,14 +143,14 @@ describe('AuditHistoryModal', () => {
 
   it('shows Revert for a non-reverted flag_edit entry', async () => {
     vi.spyOn(apiClient, 'getAuditHistory').mockResolvedValue(entries)
-    renderModal('/files?file=shipx_2026-08-01')
+    renderModal('/plot?file=shipx_2026-08-01')
 
     await waitFor(() => expect(screen.getAllByText('Revert')).toHaveLength(2))
   })
 
   it('shows an empty-state message when a file is selected but has no entries', async () => {
     vi.spyOn(apiClient, 'getAuditHistory').mockResolvedValue([])
-    renderModal('/files?file=shipx_2026-08-01')
+    renderModal('/plot?file=shipx_2026-08-01')
 
     await waitFor(() => expect(screen.getByText('No edits yet.')).toBeInTheDocument())
   })
@@ -160,7 +160,7 @@ describe('AuditHistoryModal', () => {
     const revertSpy = vi
       .spyOn(apiClient, 'revertAuditEntry')
       .mockResolvedValue({ status: 'reverted' })
-    renderModal('/files?file=shipx_2026-08-01')
+    renderModal('/plot?file=shipx_2026-08-01')
     await waitFor(() => expect(screen.getAllByText('Revert')[0]).toBeInTheDocument())
 
     fireEvent.click(screen.getAllByText('Revert')[0])
@@ -174,7 +174,7 @@ describe('AuditHistoryModal', () => {
     vi.spyOn(apiClient, 'revertAuditEntry').mockRejectedValue(
       new Error('409: no active edit lock for this file')
     )
-    renderModal('/files?file=shipx_2026-08-01')
+    renderModal('/plot?file=shipx_2026-08-01')
     await waitFor(() => expect(screen.getAllByText('Revert')[0]).toBeInTheDocument())
 
     fireEvent.click(screen.getAllByText('Revert')[0])

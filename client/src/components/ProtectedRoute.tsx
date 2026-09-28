@@ -2,6 +2,7 @@ import { type ReactNode } from 'react'
 import { Navigate } from 'react-router-dom'
 import { Navbar } from './Navbar'
 import { Sidebar } from './Sidebar'
+import { SecondaryNavbar } from './SecondaryNavbar'
 import { useAuth } from '../context/AuthContext'
 import { PlotSelectionProvider } from '../context/PlotSelectionContext'
 import { EditSessionProvider } from '../context/EditSessionContext'
@@ -28,7 +29,10 @@ export function ProtectedRoute({
           <Navbar />
           <div className="app-body">
             <Sidebar />
-            <main className="app-main">{children}</main>
+            <div className="app-content">
+              <SecondaryNavbar />
+              <main className="app-main">{children}</main>
+            </div>
           </div>
         </div>
       </EditSessionProvider>

@@ -1,3 +1,6 @@
+import os
+from pathlib import Path
+
 from app import storage
 
 
@@ -118,6 +121,49 @@ def test_catalog_empty_when_no_raw_dir(client, auth_header, tmp_path, monkeypatc
     headers = auth_header("cataloguser6")
 
     resp = client.get("/files/catalog", headers=headers)
+    assert resp.status_code == 200
+    assert resp.json() == {}
+
+
+def _set_site(filename, site):
+    import netCDF4
+
+    path = Path(os.environ["DATA_DIR"]) / "raw" / f"{filename}.nc"
+    with netCDF4.Dataset(path, "a") as ds:
+        ds.site = site
+
+
+def test_ship_names_reads_site_from_each_ships_latest_file(client, auth_header, synthetic_nc):
+    synthetic_nc("SHNA_20250101v20001")
+    _set_site("SHNA_20250101v20001", "OLD NAME")
+    synthetic_nc("SHNA_20260101v20001")
+    _set_site("SHNA_20260101v20001", "NEW NAME")
+    synthetic_nc("SHNB_20250101v20001")  # no site attribute
+    headers = auth_header("shipnames1")
+
+    resp = client.get("/files/ships", headers=headers)
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["SHNA"] == "NEW NAME"
+    assert body["SHNB"] is None
+
+
+def test_ship_names_pick_up_a_newer_file(client, auth_header, synthetic_nc):
+    synthetic_nc("SHNC_20250101v20001")
+    _set_site("SHNC_20250101v20001", "FIRST")
+    headers = auth_header("shipnames2")
+    assert client.get("/files/ships", headers=headers).json()["SHNC"] == "FIRST"
+
+    synthetic_nc("SHNC_20250102v20001")
+    _set_site("SHNC_20250102v20001", "RENAMED")
+    assert client.get("/files/ships", headers=headers).json()["SHNC"] == "RENAMED"
+
+
+def test_ship_names_empty_when_no_raw_dir(client, auth_header, tmp_path, monkeypatch):
+    import app.storage as storage_module
+
+    monkeypatch.setattr(storage_module.settings, "data_dir", str(tmp_path / "none"))
+    resp = client.get("/files/ships", headers=auth_header("shipnames3"))
     assert resp.status_code == 200
     assert resp.json() == {}
 

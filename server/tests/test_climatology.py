@@ -8,7 +8,7 @@ from app import climatology, netcdf_ops
 from app.config import settings
 
 
-def write_clim(path: Path, points, values) -> None:
+def write_clim(path: Path, points, values, scale: float = 0.01) -> None:
     """Write a climatology file in the real UWM/COADS packed layout.
 
     points: list of (lat_center, lon_center) in degrees, lon 0..360.
@@ -27,12 +27,12 @@ def write_clim(path: Path, points, values) -> None:
         lon.add_offset = np.float32(-0.5)
         lon.set_auto_maskandscale(False)
         clm = ds.createVariable("clm", "i2", ("mon", "npoint"))
-        clm.scale_factor = np.float32(0.01)
+        clm.scale_factor = np.float32(scale)
         clm.add_offset = np.float32(0.0)
         clm.set_auto_maskandscale(False)
         lat[:] = np.rint(np.array([p[0] for p in points]) + 90.5).astype("i2")
         lon[:] = np.rint(np.array([p[1] for p in points]) + 0.5).astype("i2")
-        clm[:] = np.rint(np.asarray(values, dtype=float) / 0.01).astype("i2")
+        clm[:] = np.rint(np.asarray(values, dtype=float) / scale).astype("i2")
 
 
 def monthly(base: float, n_points: int = 1) -> np.ndarray:
@@ -51,20 +51,91 @@ def clim_dir(tmp_path, monkeypatch):
 @pytest.mark.parametrize(
     "name,expected",
     [
-        ("T", "atemp.nc"),
-        ("T2", "atemp.nc"),
-        ("RH", "RH.NC"),
-        ("P", "SLP.NC"),
-        ("TS", "SST.NC"),
-        ("TS2", "SST.NC"),
-        ("SPD", "W3.NC"),
+        ("T", ("atemp.nc",)),
+        ("T2", ("atemp.nc",)),
+        ("RH", ("RH.NC",)),
+        ("P", ("SLP.NC",)),
+        ("TS", ("SST.NC",)),
+        ("TS2", ("SST.NC",)),
+        ("SPD", ("W3.NC",)),
+        ("RAD_SW", ("SHORTRAD.NC",)),
+        ("RRATE", ("PRECIP6.NC",)),
+        ("DIR", ("U3.NC", "V3.NC")),
+        ("TD", ("QAIR.NC", "SLP.NC")),
         ("PL_WSPD", None),
-        ("DIR", None),
+        ("RAD_LW", None),
+        ("PRECIP", None),
         ("lat", None),
     ],
 )
-def test_climatology_key(name, expected):
-    assert climatology.climatology_key(name) == expected
+def test_climatology_source_files(name, expected):
+    source = climatology.climatology_source(name)
+    assert (source.files if source else None) == expected
+
+
+def _single_point_track(month: int = 1):
+    return {"lat": np.array([0.5]), "lon": np.array([0.5]), "month": np.array([month])}
+
+
+def _write_const(path: Path, value: float, scale: float = 0.01) -> None:
+    write_clim(path, [(0.5, 0.5)], np.full((12, 1), value), scale=scale)
+
+
+def test_rrate_converts_mm_per_3h_to_mm_per_min(clim_dir):
+    _write_const(clim_dir / "PRECIP6.NC", 1.8, scale=0.001)
+    out = climatology.series_for_track(_single_point_track(), ["RRATE"])
+    assert out["RRATE"][0] == pytest.approx(0.01)
+
+
+@pytest.mark.parametrize(
+    "u,v,expected",
+    [
+        (0.0, -5.0, 0.0),  # blowing south = wind FROM north
+        (-5.0, 0.0, 90.0),  # from east
+        (0.0, 5.0, 180.0),  # from south
+        (5.0, 0.0, 270.0),  # from west
+    ],
+)
+def test_dir_is_meteorological_direction_of_mean_wind(clim_dir, u, v, expected):
+    _write_const(clim_dir / "U3.NC", u)
+    _write_const(clim_dir / "V3.NC", v)
+    out = climatology.series_for_track(_single_point_track(), ["DIR"])
+    assert out["DIR"][0] == pytest.approx(expected)
+
+
+def test_dir_is_null_when_mean_wind_is_near_calm(clim_dir):
+    _write_const(clim_dir / "U3.NC", 0.1)
+    _write_const(clim_dir / "V3.NC", 0.1)
+    out = climatology.series_for_track(_single_point_track(), ["DIR"])
+    assert out["DIR"] == [None]
+
+
+def test_td_from_specific_humidity_and_pressure(clim_dir):
+    # q = 10 g/kg at 1013 mb -> e ~= 16.19 mb -> Td ~= 14.2 C (Magnus).
+    _write_const(clim_dir / "QAIR.NC", 10.0, scale=0.001)
+    _write_const(clim_dir / "SLP.NC", 1013.0, scale=0.1)  # 1013 fits int16 at 0.1
+    out = climatology.series_for_track(_single_point_track(), ["TD"])
+    assert out["TD"][0] == pytest.approx(14.2, abs=0.05)
+
+
+def test_td_is_null_for_zero_humidity(clim_dir):
+    _write_const(clim_dir / "QAIR.NC", 0.0, scale=0.001)
+    _write_const(clim_dir / "SLP.NC", 1013.0, scale=0.1)
+    out = climatology.series_for_track(_single_point_track(), ["TD"])
+    assert out["TD"] == [None]
+
+
+def test_derived_var_omitted_when_any_input_file_missing(clim_dir):
+    _write_const(clim_dir / "QAIR.NC", 10.0, scale=0.001)  # no SLP.NC
+    out = climatology.series_for_track(_single_point_track(), ["TD"])
+    assert out == {}
+
+
+def test_int16_overflow_sentinel_is_treated_as_missing(clim_dir):
+    # Real QAIR.NC has a few cells stuck at raw 32767 (32.767 g/kg).
+    _write_const(clim_dir / "QAIR.NC", 32.767, scale=0.001)
+    grid = climatology.get_grid("QAIR.NC")
+    assert np.isnan(grid[0, 90, 0])
 
 
 def test_grid_places_points_at_cell_centers(clim_dir):

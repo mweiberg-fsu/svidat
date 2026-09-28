@@ -11,6 +11,20 @@ export interface FlagSelection {
   rangeLabel: string
 }
 
+// The selected plot's displayed Y range — published by SvgPlot (which owns
+// the plot's zoom state) so the navbar's Y min/max inputs can show it.
+export interface YRange {
+  varName: string
+  min: number
+  max: number
+}
+
+// A typed Y range for SvgPlot to apply. `id` makes each request distinct so
+// re-submitting the same numbers (e.g. after an undo) still applies.
+export interface YRangeRequest extends YRange {
+  id: number
+}
+
 interface EditSessionState {
   sessionOpen: boolean
   sessionOpenedAt: string | null
@@ -28,6 +42,20 @@ interface EditSessionState {
   toggleFlagsVisible: () => void
   climatologyVisible: boolean
   toggleClimatologyVisible: () => void
+  pointsVisible: boolean
+  togglePointsVisible: () => void
+  activeYRange: YRange | null
+  setActiveYRange: (range: YRange | null) => void
+  // The plots' current X zoom window as inclusive sample indices (null =
+  // unzoomed), published by SvgPlot for the Ship Track map.
+  xWindow: [number, number] | null
+  setXWindow: (w: [number, number] | null) => void
+  // A sample index picked on the Ship Track map, drawn as a vertical line on
+  // every plot (null = none).
+  timeMarker: number | null
+  setTimeMarker: (idx: number | null) => void
+  yRangeRequest: YRangeRequest | null
+  requestYRange: (range: YRange) => void
   bulkEdit: boolean
   toggleBulkEdit: () => void
   selectedVariables: string[]
@@ -47,6 +75,11 @@ export function EditSessionProvider({ children }: { children: ReactNode }) {
   const [flagAppliedAt, setFlagAppliedAt] = useState(0)
   const [flagsVisible, setFlagsVisible] = useState(true)
   const [climatologyVisible, setClimatologyVisible] = useState(false)
+  const [pointsVisible, setPointsVisible] = useState(false)
+  const [activeYRange, setActiveYRange] = useState<YRange | null>(null)
+  const [xWindow, setXWindow] = useState<[number, number] | null>(null)
+  const [timeMarker, setTimeMarker] = useState<number | null>(null)
+  const [yRangeRequest, setYRangeRequest] = useState<YRangeRequest | null>(null)
   const [bulkEdit, setBulkEdit] = useState(false)
   const [selectedVariables, setSelectedVariables] = useState<string[]>([])
 
@@ -93,6 +126,13 @@ export function EditSessionProvider({ children }: { children: ReactNode }) {
     setFlagSelection(null)
     setSelectedVariables([])
   }, [file, variables])
+
+  // Panel selection only exists while bulk edit is on — turning it off (by
+  // the toggle, or a file change resetting it) drops any selected panels so
+  // they don't silently come back as bulk targets next time it's enabled.
+  useEffect(() => {
+    if (!bulkEdit) setSelectedVariables([])
+  }, [bulkEdit])
 
   // Warn before the user loses an open edit session (unsaved temp-file
   // edits + the DB lock) by closing the tab, refreshing, or navigating away
@@ -164,6 +204,9 @@ export function EditSessionProvider({ children }: { children: ReactNode }) {
   const notifyFlagged = () => setFlagAppliedAt((v) => v + 1)
   const toggleFlagsVisible = () => setFlagsVisible((v) => !v)
   const toggleClimatologyVisible = () => setClimatologyVisible((v) => !v)
+  const togglePointsVisible = () => setPointsVisible((v) => !v)
+  const requestYRange = (range: YRange) =>
+    setYRangeRequest((prev) => ({ ...range, id: (prev?.id ?? 0) + 1 }))
   const toggleBulkEdit = () => setBulkEdit((v) => !v)
   const toggleVariableSelected = (varName: string) => {
     setSelectedVariables((prev) =>
@@ -190,6 +233,16 @@ export function EditSessionProvider({ children }: { children: ReactNode }) {
         toggleFlagsVisible,
         climatologyVisible,
         toggleClimatologyVisible,
+        pointsVisible,
+        togglePointsVisible,
+        activeYRange,
+        setActiveYRange,
+        xWindow,
+        setXWindow,
+        timeMarker,
+        setTimeMarker,
+        yRangeRequest,
+        requestYRange,
         bulkEdit,
         toggleBulkEdit,
         selectedVariables,

@@ -70,7 +70,7 @@ describe('ProfilePage', () => {
     const link = screen.getByText('shipx_2026-07-30')
     expect(link.closest('a')).toHaveAttribute(
       'href',
-      '/files?file=shipx_2026-07-30&source=draft'
+      '/plot?file=shipx_2026-07-30&source=draft'
     )
   })
 

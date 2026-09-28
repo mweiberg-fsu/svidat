@@ -5,15 +5,19 @@ import { LoginPage } from './pages/LoginPage'
 import { FilesPage } from './pages/FilesPage'
 import { AdminUsersPage } from './pages/AdminUsersPage'
 import { ProfilePage } from './pages/ProfilePage'
+import { LegacyPlotRedirect, PLOT_PATH } from './routes'
+import { useFavicon } from './hooks/useFavicon'
 
 export default function App() {
+  // Tab icon follows the admin-set logo on every page, login included.
+  useFavicon()
   return (
     <AuthProvider>
       <BrowserRouter>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route
-            path="/files"
+            path={PLOT_PATH}
             element={
               <ProtectedRoute>
                 <FilesPage />
@@ -36,7 +40,8 @@ export default function App() {
               </ProtectedRoute>
             }
           />
-          <Route path="/" element={<Navigate to="/files" replace />} />
+          <Route path="/files" element={<LegacyPlotRedirect />} />
+          <Route path="/" element={<Navigate to={PLOT_PATH} replace />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

@@ -13,6 +13,7 @@ import { DEFAULT_SITE_NAME, useBranding } from '../theme'
 import { renderGoogleButton } from '../auth/googleSignIn'
 import { signInWithMicrosoft } from '../auth/microsoftSignIn'
 import type { LoginResponse } from '../api/types'
+import { PLOT_PATH } from '../routes'
 
 export function LoginPage() {
   const [username, setUsername] = useState('')
@@ -42,7 +43,7 @@ export function LoginPage() {
     setToken(response.access_token)
     const me = await getCurrentUser()
     auth.login(response.access_token, response.roles, me.username, me.id)
-    navigate('/files')
+    navigate(PLOT_PATH)
   }
 
   const completeOAuthLogin = async (pending: Promise<LoginResponse>) => {

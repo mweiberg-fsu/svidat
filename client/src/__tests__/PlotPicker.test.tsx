@@ -36,6 +36,48 @@ describe('PlotPicker', () => {
     vi.restoreAllMocks()
   })
 
+  it('shows ships as "NAME (CALLSIGN)", sorted by name, keeping the call sign as the value', async () => {
+    vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({
+      KAQP: { '2025': ['KAQP_20250101v20001'] },
+      WTDF: { '2025': ['WTDF_20250601v20001'] },
+      ZZZZ: { '2025': ['ZZZZ_20250601v20001'] },
+    })
+    vi.spyOn(apiClient, 'getShipNames').mockResolvedValue({
+      KAQP: 'ATLANTIS',
+      WTDF: 'HENRY B. BIGELOW',
+      ZZZZ: null,
+    })
+    renderPicker()
+
+    const select = (await screen.findByLabelText('Ship')) as HTMLSelectElement
+    await waitFor(() =>
+      expect(Array.from(select.options).map((o) => o.textContent)).toEqual([
+        'Select ship',
+        'ATLANTIS (KAQP)',
+        'HENRY B. BIGELOW (WTDF)',
+        'ZZZZ',
+      ])
+    )
+    expect(Array.from(select.options).map((o) => o.value)).toEqual(['', 'KAQP', 'WTDF', 'ZZZZ'])
+  })
+
+  it('falls back to bare call signs when ship names fail to load', async () => {
+    vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({
+      WTDF: { '2025': ['WTDF_20250601v20001'] },
+      KAQP: { '2025': ['KAQP_20250101v20001'] },
+    })
+    vi.spyOn(apiClient, 'getShipNames').mockRejectedValue(new Error('boom'))
+    renderPicker()
+
+    const select = (await screen.findByLabelText('Ship')) as HTMLSelectElement
+    expect(Array.from(select.options).map((o) => o.textContent)).toEqual([
+      'Select ship',
+      'KAQP',
+      'WTDF',
+    ])
+    expect(screen.queryByText(/Error:/)).not.toBeInTheDocument()
+  })
+
   it('cascades ship -> year -> file and resets downstream selections', async () => {
     vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({
       KAQP: { '2025': ['KAQP_20250101v20001'], '2026': ['KAQP_20260115v20001'] },
@@ -100,6 +142,70 @@ describe('PlotPicker', () => {
     )
   })
 
+  describe('Select all option', () => {
+    const openVariables = async () => {
+      vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({
+        KAQP: { '2025': ['KAQP_20250101v20001'] },
+      })
+      vi.spyOn(apiClient, 'getFileMetadata').mockResolvedValue({
+        variables: {
+          lat: { dims: ['time'], shape: [5], dtype: 'float32', attrs: {} },
+          T: { dims: ['time'], shape: [5], dtype: 'float32', attrs: {} },
+          RH: { dims: ['time'], shape: [5], dtype: 'float32', attrs: {} },
+        },
+        dimensions: { time: 5 },
+      })
+      renderPickerWithConsumer()
+      await waitFor(() => expect(screen.getByLabelText('Ship')).toBeInTheDocument())
+      fireEvent.change(screen.getByLabelText('Ship'), { target: { value: 'KAQP' } })
+      fireEvent.change(screen.getByLabelText('Year'), { target: { value: '2025' } })
+      fireEvent.change(screen.getByLabelText('File'), { target: { value: 'KAQP_20250101v20001' } })
+      await waitFor(() => expect(screen.getByLabelText('Variables')).toBeInTheDocument())
+      return screen.getByLabelText('Variables') as HTMLSelectElement
+    }
+    // Mimics the browser: set exactly these options selected, then fire change.
+    const choose = (select: HTMLSelectElement, values: string[]) => {
+      Array.from(select.options).forEach((o) => (o.selected = values.includes(o.value)))
+      fireEvent.change(select)
+    }
+
+    it('is the first option and selects every variable', async () => {
+      const select = await openVariables()
+      expect(select.options[0].textContent).toBe('Select all')
+
+      choose(select, ['__all__'])
+      await waitFor(() =>
+        expect(screen.getByTestId('selected-variables')).toHaveTextContent('variables:lat,T,RH')
+      )
+      // The option itself is never left highlighted.
+      expect(select.options[0].selected).toBe(false)
+    })
+
+    it('becomes "Deselect all" once everything is selected, and clears the selection', async () => {
+      const select = await openVariables()
+      choose(select, ['__all__'])
+      await waitFor(() => expect(select.options[0].textContent).toBe('Deselect all'))
+
+      choose(select, ['__all__'])
+      await waitFor(() =>
+        expect(screen.getByTestId('selected-variables')).toHaveTextContent(/^variables:$/)
+      )
+      expect(select.options[0].textContent).toBe('Select all')
+    })
+
+    it('Ctrl/Cmd-deselecting one variable after Select all keeps the rest', async () => {
+      const select = await openVariables()
+      choose(select, ['__all__'])
+      await waitFor(() =>
+        expect(screen.getByTestId('selected-variables')).toHaveTextContent('variables:lat,T,RH')
+      )
+      choose(select, ['lat', 'RH'])
+      await waitFor(() =>
+        expect(screen.getByTestId('selected-variables')).toHaveTextContent('variables:lat,RH')
+      )
+    })
+  })
+
   it('shows an error when fetching file metadata fails', async () => {
     vi.spyOn(apiClient, 'getCatalog').mockResolvedValue({
       KAQP: { '2025': ['KAQP_20250101v20001'] },
@@ -138,7 +244,7 @@ describe('PlotPicker', () => {
     await waitFor(() => expect(screen.getByLabelText('Variables')).toBeInTheDocument())
     const variablesSelect = screen.getByLabelText('Variables') as HTMLSelectElement
     const optionValues = Array.from(variablesSelect.options).map((o) => o.value)
-    expect(optionValues).toEqual(['temperature'])
+    expect(optionValues).toEqual(['__all__', 'temperature'])
   })
 
   it('lists variables in netCDF file order, not alphabetically', async () => {
@@ -165,7 +271,7 @@ describe('PlotPicker', () => {
     await waitFor(() => expect(screen.getByLabelText('Variables')).toBeInTheDocument())
     const variablesSelect = screen.getByLabelText('Variables') as HTMLSelectElement
     const optionValues = Array.from(variablesSelect.options).map((o) => o.value)
-    expect(optionValues).toEqual(['lat', 'lon', 'PL_HD', 'DIR', 'T'])
+    expect(optionValues).toEqual(['__all__', 'lat', 'lon', 'PL_HD', 'DIR', 'T'])
   })
 
   it('shows a multi-select hint next to the Variables label', async () => {
@@ -212,6 +318,6 @@ describe('PlotPicker', () => {
     await waitFor(() => expect(screen.getByLabelText('Variables')).toBeInTheDocument())
     const variablesSelect = screen.getByLabelText('Variables') as HTMLSelectElement
     const optionValues = Array.from(variablesSelect.options).map((o) => o.value)
-    expect(optionValues).toEqual(['lat', 'T'])
+    expect(optionValues).toEqual(['__all__', 'lat', 'T'])
   })
 })

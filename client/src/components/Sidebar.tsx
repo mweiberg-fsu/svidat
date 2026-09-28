@@ -90,16 +90,18 @@ export function Sidebar() {
   return (
     <aside className="sidebar" style={{ width }}>
       <div className="sidebar-welcome">
-        {avatarUrl ? (
-          <img className="sidebar-welcome-avatar" src={avatarUrl} alt="avatar" width={36} height={36} />
-        ) : (
-          <span className="sidebar-welcome-avatar sidebar-welcome-avatar-placeholder" aria-hidden="true" />
-        )}
-        <div className="sidebar-welcome-text">
-          Welcome
-          <b>{username}</b>
-          <ColorModeSwitch className="sidebar-color-mode" />
+        <div className="sidebar-welcome-row">
+          {avatarUrl ? (
+            <img className="sidebar-welcome-avatar" src={avatarUrl} alt="avatar" width={36} height={36} />
+          ) : (
+            <span className="sidebar-welcome-avatar sidebar-welcome-avatar-placeholder" aria-hidden="true" />
+          )}
+          <div className="sidebar-welcome-text">
+            Welcome
+            <b>{username}</b>
+          </div>
         </div>
+        <ColorModeSwitch className="sidebar-color-mode" />
       </div>
       <div className="sidebar-links">
         <h3 className="sidebar-section-heading">Widgets</h3>

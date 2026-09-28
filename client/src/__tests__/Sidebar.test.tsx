@@ -58,15 +58,17 @@ describe('Sidebar', () => {
     expect(screen.queryByText('Admin')).not.toBeInTheDocument()
   })
 
-  it('shows a labelled Dark mode switch on the line below the username', () => {
+  it('shows a labelled Dark mode switch on its own row under the avatar, left-aligned with it', () => {
     const { container } = renderSidebar('qca')
-    const textBlock = container.querySelector('.sidebar-welcome-text')!
-    const switchLabel = textBlock.querySelector('.color-mode-switch')!
-    // Comes after the username in the same column.
-    const username = textBlock.querySelector('b')!
-    expect(username.compareDocumentPosition(switchLabel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    const welcome = container.querySelector('.sidebar-welcome')!
+    const row = welcome.querySelector('.sidebar-welcome-row')!
+    const switchLabel = welcome.querySelector('.color-mode-switch')!
+    // Not in the avatar/name row, but after it, as a direct child of the block
+    // so it starts at the same left edge as the avatar.
+    expect(row.contains(switchLabel)).toBe(false)
+    expect(switchLabel.parentElement).toBe(welcome)
+    expect(row.compareDocumentPosition(switchLabel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(switchLabel.querySelector('[role="switch"]')).toHaveAccessibleName('Dark mode')
-    // Visible text, not just a screen-reader label.
     expect(container.querySelector('.sidebar-color-mode .color-mode-switch-label')).toHaveTextContent('Dark mode')
   })
 

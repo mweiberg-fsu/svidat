@@ -11,11 +11,14 @@ import {
   heldMatchesTrigger,
   matchesPointer,
   parseTrigger,
+  recordedLabel,
+  triggerKind,
   triggerLabel,
   useAppConfig,
+  validateCustomTrigger,
 } from '../appConfig'
 import { IS_MAC } from '../platform'
-import { renderHook } from '@testing-library/react'
+import { act, renderHook } from '@testing-library/react'
 
 const USER_KEYBINDINGS: KeyBindings = {
   x_zoom: 'alt',
@@ -181,5 +184,53 @@ describe('appConfig helpers', () => {
       const bindings = { ...DEFAULT_KEYBINDINGS, x_zoom: 'none/right/drag', y_zoom: 'none/middle/drag' }
       expect(findConflict(bindings)).toBeNull()
     })
+  })
+})
+
+describe('custom triggers', () => {
+  afterEach(() => {
+    applyConfig({ keybindings: DEFAULT_KEYBINDINGS, documentation: DEFAULT_DOCUMENTATION })
+  })
+
+  it('applyConfig exposes shared and personal lists, defaulting to []', () => {
+    const { result } = renderHook(() => useAppConfig())
+    expect(result.current.sharedTriggers).toEqual([])
+    expect(result.current.myTriggers).toEqual([])
+    act(() =>
+      applyConfig({
+        keybindings: DEFAULT_KEYBINDINGS,
+        documentation: DEFAULT_DOCUMENTATION,
+        custom_triggers: [{ name: 'Pan', trigger: 'none/middle/drag' }],
+        user_custom_triggers: [{ name: 'Mine', trigger: 'alt/right/click' }],
+      })
+    )
+    expect(result.current.sharedTriggers).toEqual([{ name: 'Pan', trigger: 'none/middle/drag' }])
+    expect(result.current.myTriggers).toEqual([{ name: 'Mine', trigger: 'alt/right/click' }])
+  })
+
+  it('triggerKind reads the action of valid canonical triggers only', () => {
+    expect(triggerKind('shift/left/drag')).toBe('drag')
+    expect(triggerKind('alt/right/click')).toBe('click')
+    expect(triggerKind('none/middle/dblclick')).toBe('click')
+    expect(triggerKind('shift')).toBeNull()
+    expect(triggerKind('none/left/click')).toBeNull()
+    expect(triggerKind('alt+shift/left/drag')).toBeNull()
+  })
+
+  it('recordedLabel labels any recorded trigger, including a plain click', () => {
+    expect(recordedLabel('none/left/click')).toBe('Click')
+    expect(recordedLabel('none/middle/drag')).toBe('Middle-drag')
+  })
+
+  it('validateCustomTrigger mirrors the server rules', () => {
+    const list = [{ name: 'Pan', trigger: 'none/middle/drag' }]
+    expect(validateCustomTrigger({ name: '  ', trigger: 'alt/right/click' }, list)).toMatch(/name/i)
+    expect(validateCustomTrigger({ name: 'x'.repeat(41), trigger: 'alt/right/click' }, list)).toMatch(/40/)
+    expect(validateCustomTrigger({ name: 'Other', trigger: 'none/left/click' }, list)).toMatch(/reserved/)
+    expect(validateCustomTrigger({ name: 'pan', trigger: 'alt/right/click' }, list)).toMatch(/already/)
+    expect(validateCustomTrigger({ name: 'Other', trigger: 'none/middle/drag' }, list)).toMatch(/"Pan"/)
+    const full = Array.from({ length: 50 }, (_, i) => ({ name: `t${i}`, trigger: `none/middle/drag` }))
+    expect(validateCustomTrigger({ name: 'new', trigger: 'alt/right/click' }, full)).toMatch(/50/)
+    expect(validateCustomTrigger({ name: 'Other', trigger: 'alt/right/click' }, list)).toBeNull()
   })
 })

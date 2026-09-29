@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react'
-import type { AppConfig, ClickTrigger, DocTab, DragTrigger, KeyBindings, Modifier } from './api/types'
+import type { AppConfig, ClickTrigger, CustomTrigger, DocTab, DragTrigger, KeyBindings, Modifier } from './api/types'
 import { IS_MAC } from './platform'
 
 // Mirrors server/app/app_config.py DEFAULT_KEYBINDINGS, so plot gestures work
@@ -123,6 +123,8 @@ interface ConfigState {
   defaultKeybindings: KeyBindings
   userKeybindings: KeyBindings | null
   documentation: DocTab[]
+  sharedTriggers: CustomTrigger[]
+  myTriggers: CustomTrigger[]
 }
 
 let state: ConfigState = {
@@ -130,6 +132,8 @@ let state: ConfigState = {
   defaultKeybindings: DEFAULT_KEYBINDINGS,
   userKeybindings: null,
   documentation: DEFAULT_DOCUMENTATION,
+  sharedTriggers: [],
+  myTriggers: [],
 }
 const listeners = new Set<() => void>()
 
@@ -145,6 +149,8 @@ export function applyConfig(config: AppConfig) {
     defaultKeybindings: defaults,
     userKeybindings: mine,
     documentation: config.documentation,
+    sharedTriggers: config.custom_triggers ?? [],
+    myTriggers: config.user_custom_triggers ?? [],
   }
   listeners.forEach((l) => l())
 }
@@ -220,6 +226,48 @@ export function parseTrigger(t: string, kind: Kind): TriggerSpec | null {
 export function canonicalTrigger(t: string, kind: Kind): string | null {
   const s = parseTrigger(t, kind)
   return s ? `${s.mods.join('+') || 'none'}/${s.button}/${s.action}` : null
+}
+
+// Keep in sync with server/app/schemas.py.
+export const MAX_CUSTOM_TRIGGERS = 50
+export const MAX_CUSTOM_TRIGGER_NAME_LENGTH = 40
+
+// Gesture kind of a canonical trigger, from its action (mirrors
+// server/app/triggers.py trigger_kind), or null when `t` isn't a valid
+// canonical trigger. Legacy tokens give null: "shift" fits both kinds.
+export function triggerKind(t: string): Kind | null {
+  const pieces = t.split('/')
+  if (pieces.length !== 3) return null
+  const kind: Kind = pieces[2] === 'drag' ? 'drag' : 'click'
+  return parseTrigger(t, kind) ? kind : null
+}
+
+// Label for anything the recorder can capture, including the plain left
+// click that no gesture accepts (triggerLabel would return it raw).
+export function recordedLabel(t: string): string {
+  if (t === 'none/left/click') return 'Click'
+  return triggerLabel(t, triggerKind(t) ?? 'click')
+}
+
+// First problem with adding `entry` to `list`, or null. Mirrors the
+// server's CustomTrigger/CustomTriggerList validation.
+export function validateCustomTrigger(entry: CustomTrigger, list: CustomTrigger[]): string | null {
+  const name = entry.name.trim()
+  if (!name) return 'Give the keybind a name.'
+  if (name.length > MAX_CUSTOM_TRIGGER_NAME_LENGTH)
+    return `Names can be at most ${MAX_CUSTOM_TRIGGER_NAME_LENGTH} characters.`
+  const kind = triggerKind(entry.trigger)
+  if (!kind) {
+    return entry.trigger === 'none/left/click'
+      ? 'A plain left click is reserved for selecting a row.'
+      : 'Record a keybind first.'
+  }
+  if (list.length >= MAX_CUSTOM_TRIGGERS) return `At most ${MAX_CUSTOM_TRIGGERS} custom keybinds.`
+  if (list.some((t) => t.name.trim().toLowerCase() === name.toLowerCase())) return `"${name}" is already used.`
+  const canon = canonicalTrigger(entry.trigger, kind)
+  const dup = list.find((t) => t.trigger === canon)
+  if (dup) return `Same keybind as "${dup.name}".`
+  return null
 }
 
 function heldModifiers(e: { shiftKey: boolean; ctrlKey: boolean; altKey: boolean; metaKey: boolean }): Modifier[] {

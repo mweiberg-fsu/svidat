@@ -1,4 +1,4 @@
-import type { AppConfig, CurrentUser, Catalog, ClimatologyResponse, KeyBindings, ShipNames, OAuthSettings, TempSessionEntry, VariableDataResponse, ThemeSettings, ThemeSettingsUpdate } from './types'
+import type { AppConfig, CurrentUser, CustomTrigger, Catalog, ClimatologyResponse, KeyBindings, ShipNames, OAuthSettings, TempSessionEntry, VariableDataResponse, ThemeSettings, ThemeSettingsUpdate } from './types'
 
 const BASE_URL = 'http://localhost:8000'
 const TOKEN_KEY = 'svidat_token'
@@ -189,6 +189,18 @@ export const saveMyKeybindings = (keybindings: KeyBindings): Promise<AppConfig> 
 
 export const resetMyKeybindings = (): Promise<AppConfig> =>
   apiFetch('/users/me/keybindings', { method: 'DELETE' }).then((r) => r.json())
+
+export const saveMyCustomTriggers = (customTriggers: CustomTrigger[]): Promise<AppConfig> =>
+  apiFetch('/users/me/custom-triggers', {
+    method: 'PUT',
+    body: JSON.stringify({ custom_triggers: customTriggers }),
+  }).then((r) => r.json())
+
+export const saveSharedCustomTriggers = (customTriggers: CustomTrigger[]): Promise<AppConfig> =>
+  apiFetch('/admin/config/custom-triggers', {
+    method: 'PUT',
+    body: JSON.stringify({ custom_triggers: customTriggers }),
+  }).then((r) => r.json())
 
 export const uploadThemeLogo = (file: File): Promise<ThemeSettings> => {
   const form = new FormData()

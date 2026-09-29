@@ -115,8 +115,17 @@ export interface DocTab {
   body: string
 }
 
+// A named, user-recorded trigger. `trigger` is always canonical
+// "<mods>/<button>/<action>"; its action decides which gestures it fits.
+export interface CustomTrigger {
+  name: string
+  trigger: string
+}
+
 export interface AppConfig {
   keybindings: KeyBindings
   user_keybindings?: KeyBindings | null
   documentation: DocTab[]
+  custom_triggers?: CustomTrigger[]
+  user_custom_triggers?: CustomTrigger[]
 }

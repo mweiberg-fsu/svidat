@@ -12,7 +12,7 @@ from app.database import get_db
 from app.deps import get_current_user, require_role
 from app.file_locks import file_write_lock
 from app.models import Role, User
-from app.schemas import AppConfigOut, KeyBindings, UserCreate, UserOut, UserRolesUpdate
+from app.schemas import AppConfigOut, CustomTriggerList, KeyBindings, UserCreate, UserOut, UserRolesUpdate
 from app.security import hash_password
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -41,6 +41,18 @@ def reset_my_keybindings(
     user: User = Depends(get_current_user),
 ):
     user.keybindings = None
+    db.commit()
+    db.refresh(user)
+    return config_to_dict(get_or_create_config(db), user)
+
+
+@router.put("/me/custom-triggers", response_model=AppConfigOut)
+def save_my_custom_triggers(
+    payload: CustomTriggerList,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    user.custom_triggers = json.dumps([t.model_dump() for t in payload.custom_triggers])
     db.commit()
     db.refresh(user)
     return config_to_dict(get_or_create_config(db), user)

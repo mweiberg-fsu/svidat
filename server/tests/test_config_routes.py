@@ -180,3 +180,28 @@ def test_get_config_custom_triggers_empty_by_default(client, auth_header):
     body = client.get("/config", headers=headers).json()
     assert body["custom_triggers"] == []
     assert body["user_custom_triggers"] == []
+
+
+SHARED = {"custom_triggers": [{"name": "Pan", "trigger": "none/middle/drag"}]}
+
+
+def test_update_shared_custom_triggers_visible_to_everyone(client, auth_header):
+    admin = auth_header("ctadmin1", is_admin=True)
+    user = auth_header("ctplain1")
+    resp = client.put("/admin/config/custom-triggers", json=SHARED, headers=admin)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["custom_triggers"] == SHARED["custom_triggers"]
+    assert client.get("/config", headers=user).json()["custom_triggers"] == SHARED["custom_triggers"]
+
+
+def test_update_shared_custom_triggers_requires_admin(client, auth_header):
+    headers = auth_header("ctplain2")
+    assert client.put("/admin/config/custom-triggers", json=SHARED, headers=headers).status_code == 403
+
+
+def test_update_shared_custom_triggers_keeps_keybindings(client, auth_header):
+    admin = auth_header("ctadmin2", is_admin=True)
+    client.put("/admin/config", headers=admin, json=VALID)
+    client.put("/admin/config/custom-triggers", json=SHARED, headers=admin)
+    body = client.get("/config", headers=admin).json()
+    assert body["keybindings"] == VALID["keybindings"]

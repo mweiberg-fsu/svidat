@@ -199,3 +199,34 @@ def test_update_user_roles_404_for_missing_user(client, auth_header):
     headers = auth_header("admin_updater3", is_admin=True)
     resp = client.patch("/users/999999/roles", headers=headers, json={"roles": ["qca"]})
     assert resp.status_code == 404
+
+
+MY_TRIGGERS = {
+    "custom_triggers": [
+        {"name": "Pan", "trigger": "none/middle/drag"},
+        {"name": "Quick undo", "trigger": "alt/right/click"},
+    ]
+}
+
+
+def test_save_my_custom_triggers_applies_only_to_me(client, auth_header):
+    me = auth_header("ctuser1")
+    other = auth_header("ctuser2")
+    resp = client.put("/users/me/custom-triggers", json=MY_TRIGGERS, headers=me)
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["user_custom_triggers"] == MY_TRIGGERS["custom_triggers"]
+    assert client.get("/config", headers=me).json()["user_custom_triggers"] == MY_TRIGGERS["custom_triggers"]
+    assert client.get("/config", headers=other).json()["user_custom_triggers"] == []
+
+
+def test_save_my_custom_triggers_validates(client, auth_header):
+    me = auth_header("ctuser3")
+    bad = {"custom_triggers": [{"name": "x", "trigger": "shift"}]}
+    assert client.put("/users/me/custom-triggers", json=bad, headers=me).status_code == 422
+
+
+def test_save_my_custom_triggers_empty_list_clears(client, auth_header):
+    me = auth_header("ctuser4")
+    client.put("/users/me/custom-triggers", json=MY_TRIGGERS, headers=me)
+    resp = client.put("/users/me/custom-triggers", json={"custom_triggers": []}, headers=me)
+    assert resp.json()["user_custom_triggers"] == []

@@ -14,6 +14,7 @@ from app.app_config import config_to_dict, get_or_create_config
 from app.schemas import (
     AppConfigOut,
     AppConfigUpdate,
+    CustomTriggerList,
     OAuthSettingsOut,
     OAuthSettingsUpdate,
     ThemeSettingsOut,
@@ -84,6 +85,21 @@ def update_config(
     row = get_or_create_config(db)
     row.keybindings = json.dumps(payload.keybindings.model_dump())
     row.documentation = json.dumps([tab.model_dump() for tab in payload.documentation])
+    db.commit()
+    db.refresh(row)
+    return config_to_dict(row, user)
+
+
+# Separate from PUT /config so adding a shared keybind doesn't also submit
+# the admin's unsaved keybinding/documentation edits.
+@router.put("/config/custom-triggers", response_model=AppConfigOut)
+def update_shared_custom_triggers(
+    payload: CustomTriggerList,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_role(Role.admin)),
+):
+    row = get_or_create_config(db)
+    row.custom_triggers = json.dumps([t.model_dump() for t in payload.custom_triggers])
     db.commit()
     db.refresh(row)
     return config_to_dict(row, user)

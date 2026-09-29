@@ -4,7 +4,7 @@ from typing import List, Optional
 from pydantic import BaseModel, field_validator, model_validator
 
 from app.models import Role
-from app.triggers import canonical, parse_trigger
+from app.triggers import canonical, parse_trigger, trigger_kind
 
 ALLOWED_ROLE_VALUES = {"admin", "qca"}
 MAX_SITE_NAME_LENGTH = 64
@@ -12,6 +12,8 @@ MAX_BUTTON_LABEL_LENGTH = 32
 MAX_DOC_TABS = 10
 MAX_DOC_TAB_TITLE_LENGTH = 40
 MAX_DOC_TAB_BODY_LENGTH = 20000
+MAX_CUSTOM_TRIGGERS = 50
+MAX_CUSTOM_TRIGGER_NAME_LENGTH = 40
 
 
 def _validate_role_values(v: List[str]) -> List[str]:
@@ -243,10 +245,52 @@ class DocTab(BaseModel):
         return v
 
 
+class CustomTrigger(BaseModel):
+    """A named, user-recorded trigger. Always stored canonical; kind comes
+    from the action (drag → drag gestures, click/dblclick → click gestures)."""
+
+    name: str
+    trigger: str
+
+    @field_validator("name")
+    @classmethod
+    def validate_name(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("name is required")
+        if len(v) > MAX_CUSTOM_TRIGGER_NAME_LENGTH:
+            raise ValueError(f"name allows at most {MAX_CUSTOM_TRIGGER_NAME_LENGTH} characters")
+        return v
+
+    @field_validator("trigger")
+    @classmethod
+    def validate_trigger(cls, v: str) -> str:
+        return canonical(v, trigger_kind(v))
+
+
+class CustomTriggerList(BaseModel):
+    custom_triggers: List[CustomTrigger]
+
+    @field_validator("custom_triggers")
+    @classmethod
+    def validate_list(cls, v: List[CustomTrigger]) -> List[CustomTrigger]:
+        if len(v) > MAX_CUSTOM_TRIGGERS:
+            raise ValueError(f"at most {MAX_CUSTOM_TRIGGERS} custom keybinds")
+        names = [t.name.lower() for t in v]
+        if len(set(names)) != len(names):
+            raise ValueError("custom keybind names must be unique")
+        triggers = [t.trigger for t in v]
+        if len(set(triggers)) != len(triggers):
+            raise ValueError("each custom keybind needs a different trigger")
+        return v
+
+
 class AppConfigOut(BaseModel):
     keybindings: KeyBindings
     documentation: List[DocTab]
     user_keybindings: Optional[KeyBindings] = None
+    custom_triggers: List[CustomTrigger] = []
+    user_custom_triggers: List[CustomTrigger] = []
 
 
 class AppConfigUpdate(BaseModel):

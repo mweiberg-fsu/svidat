@@ -25,6 +25,8 @@ def test_get_config_defaults(client, auth_header):
         "keybindings": DEFAULT_KEYBINDINGS,
         "documentation": DEFAULT_DOCUMENTATION,
         "user_keybindings": None,
+        "custom_triggers": [],
+        "user_custom_triggers": [],
     }
     assert body["keybindings"]["box_zoom"] == "shift+ctrl"
     assert body["keybindings"]["flag_select"] == "none"
@@ -171,3 +173,10 @@ def test_update_config_rejects_undo_redo_click_dblclick_conflict(client, auth_he
     resp = client.put("/admin/config", headers=headers, json={**VALID, "keybindings": bindings})
     assert resp.status_code == 422, resp.text
     assert "undo and redo can't be the click and double-click of the same keys and button" in resp.text
+
+
+def test_get_config_custom_triggers_empty_by_default(client, auth_header):
+    headers = auth_header("ctdefault")
+    body = client.get("/config", headers=headers).json()
+    assert body["custom_triggers"] == []
+    assert body["user_custom_triggers"] == []

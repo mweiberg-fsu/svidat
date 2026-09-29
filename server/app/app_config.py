@@ -105,4 +105,8 @@ def config_to_dict(row: AppConfig, user: Optional[User] = None) -> Dict[str, Any
         "keybindings": keybindings,
         "user_keybindings": user_keybindings,
         "documentation": json.loads(row.documentation),
+        "custom_triggers": json.loads(row.custom_triggers) if row.custom_triggers else [],
+        "user_custom_triggers": (
+            json.loads(user.custom_triggers) if user is not None and user.custom_triggers else []
+        ),
     }

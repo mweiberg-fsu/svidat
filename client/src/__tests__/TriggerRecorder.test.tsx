@@ -50,4 +50,31 @@ describe('TriggerRecorder', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Re-record' }))
     expect(onChange).toHaveBeenCalledWith(null)
   })
+
+  it('disarms when the window loses focus mid-press', () => {
+    const { onChange, box } = setup()
+    fireEvent.mouseDown(box, { button: 0, clientX: 0, clientY: 0 })
+    fireEvent.blur(window)
+    fireEvent.mouseUp(window, { button: 0, clientX: 0, clientY: 0, detail: 1 })
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('disarms when disabled mid-press', () => {
+    const onChange = vi.fn()
+    const { rerender } = render(<TriggerRecorder value={null} onChange={onChange} />)
+    fireEvent.mouseDown(screen.getByRole('button', { name: /record keybind/i }), { button: 0, clientX: 0, clientY: 0 })
+    rerender(<TriggerRecorder value={null} onChange={onChange} disabled />)
+    fireEvent.mouseUp(window, { button: 0, clientX: 0, clientY: 0, detail: 1 })
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('does not record while disabled', () => {
+    const onChange = vi.fn()
+    render(<TriggerRecorder value={null} onChange={onChange} disabled />)
+    const box = screen.getByRole('button', { name: /record keybind/i })
+    expect(box).toHaveAttribute('tabindex', '-1')
+    fireEvent.mouseDown(box, { button: 0, clientX: 0, clientY: 0 })
+    fireEvent.mouseUp(window, { button: 0, clientX: 0, clientY: 0, detail: 1 })
+    expect(onChange).not.toHaveBeenCalled()
+  })
 })

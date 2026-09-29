@@ -1,4 +1,4 @@
-import { useEffect, useRef, type MouseEvent as ReactMouseEvent } from 'react'
+import { useCallback, useEffect, useRef, type MouseEvent as ReactMouseEvent } from 'react'
 import type { Modifier } from '../api/types'
 import { recordedLabel } from '../appConfig'
 
@@ -27,11 +27,15 @@ interface TriggerRecorderProps {
 export function TriggerRecorder({ value, onChange, disabled }: TriggerRecorderProps) {
   const pendingUp = useRef<((e: MouseEvent) => void) | null>(null)
 
-  const stopListening = () => {
+  const stopListening = useCallback(() => {
     if (pendingUp.current) window.removeEventListener('mouseup', pendingUp.current)
+    window.removeEventListener('blur', stopListening)
     pendingUp.current = null
-  }
-  useEffect(() => stopListening, [])
+  }, [])
+  useEffect(() => stopListening, [stopListening])
+  useEffect(() => {
+    if (disabled) stopListening()
+  }, [disabled, stopListening])
 
   const onMouseDown = (e: ReactMouseEvent) => {
     const button = BUTTONS[e.button]
@@ -49,13 +53,14 @@ export function TriggerRecorder({ value, onChange, disabled }: TriggerRecorderPr
     }
     pendingUp.current = onUp
     window.addEventListener('mouseup', onUp)
+    window.addEventListener('blur', stopListening)
   }
 
   return (
     <div className="trigger-recorder">
       <div
         role="button"
-        tabIndex={0}
+        tabIndex={disabled ? -1 : 0}
         aria-label="Record keybind"
         aria-disabled={disabled}
         className={`trigger-recorder-box${value ? ' has-value' : ''}`}

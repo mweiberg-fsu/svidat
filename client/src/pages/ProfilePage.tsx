@@ -2,12 +2,14 @@ import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ColorModeSwitch } from '../components/ColorModeSwitch'
 import { KeybindingsFields } from '../components/KeybindingsFields'
+import { CustomTriggersList } from '../components/CustomTriggersList'
 import {
   getMyAuditHistory,
   getMySessions,
   listDrafts,
   resetMyKeybindings,
   revertAuditEntry,
+  saveMyCustomTriggers,
   saveMyKeybindings,
   uploadAvatar,
 } from '../api/client'
@@ -28,7 +30,7 @@ export function ProfilePage() {
   const [draftsError, setDraftsError] = useState<string | null>(null)
   const navigate = useNavigate()
 
-  const { keybindings, userKeybindings } = useAppConfig()
+  const { keybindings, userKeybindings, sharedTriggers, myTriggers } = useAppConfig()
   const [kbForm, setKbForm] = useState(keybindings)
   const [kbStatus, setKbStatus] = useState<string | null>(null)
   const [kbSubmitting, setKbSubmitting] = useState(false)
@@ -202,7 +204,15 @@ export function ProfilePage() {
           {userKeybindings ? 'Using your own bindings.' : 'Using the default bindings.'} Right-click
           (undo) and Shift+right-click (redo) always work too.
         </p>
-        <KeybindingsFields value={kbForm} onChange={setKbForm} disabled={kbSubmitting} />
+        <KeybindingsFields
+          value={kbForm}
+          onChange={setKbForm}
+          disabled={kbSubmitting}
+          customGroups={[
+            { label: 'Shared', triggers: sharedTriggers },
+            { label: 'Mine', triggers: myTriggers },
+          ]}
+        />
         <div className="profile-keybindings-actions">
           <button
             type="button"
@@ -222,6 +232,15 @@ export function ProfilePage() {
             {kbStatus}
           </p>
         )}
+        <h3 className="admin-subheading">My custom keybinds</h3>
+        <p className="profile-hint">
+          Record a keybind with <strong>+</strong>, then pick it from the dropdowns above.
+        </p>
+        <CustomTriggersList
+          triggers={myTriggers}
+          onSave={async (next) => applyConfig(await saveMyCustomTriggers(next))}
+          disabled={kbSubmitting}
+        />
       </section>
 
       {roles.includes('qca') && (

@@ -54,4 +54,17 @@ describe('KeybindingsFields custom groups', () => {
     expect(yZoom.value).toBe('alt/right/drag')
     expect(within(yZoom).getByRole('option', { name: `${modifierName('alt')}+right-drag` })).toBeInTheDocument()
   })
+
+  it('selects a custom trigger option when the value equals it, with no fallback duplicate', () => {
+    render(
+      <KeybindingsFields
+        value={{ ...DEFAULT_KEYBINDINGS, y_zoom: 'none/middle/drag' }}
+        onChange={vi.fn()}
+        customGroups={[{ label: 'Shared', triggers: [{ name: 'Pan', trigger: 'none/middle/drag' }] }]}
+      />
+    )
+    const yZoom = select('Zoom Y axis') as HTMLSelectElement
+    expect(yZoom.value).toBe('none/middle/drag')
+    expect([...yZoom.options].filter((o) => o.value === 'none/middle/drag')).toHaveLength(1)
+  })
 })

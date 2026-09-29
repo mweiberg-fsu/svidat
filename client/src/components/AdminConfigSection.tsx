@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
-import { getConfig, updateConfig } from '../api/client'
-import type { AppConfig, DocTab, KeyBindings } from '../api/types'
+import { getConfig, saveSharedCustomTriggers, updateConfig } from '../api/client'
+import type { AppConfig, CustomTrigger, DocTab, KeyBindings } from '../api/types'
 import { DEFAULT_DOCUMENTATION, DEFAULT_KEYBINDINGS, applyConfig, fillPlaceholders, findConflict } from '../appConfig'
 import { KeybindingsFields } from './KeybindingsFields'
+import { CustomTriggersList } from './CustomTriggersList'
 import { Markdown } from './Markdown'
 
 // Keep in sync with server/app/schemas.py.
@@ -68,6 +69,16 @@ export function AdminConfigSection({ view }: { view?: 'keybindings' | 'documenta
     setStatus('Documentation reset to defaults — save to apply')
   }
 
+  const sharedTriggers = form.custom_triggers ?? []
+
+  // Saves only the shared list; unsaved keybinding/documentation edits in
+  // `form` are kept.
+  const saveShared = async (next: CustomTrigger[]) => {
+    const saved = await saveSharedCustomTriggers(next)
+    applyConfig(saved)
+    setForm((prev) => ({ ...prev, custom_triggers: saved.custom_triggers ?? [] }))
+  }
+
   const handleSave = async () => {
     setStatus(null)
     setSubmitting(true)
@@ -97,7 +108,17 @@ export function AdminConfigSection({ view }: { view?: 'keybindings' | 'documenta
       <p className="admin-hint">
         Applies to every user. Right-click (undo) and Shift+right-click (redo) always work too.
       </p>
-      <KeybindingsFields value={form.keybindings} onChange={setKeybindings} disabled={submitting} />
+      <KeybindingsFields
+        value={form.keybindings}
+        onChange={setKeybindings}
+        disabled={submitting}
+        customGroups={[{ label: 'Shared', triggers: sharedTriggers }]}
+      />
+      <h3 className="admin-subheading">Shared custom keybinds</h3>
+      <p className="admin-hint">
+        Offered in every user's keybinding dropdowns. Adding or removing one saves immediately.
+      </p>
+      <CustomTriggersList triggers={sharedTriggers} onSave={saveShared} disabled={submitting} />
         </>
       )}
 

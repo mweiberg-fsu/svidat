@@ -128,4 +128,27 @@ describe('AdminConfigSection', () => {
 
     expect(await screen.findByText('Error: 422: bad')).toBeInTheDocument()
   })
+
+  it('saves shared custom keybinds without submitting the rest of the form', async () => {
+    vi.spyOn(client, 'getConfig').mockResolvedValue({ ...SERVER_CONFIG, custom_triggers: [] })
+    const updateSpy = vi.spyOn(client, 'updateConfig')
+    const saveSpy = vi
+      .spyOn(client, 'saveSharedCustomTriggers')
+      .mockResolvedValue({ ...SERVER_CONFIG, custom_triggers: [{ name: 'Pan', trigger: 'none/middle/drag' }] })
+    render(<AdminConfigSection view="keybindings" />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Add keybind' }))
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'Pan' } })
+    const box = screen.getByRole('button', { name: /record keybind/i })
+    fireEvent.mouseDown(box, { button: 1, clientX: 0, clientY: 0 })
+    fireEvent.mouseUp(window, { button: 1, clientX: 20, clientY: 0 })
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+
+    await waitFor(() => expect(saveSpy).toHaveBeenCalledWith([{ name: 'Pan', trigger: 'none/middle/drag' }]))
+    expect(updateSpy).not.toHaveBeenCalled()
+    await waitFor(() =>
+      expect(within(screen.getByRole('combobox', { name: 'Zoom X axis' })).getByRole('option', { name: /Pan/ }))
+        .toBeInTheDocument()
+    )
+  })
 })

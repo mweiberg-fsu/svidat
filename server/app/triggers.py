@@ -53,3 +53,13 @@ def parse_trigger(value: str, kind: str) -> Tuple[Tuple[str, ...], str, str]:
 def canonical(value: str, kind: str) -> str:
     mods, button, action = parse_trigger(value, kind)
     return f"{'+'.join(mods) or 'none'}/{button}/{action}"
+
+
+def trigger_kind(value: str) -> str:
+    """"drag" or "click" for a canonical "<mods>/<button>/<action>" string,
+    read from its action. Legacy tokens are rejected: "shift" is valid for
+    both kinds, so it has no single kind."""
+    pieces = value.split("/")
+    if len(pieces) != 3:
+        raise ValueError("expected <mods>/<button>/<action>")
+    return "drag" if pieces[2] == "drag" else "click"

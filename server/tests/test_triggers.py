@@ -1,6 +1,6 @@
 import pytest
 
-from app.triggers import canonical, parse_trigger
+from app.triggers import canonical, parse_trigger, trigger_kind
 
 
 @pytest.mark.parametrize("value,kind,expected", [
@@ -33,3 +33,22 @@ def test_canonical(value, kind, expected):
 def test_rejects(value, kind):
     with pytest.raises(ValueError):
         parse_trigger(value, kind)
+
+
+@pytest.mark.parametrize(
+    "value,kind",
+    [
+        ("shift/left/drag", "drag"),
+        ("none/middle/drag", "drag"),
+        ("alt/right/click", "click"),
+        ("ctrl+meta/left/dblclick", "click"),
+    ],
+)
+def test_trigger_kind_from_action(value, kind):
+    assert trigger_kind(value) == kind
+
+
+@pytest.mark.parametrize("value", ["shift", "dblclick", "none", "shift/left", "a/b/c/d"])
+def test_trigger_kind_rejects_non_canonical(value):
+    with pytest.raises(ValueError):
+        trigger_kind(value)

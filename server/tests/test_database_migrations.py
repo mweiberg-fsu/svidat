@@ -237,3 +237,43 @@ def test_run_migrations_keybindings_column_idempotent(tmp_path):
     with engine.connect() as conn:
         cols = [row[1] for row in conn.execute(text("PRAGMA table_info(users)"))]
     assert cols.count("keybindings") == 1
+
+
+def _make_legacy_app_config_table(db_path):
+    conn = sqlite3.connect(db_path)
+    conn.execute(
+        "CREATE TABLE app_config ("
+        "id INTEGER PRIMARY KEY, "
+        "keybindings TEXT NOT NULL, "
+        "documentation TEXT NOT NULL)"
+    )
+    conn.commit()
+    conn.close()
+
+
+def test_run_migrations_adds_custom_triggers_columns(tmp_path):
+    db_path = tmp_path / "legacy_ct.db"
+    _make_legacy_users_table(db_path)
+    _make_legacy_app_config_table(db_path)
+    engine = create_engine(f"sqlite:///{db_path}")
+
+    run_migrations(engine)
+    run_migrations(engine)  # idempotent
+
+    with engine.connect() as conn:
+        user_cols = [row[1] for row in conn.execute(text("PRAGMA table_info(users)"))]
+        config_cols = [row[1] for row in conn.execute(text("PRAGMA table_info(app_config)"))]
+    assert user_cols.count("custom_triggers") == 1
+    assert config_cols.count("custom_triggers") == 1
+
+
+def test_run_migrations_skips_missing_app_config_table(tmp_path):
+    db_path = tmp_path / "legacy_ct2.db"
+    _make_legacy_users_table(db_path)
+    engine = create_engine(f"sqlite:///{db_path}")
+
+    run_migrations(engine)  # must not raise when app_config doesn't exist yet
+
+    with engine.connect() as conn:
+        config_cols = [row[1] for row in conn.execute(text("PRAGMA table_info(app_config)"))]
+    assert config_cols == []

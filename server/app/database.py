@@ -51,6 +51,9 @@ def run_migrations(bind=None) -> None:
         if "keybindings" not in cols:
             conn.execute(text("ALTER TABLE users ADD COLUMN keybindings TEXT"))
             conn.commit()
+        if "custom_triggers" not in cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN custom_triggers TEXT"))
+            conn.commit()
         theme_cols = [row[1] for row in conn.execute(text("PRAGMA table_info(theme_settings)"))]
         # Empty list means the table doesn't exist yet; create_all will build
         # it with every column, so there's nothing to alter.
@@ -77,4 +80,9 @@ def run_migrations(bind=None) -> None:
                     "DEFAULT 'Publish (v300)'"
                 )
             )
+            conn.commit()
+        config_cols = [row[1] for row in conn.execute(text("PRAGMA table_info(app_config)"))]
+        # Same as theme_settings: no table yet means create_all builds it whole.
+        if config_cols and "custom_triggers" not in config_cols:
+            conn.execute(text("ALTER TABLE app_config ADD COLUMN custom_triggers TEXT"))
             conn.commit()

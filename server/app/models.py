@@ -44,6 +44,10 @@ class User(Base):
     # The user's own plot keybindings (JSON, KeyBindings shape); NULL means
     # "use the admin-configured defaults" (app_config.keybindings).
     keybindings = Column(Text, nullable=True)
+    # The user's own named custom triggers (JSON list of {name, trigger},
+    # trigger canonical); NULL means none. Offered in their keybinding
+    # dropdowns alongside the shared list (app_config.custom_triggers).
+    custom_triggers = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     audit_entries = relationship("AuditLog", back_populates="user")
@@ -137,3 +141,6 @@ class AppConfig(Base):
     id = Column(Integer, primary_key=True)
     keybindings = Column(Text, nullable=False)
     documentation = Column(Text, nullable=False)
+    # Shared named custom triggers (JSON list of {name, trigger}), managed by
+    # admins and offered in every user's keybinding dropdowns; NULL means none.
+    custom_triggers = Column(Text, nullable=True)

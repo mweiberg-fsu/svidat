@@ -20,7 +20,7 @@ export function CustomTriggersList({ triggers, onSave, disabled }: CustomTrigger
   const [status, setStatus] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
-  const error = trigger ? validateCustomTrigger({ name, trigger }, triggers) : null
+  const error = trigger && name.trim() ? validateCustomTrigger({ name, trigger }, triggers) : null
   const busy = disabled || saving
 
   const closeAdd = () => {

@@ -141,9 +141,16 @@ const listeners = new Set<() => void>()
 // just-saved config to SvgPlot/DocumentationModal without a provider.
 // The effective `keybindings` are the caller's own saved set, if any, over
 // the admin-configured defaults.
+const sameKb = (a: KeyBindings | null, b: KeyBindings | null) =>
+  a === b || (!!a && !!b && GESTURES.every(({ key }) => a[key] === b[key]))
+
 export function applyConfig(config: AppConfig) {
-  const defaults = { ...DEFAULT_KEYBINDINGS, ...config.keybindings }
-  const mine = config.user_keybindings ? { ...DEFAULT_KEYBINDINGS, ...config.user_keybindings } : null
+  // Reuse the previous objects when values are unchanged so consumers
+  // (e.g. the Profile form) don't reset unsaved edits on unrelated updates.
+  const newDefaults = { ...DEFAULT_KEYBINDINGS, ...config.keybindings }
+  const newMine = config.user_keybindings ? { ...DEFAULT_KEYBINDINGS, ...config.user_keybindings } : null
+  const defaults = sameKb(state.defaultKeybindings, newDefaults) ? state.defaultKeybindings : newDefaults
+  const mine = sameKb(state.userKeybindings, newMine) ? state.userKeybindings : newMine
   state = {
     keybindings: mine ?? defaults,
     defaultKeybindings: defaults,

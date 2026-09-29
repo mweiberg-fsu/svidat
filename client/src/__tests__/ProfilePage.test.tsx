@@ -346,4 +346,41 @@ describe('ProfilePage', () => {
         .toBeInTheDocument()
     )
   })
+
+  it('keeps unsaved dropdown edits when a custom keybind is added', async () => {
+    vi.spyOn(apiClient, 'fetchAvatarBlobUrl').mockResolvedValue(null)
+    vi.spyOn(apiClient, 'listDrafts').mockResolvedValue([])
+    vi.spyOn(apiClient, 'getMyAuditHistory').mockResolvedValue([])
+    vi.spyOn(apiClient, 'getMySessions').mockResolvedValue([])
+    const saved = {
+      keybindings: DEFAULT_KEYBINDINGS,
+      documentation: DEFAULT_DOCUMENTATION,
+      user_custom_triggers: [{ name: 'My undo', trigger: 'alt/right/click' }],
+    }
+    vi.spyOn(apiClient, 'saveMyCustomTriggers').mockResolvedValue(saved)
+    applyConfig({ ...saved, user_custom_triggers: [] })
+
+    render(
+      <AuthProvider>
+        <MemoryRouter>
+          <ProfilePage />
+        </MemoryRouter>
+      </AuthProvider>
+    )
+
+    const xZoom = screen.getByRole('combobox', { name: 'Zoom X axis' }) as HTMLSelectElement
+    const other = [...xZoom.options].find((o) => o.value !== xZoom.value && o.value === 'alt')!
+    fireEvent.change(xZoom, { target: { value: other.value } })
+    expect(xZoom.value).toBe('alt')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add keybind' }))
+    fireEvent.change(screen.getByLabelText('Name'), { target: { value: 'My undo' } })
+    const box = screen.getByRole('button', { name: /record keybind/i })
+    fireEvent.mouseDown(box, { button: 2, clientX: 0, clientY: 0, altKey: true })
+    fireEvent.mouseUp(window, { button: 2, clientX: 0, clientY: 0, detail: 1 })
+    fireEvent.click(screen.getByRole('button', { name: 'Add' }))
+
+    await waitFor(() => expect(screen.getByText('My undo')).toBeInTheDocument())
+    expect((screen.getByRole('combobox', { name: 'Zoom X axis' }) as HTMLSelectElement).value).toBe('alt')
+  })
 })

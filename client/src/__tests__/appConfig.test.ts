@@ -208,6 +208,17 @@ describe('custom triggers', () => {
     expect(result.current.myTriggers).toEqual([{ name: 'Mine', trigger: 'alt/right/click' }])
   })
 
+  it('applyConfig keeps keybinding object identity when values are unchanged', () => {
+    const cfg = { keybindings: DEFAULT_KEYBINDINGS, user_keybindings: { ...DEFAULT_KEYBINDINGS, x_zoom: 'alt' as const }, documentation: DEFAULT_DOCUMENTATION }
+    const { result } = renderHook(() => useAppConfig())
+    act(() => applyConfig(cfg))
+    const before = result.current
+    act(() => applyConfig({ ...cfg, custom_triggers: [{ name: 'Pan', trigger: 'none/middle/drag' }] }))
+    expect(result.current.keybindings).toBe(before.keybindings)
+    expect(result.current.defaultKeybindings).toBe(before.defaultKeybindings)
+    expect(result.current.userKeybindings).toBe(before.userKeybindings)
+  })
+
   it('triggerKind reads the action of valid canonical triggers only', () => {
     expect(triggerKind('shift/left/drag')).toBe('drag')
     expect(triggerKind('alt/right/click')).toBe('click')

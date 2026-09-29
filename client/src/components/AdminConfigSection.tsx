@@ -84,7 +84,7 @@ export function AdminConfigSection({ view }: { view?: 'keybindings' | 'documenta
     setSubmitting(true)
     try {
       const saved = await updateConfig(form)
-      setForm(saved)
+      setForm((prev) => ({ ...saved, custom_triggers: prev.custom_triggers }))
       applyConfig(saved)
       setStatus('Configuration updated')
     } catch (err) {

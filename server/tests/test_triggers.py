@@ -52,3 +52,8 @@ def test_trigger_kind_from_action(value, kind):
 def test_trigger_kind_rejects_non_canonical(value):
     with pytest.raises(ValueError):
         trigger_kind(value)
+
+
+def test_trigger_kind_rejects_unknown_action():
+    with pytest.raises(ValueError, match=r"action must be one of \['drag', 'click', 'dblclick'\]"):
+        trigger_kind("none/left/hover")

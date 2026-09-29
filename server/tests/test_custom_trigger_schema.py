@@ -32,7 +32,7 @@ def test_custom_trigger_rejects_bad_name(name):
 
 
 def test_list_rejects_duplicate_names_case_insensitive():
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError, match="names must be unique"):
         CustomTriggerList(
             custom_triggers=[
                 {"name": "Pan", "trigger": "none/middle/drag"},
@@ -42,7 +42,7 @@ def test_list_rejects_duplicate_names_case_insensitive():
 
 
 def test_list_rejects_duplicate_triggers():
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError, match="different trigger"):
         CustomTriggerList(
             custom_triggers=[
                 {"name": "A", "trigger": "none/middle/drag"},
@@ -53,7 +53,7 @@ def test_list_rejects_duplicate_triggers():
 
 def test_list_rejects_more_than_50():
     items = [{"name": f"t{i}", "trigger": "none/middle/drag"} for i in range(51)]
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError, match="at most 50"):
         CustomTriggerList(custom_triggers=items)
 
 

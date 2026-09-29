@@ -62,4 +62,9 @@ def trigger_kind(value: str) -> str:
     pieces = value.split("/")
     if len(pieces) != 3:
         raise ValueError("expected <mods>/<button>/<action>")
-    return "drag" if pieces[2] == "drag" else "click"
+    action = pieces[2]
+    if action in DRAG_ACTIONS:
+        return "drag"
+    if action in CLICK_ACTIONS:
+        return "click"
+    raise ValueError(f"action must be one of {list(DRAG_ACTIONS + CLICK_ACTIONS)}")

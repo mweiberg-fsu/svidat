@@ -222,7 +222,9 @@ def test_save_my_custom_triggers_applies_only_to_me(client, auth_header):
 def test_save_my_custom_triggers_validates(client, auth_header):
     me = auth_header("ctuser3")
     bad = {"custom_triggers": [{"name": "x", "trigger": "shift"}]}
-    assert client.put("/users/me/custom-triggers", json=bad, headers=me).status_code == 422
+    resp = client.put("/users/me/custom-triggers", json=bad, headers=me)
+    assert resp.status_code == 422
+    assert "expected <mods>/<button>/<action>" in resp.text
 
 
 def test_save_my_custom_triggers_empty_list_clears(client, auth_header):

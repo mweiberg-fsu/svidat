@@ -3,8 +3,8 @@ from typing import List, Optional
 
 from pydantic import BaseModel, field_validator, model_validator
 
-from app.app_config import CLICK_TRIGGERS, DRAG_TRIGGERS
 from app.models import Role
+from app.triggers import canonical, parse_trigger
 
 ALLOWED_ROLE_VALUES = {"admin", "qca"}
 MAX_SITE_NAME_LENGTH = 64
@@ -157,30 +157,67 @@ class ThemeSettingsUpdate(BaseModel):
 class KeyBindings(BaseModel):
     x_zoom: str
     y_zoom: str
+    box_zoom: str
+    flag_select: str
     undo: str
     redo: str
 
-    @field_validator("x_zoom", "y_zoom")
+    @field_validator("x_zoom", "y_zoom", "box_zoom", "flag_select")
     @classmethod
     def validate_drag(cls, v: str) -> str:
-        if v not in DRAG_TRIGGERS:
-            raise ValueError(f"must be one of {list(DRAG_TRIGGERS)}")
+        try:
+            parse_trigger(v, "drag")
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
         return v
 
     @field_validator("undo", "redo")
     @classmethod
     def validate_click(cls, v: str) -> str:
-        if v not in CLICK_TRIGGERS:
-            raise ValueError(f"must be one of {list(CLICK_TRIGGERS)}")
+        try:
+            parse_trigger(v, "click")
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
         return v
 
     @model_validator(mode="after")
     def validate_unique(self) -> "KeyBindings":
         # Sharing a trigger would make one gesture swallow the other (e.g. a
         # shift+click undo would also fire at the end of every shift+drag zoom).
-        values = [self.x_zoom, self.y_zoom, self.undo, self.redo]
+        drag_fields = ["x_zoom", "y_zoom", "box_zoom", "flag_select"]
+        click_fields = ["undo", "redo"]
+        drag_canon = {name: canonical(getattr(self, name), "drag") for name in drag_fields}
+        click_canon = {name: canonical(getattr(self, name), "click") for name in click_fields}
+        all_canon = {**drag_canon, **click_canon}
+
+        # Rule 4: the six normalized triggers are pairwise distinct.
+        values = list(all_canon.values())
         if len(set(values)) != len(values):
             raise ValueError("each gesture needs a different binding")
+
+        # Rule 5: a click gesture's (mods, button) must not match a drag
+        # gesture's (mods, button) — a drag ends with a click.
+        for click_name, click_value in click_canon.items():
+            click_mods_button, click_action = click_value.rsplit("/", 1)
+            if click_action != "click":
+                continue
+            for drag_name, drag_value in drag_canon.items():
+                drag_mods_button, _ = drag_value.rsplit("/", 1)
+                if click_mods_button == drag_mods_button:
+                    raise ValueError(
+                        "a click binding can't use the same keys and button as a drag binding"
+                    )
+
+        # Rule 6: undo and redo can't be the click and double-click of the
+        # same keys and button — the first click of a double-click would
+        # fire the single-click gesture.
+        undo_mods_button, undo_action = click_canon["undo"].rsplit("/", 1)
+        redo_mods_button, redo_action = click_canon["redo"].rsplit("/", 1)
+        if undo_mods_button == redo_mods_button and {undo_action, redo_action} == {"click", "dblclick"}:
+            raise ValueError(
+                "undo and redo can't be the click and double-click of the same keys and button"
+            )
+
         return self
 
 
@@ -209,6 +246,7 @@ class DocTab(BaseModel):
 class AppConfigOut(BaseModel):
     keybindings: KeyBindings
     documentation: List[DocTab]
+    user_keybindings: Optional[KeyBindings] = None
 
 
 class AppConfigUpdate(BaseModel):

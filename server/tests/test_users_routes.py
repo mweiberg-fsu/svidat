@@ -123,6 +123,46 @@ def test_avatar_reupload_replaces_old_file(client, auth_header):
     assert fetch_resp.content == b"second" * 20
 
 
+CUSTOM = {
+    "x_zoom": "alt",
+    "y_zoom": "shift",
+    "box_zoom": "shift+alt",
+    "flag_select": "none",
+    "undo": "meta",
+    "redo": "dblclick",
+}
+
+
+def test_save_my_keybindings_applies_only_to_me(client, auth_header):
+    me = auth_header("kbuser2")
+    other = auth_header("kbuser3")
+    resp = client.put("/users/me/keybindings", json=CUSTOM, headers=me)
+    assert resp.status_code == 200
+    assert resp.json()["user_keybindings"] == CUSTOM
+
+    mine = client.get("/config", headers=me).json()
+    assert mine["user_keybindings"] == CUSTOM
+    assert mine["keybindings"]["x_zoom"] == "shift"  # admin default untouched
+    assert client.get("/config", headers=other).json()["user_keybindings"] is None
+
+
+def test_save_my_keybindings_validates(client, auth_header):
+    me = auth_header("kbuser4")
+    dup = {**CUSTOM, "y_zoom": "alt"}  # same trigger as x_zoom
+    assert client.put("/users/me/keybindings", json=dup, headers=me).status_code == 422
+    bad = {**CUSTOM, "x_zoom": "dblclick"}  # not a drag trigger
+    assert client.put("/users/me/keybindings", json=bad, headers=me).status_code == 422
+
+
+def test_reset_my_keybindings(client, auth_header):
+    me = auth_header("kbuser5")
+    client.put("/users/me/keybindings", json=CUSTOM, headers=me)
+    resp = client.delete("/users/me/keybindings", headers=me)
+    assert resp.status_code == 200
+    assert resp.json()["user_keybindings"] is None
+    assert client.get("/config", headers=me).json()["user_keybindings"] is None
+
+
 def test_update_user_roles_requires_admin(client, auth_header, make_user):
     target = make_user("roletarget1")
     headers = auth_header("qcaonly_roles1", is_qca=True)

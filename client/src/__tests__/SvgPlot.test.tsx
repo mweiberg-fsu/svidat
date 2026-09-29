@@ -252,6 +252,37 @@ describe('SvgPlot', () => {
     expect(texts).not.toContain('23:00')
   })
 
+  it('labels the end of a zoomed window with its actual end time', async () => {
+    // Minute data 00:00..00:11: 5-minute ticks at 00:00, 00:05, 00:10, and the
+    // right edge reads its real time (00:11), not the next boundary (00:15).
+    const time = Array.from({ length: 12 }, (_, i) => `2025-01-01T00:${String(i).padStart(2, '0')}:00`)
+    vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
+      time,
+      variables: { temperature: { values: time.map((_, i) => i), flags: time.map(() => 'Z') } },
+    })
+    const { container } = renderSvgPlot('FILE_A', ['temperature'])
+    await waitFor(() => expect(container.querySelector('svg')).toBeInTheDocument())
+    const texts = Array.from(container.querySelectorAll('svg text')).map((t) => t.textContent)
+    expect(texts).toContain('00:10Z')
+    expect(texts).toContain('00:11Z')
+    expect(texts).not.toContain('00:15Z')
+  })
+
+  it('drops the last regular tick when it would collide with the end label', async () => {
+    // 00:00..00:31: 10-minute ticks; 00:30 sits ~26px from the 00:31 edge.
+    const time = Array.from({ length: 32 }, (_, i) => `2025-01-01T00:${String(i).padStart(2, '0')}:00`)
+    vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
+      time,
+      variables: { temperature: { values: time.map((_, i) => i), flags: time.map(() => 'Z') } },
+    })
+    const { container } = renderSvgPlot('FILE_A', ['temperature'])
+    await waitFor(() => expect(container.querySelector('svg')).toBeInTheDocument())
+    const texts = Array.from(container.querySelectorAll('svg text')).map((t) => t.textContent)
+    expect(texts).toContain('00:20Z')
+    expect(texts).toContain('00:31Z')
+    expect(texts).not.toContain('00:30Z')
+  })
+
   it('x-axis tick interval gets finer as the zoom narrows, instead of staying fixed at 6 hours', async () => {
     // One sample per minute across 2 hours (indices 0..120) — zooming to
     // this whole range gives a 2h span, which should land on 30-min ticks.
@@ -670,6 +701,292 @@ describe('SvgPlot', () => {
     }
   })
 
+  it('rebinding box zoom to Alt makes Alt-drag box-zoom, while Shift+Ctrl no longer does', async () => {
+    const time = hourlyTimes(18)
+    vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
+      time,
+      variables: {
+        temperature: { values: time.map((_, i) => i), flags: time.map(() => 'Z') },
+        salinity: { values: time.map((_, i) => i), flags: time.map(() => 'Z') },
+      },
+    })
+    act(() =>
+      applyConfig({
+        keybindings: { ...DEFAULT_KEYBINDINGS, box_zoom: 'alt' },
+        documentation: DEFAULT_DOCUMENTATION,
+      })
+    )
+    try {
+      const { container } = renderSvgPlot('FILE_A', ['temperature', 'salinity'])
+      await waitFor(() => expect(container.querySelectorAll('svg').length).toBe(2))
+
+      const svgs = container.querySelectorAll('svg')
+      const segments = () => segmentCount(container.querySelectorAll('path')[0].getAttribute('d'))
+      const ticksOf = (svg: Element) => Array.from(svg.querySelectorAll('text')).map((t) => t.textContent)
+
+      // Alt-drag now box-zooms X and the dragged row's Y together.
+      fireEvent.mouseDown(svgs[0], { clientX: pxForIndex(1, 18), clientY: 60, altKey: true })
+      fireEvent.mouseMove(window, { clientX: pxForIndex(7, 18), clientY: 130 })
+      fireEvent.mouseUp(window, { clientX: pxForIndex(7, 18), clientY: 130 })
+      expect(segments()).toBe(6)
+      expect(ticksOf(svgs[0])).toEqual(expect.arrayContaining(['4', '10', '16']))
+
+      // Undo it, back to full extent.
+      fireEvent.contextMenu(container.querySelector('.svg-plot-row')!)
+      expect(segments()).toBe(18)
+
+      // Shift+Ctrl is nobody's binding now, so it does nothing.
+      fireEvent.mouseDown(svgs[0], { clientX: pxForIndex(1, 18), clientY: 60, shiftKey: true, ctrlKey: true })
+      fireEvent.mouseMove(window, { clientX: pxForIndex(7, 18), clientY: 130 })
+      fireEvent.mouseUp(window, { clientX: pxForIndex(7, 18), clientY: 130 })
+      expect(segments()).toBe(18)
+    } finally {
+      act(() => applyConfig({ keybindings: DEFAULT_KEYBINDINGS, documentation: DEFAULT_DOCUMENTATION }))
+    }
+  })
+
+  it('rebinding flag select to Alt makes a plain drag select nothing, while Alt-drag selects', async () => {
+    const time = hourlyTimes(18)
+    vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
+      time,
+      variables: { temperature: { values: time.map((_, i) => i), flags: time.map(() => 'Z') } },
+    })
+    vi.spyOn(apiClient, 'openSession').mockResolvedValue({ status: 'opened' })
+    act(() =>
+      applyConfig({
+        keybindings: { ...DEFAULT_KEYBINDINGS, flag_select: 'alt', box_zoom: 'alt+meta' },
+        documentation: DEFAULT_DOCUMENTATION,
+      })
+    )
+    try {
+      const { container } = renderSvgPlot('FILE_A', ['temperature'])
+      await waitFor(() => expect(container.querySelector('svg')).toBeInTheDocument())
+      const svg = container.querySelector('svg')!
+
+      // A plain drag no longer selects a flag range.
+      fireEvent.mouseDown(svg, { clientX: pxForIndex(4, 18) })
+      fireEvent.mouseMove(window, { clientX: pxForIndex(14, 18) })
+      fireEvent.mouseUp(window, { clientX: pxForIndex(14, 18) })
+      expect(container.querySelector('rect[fill="#ff00ff"]')).not.toBeInTheDocument()
+
+      // Alt-drag does.
+      fireEvent.mouseDown(svg, { clientX: pxForIndex(4, 18), altKey: true })
+      fireEvent.mouseMove(window, { clientX: pxForIndex(14, 18), altKey: true })
+      fireEvent.mouseUp(window, { clientX: pxForIndex(14, 18), altKey: true })
+      await waitFor(() => expect(container.querySelector('rect[fill="#ff00ff"]')).toBeInTheDocument())
+    } finally {
+      act(() => applyConfig({ keybindings: DEFAULT_KEYBINDINGS, documentation: DEFAULT_DOCUMENTATION }))
+    }
+  })
+
+  it('a Shift+Ctrl box drag with undo bound to Shift does not undo on the ending click', async () => {
+    const time = hourlyTimes(18)
+    vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
+      time,
+      variables: { temperature: { values: time.map((_, i) => i), flags: time.map(() => 'Z') } },
+    })
+    act(() =>
+      applyConfig({
+        keybindings: { ...DEFAULT_KEYBINDINGS, undo: 'shift', x_zoom: 'alt' },
+        documentation: DEFAULT_DOCUMENTATION,
+      })
+    )
+    try {
+      const { container } = renderSvgPlot('FILE_A', ['temperature'])
+      await waitFor(() => expect(container.querySelector('svg')).toBeInTheDocument())
+      const svg = container.querySelector('svg')!
+      const row = container.querySelector('.svg-plot-row')!
+      const segments = () => segmentCount(container.querySelector('path')?.getAttribute('d'))
+
+      fireEvent.mouseDown(svg, { clientX: pxForIndex(1, 18), clientY: 60, shiftKey: true, ctrlKey: true })
+      fireEvent.mouseMove(window, { clientX: pxForIndex(7, 18), clientY: 130 })
+      fireEvent.mouseUp(window, { clientX: pxForIndex(7, 18), clientY: 130 })
+      expect(segments()).toBe(6)
+
+      // The click ending the drag carries both modifiers, which doesn't
+      // exactly match the Shift-only undo binding.
+      fireEvent.click(row, { shiftKey: true, ctrlKey: true })
+      expect(segments()).toBe(6)
+    } finally {
+      act(() => applyConfig({ keybindings: DEFAULT_KEYBINDINGS, documentation: DEFAULT_DOCUMENTATION }))
+    }
+  })
+
+  describe('button-aware bindings (mods/button/action)', () => {
+    const withBindings = async (
+      overrides: Partial<typeof DEFAULT_KEYBINDINGS>,
+      body: (ctx: {
+        svg: SVGSVGElement
+        row: Element
+        segments: () => number
+        ticks: () => (string | null)[]
+        xZoom: () => void
+        yZoom: () => void
+      }) => void | Promise<void>
+    ) => {
+      const time = hourlyTimes(18)
+      vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
+        time,
+        variables: { temperature: { values: time.map((_, i) => i), flags: time.map(() => 'Z') } },
+      })
+      act(() =>
+        applyConfig({ keybindings: { ...DEFAULT_KEYBINDINGS, ...overrides }, documentation: DEFAULT_DOCUMENTATION })
+      )
+      try {
+        const { container } = renderSvgPlot('FILE_A', ['temperature'])
+        await waitFor(() => expect(container.querySelector('svg')).toBeInTheDocument())
+        const svg = container.querySelector('svg')!
+        const row = container.querySelector('.svg-plot-row')!
+        await body({
+          svg,
+          row,
+          segments: () => segmentCount(container.querySelector('path')?.getAttribute('d')),
+          ticks: () => Array.from(svg.querySelectorAll('text')).map((t) => t.textContent),
+          // Default X zoom (Shift-drag) to indices [4, 14]: 10 segments.
+          xZoom: () => {
+            fireEvent.mouseDown(svg, { clientX: pxForIndex(4, 18), shiftKey: true })
+            fireEvent.mouseMove(window, { clientX: pxForIndex(14, 18) })
+            fireEvent.mouseUp(window, { clientX: pxForIndex(14, 18) })
+          },
+          // Default Y zoom (Ctrl-drag); after the X zoom above, ticks become 7/9/11.
+          yZoom: () => {
+            fireEvent.mouseDown(svg, { clientY: 60, ctrlKey: true })
+            fireEvent.mouseMove(window, { clientY: 130 })
+            fireEvent.mouseUp(window, { clientY: 130 })
+          },
+        })
+      } finally {
+        act(() => applyConfig({ keybindings: DEFAULT_KEYBINDINGS, documentation: DEFAULT_DOCUMENTATION }))
+      }
+    }
+
+    it('a right-button drag bound to X zoom zooms, and its contextmenu does not undo', async () => {
+      await withBindings({ x_zoom: 'none/right/drag' }, ({ svg, row, segments }) => {
+        fireEvent.mouseDown(svg, { button: 2, clientX: pxForIndex(4, 18) })
+        // macOS/Linux fire contextmenu on the press, Windows on the release.
+        fireEvent.contextMenu(row)
+        fireEvent.mouseMove(window, { clientX: pxForIndex(14, 18) })
+        fireEvent.mouseUp(window, { button: 2, clientX: pxForIndex(14, 18) })
+        fireEvent.contextMenu(row)
+        expect(segments()).toBe(10)
+      })
+    })
+
+    it('a middle drag bound to Y zoom Y-zooms instead of the built-in middle X zoom', async () => {
+      await withBindings({ y_zoom: 'none/middle/drag' }, ({ svg, segments, ticks }) => {
+        fireEvent.mouseDown(svg, { button: 1, clientX: pxForIndex(4, 18), clientY: 60 })
+        fireEvent.mouseMove(window, { clientX: pxForIndex(14, 18), clientY: 130 })
+        fireEvent.mouseUp(window, { button: 1, clientX: pxForIndex(14, 18), clientY: 130 })
+        expect(segments()).toBe(18)
+        expect(ticks()).toEqual(expect.arrayContaining(['4', '10', '16']))
+        expect(ticks()).not.toEqual(expect.arrayContaining(['0']))
+      })
+    })
+
+    it('with no middle binding, a middle drag still X-zooms (built-in fallback)', async () => {
+      await withBindings({}, ({ svg, segments }) => {
+        fireEvent.mouseDown(svg, { button: 1, clientX: pxForIndex(4, 18) })
+        fireEvent.mouseMove(window, { clientX: pxForIndex(14, 18) })
+        fireEvent.mouseUp(window, { button: 1, clientX: pxForIndex(14, 18) })
+        expect(segments()).toBe(10)
+      })
+    })
+
+    it('undo bound to a middle click fires on auxclick, once per click', async () => {
+      await withBindings({ undo: 'none/middle/click' }, ({ svg, row, segments, ticks, xZoom, yZoom }) => {
+        xZoom()
+        yZoom()
+        expect(ticks()).toEqual(expect.arrayContaining(['7', '9', '11']))
+        // A real middle click: press, release, then auxclick.
+        fireEvent.mouseDown(svg, { button: 1, clientX: pxForIndex(9, 18) })
+        fireEvent.mouseUp(window, { button: 1, clientX: pxForIndex(9, 18) })
+        fireEvent(row, new MouseEvent('auxclick', { bubbles: true, button: 1 }))
+        expect(segments()).toBe(10)
+        expect(ticks()).not.toEqual(expect.arrayContaining(['7']))
+        fireEvent(row, new MouseEvent('auxclick', { bubbles: true, button: 1 }))
+        expect(segments()).toBe(18)
+      })
+    })
+
+    it('a middle drag does not also fire a middle-click binding on its auxclick', async () => {
+      await withBindings(
+        { undo: 'none/middle/click', y_zoom: 'shift/middle/drag' },
+        ({ svg, row, segments, ticks, xZoom }) => {
+          xZoom()
+          expect(segments()).toBe(10)
+          fireEvent.mouseDown(svg, { button: 1, clientY: 60, shiftKey: true })
+          fireEvent.mouseMove(window, { clientY: 130 })
+          fireEvent.mouseUp(window, { button: 1, clientY: 130 })
+          fireEvent(row, new MouseEvent('auxclick', { bubbles: true, button: 1, shiftKey: true }))
+          expect(ticks()).toEqual(expect.arrayContaining(['7', '9', '11']))
+          expect(segments()).toBe(10)
+        }
+      )
+    })
+
+    it('redo on Shift+right-click replaces the built-in redo; plain right-click undo still works', async () => {
+      await withBindings({ redo: 'shift/right/click' }, ({ row, segments, ticks, xZoom, yZoom }) => {
+        xZoom()
+        yZoom()
+        fireEvent.contextMenu(row)
+        fireEvent.contextMenu(row)
+        expect(segments()).toBe(18)
+        fireEvent.contextMenu(row, { shiftKey: true })
+        // Redone exactly once: the X zoom is back, the Y zoom is not.
+        expect(segments()).toBe(10)
+        expect(ticks()).not.toEqual(expect.arrayContaining(['7']))
+        fireEvent.contextMenu(row, { shiftKey: true })
+        expect(ticks()).toEqual(expect.arrayContaining(['7', '9', '11']))
+      })
+    })
+
+    it('assigned right-click bindings take over the built-ins (undo on Shift, redo on plain)', async () => {
+      await withBindings(
+        { undo: 'shift/right/click', redo: 'none/right/click' },
+        ({ row, segments, ticks, xZoom, yZoom }) => {
+          xZoom()
+          yZoom()
+          fireEvent.contextMenu(row, { shiftKey: true })
+          expect(segments()).toBe(10)
+          expect(ticks()).not.toEqual(expect.arrayContaining(['7']))
+          fireEvent.contextMenu(row)
+          expect(ticks()).toEqual(expect.arrayContaining(['7', '9', '11']))
+        }
+      )
+    })
+
+    it('undo on plain right-click undoes exactly once', async () => {
+      await withBindings({ undo: 'none/right/click' }, ({ row, segments, ticks, xZoom, yZoom }) => {
+        xZoom()
+        yZoom()
+        fireEvent.contextMenu(row)
+        expect(segments()).toBe(10)
+        expect(ticks()).not.toEqual(expect.arrayContaining(['7']))
+      })
+    })
+
+    it('a second right click within 400 ms runs a right double-click binding', async () => {
+      await withBindings({ redo: 'none/right/dblclick', undo: 'shift/right/click' }, ({ row, segments, xZoom }) => {
+        vi.useFakeTimers({ toFake: ['Date', 'performance'] })
+        try {
+          xZoom()
+          fireEvent.contextMenu(row, { shiftKey: true })
+          expect(segments()).toBe(18)
+          vi.advanceTimersByTime(1000)
+          // A single plain right click is neither the dblclick binding nor the
+          // built-in undo (right+none is reserved by the dblclick binding).
+          fireEvent.contextMenu(row)
+          expect(segments()).toBe(18)
+          vi.advanceTimersByTime(100)
+          fireEvent.contextMenu(row)
+          expect(segments()).toBe(10)
+        } finally {
+          vi.useRealTimers()
+        }
+      })
+    })
+  })
+
   it('shift+ctrl+drag box-zooms X and the dragged row\'s Y together, undone in one step', async () => {
     const time = hourlyTimes(18)
     vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
@@ -799,6 +1116,30 @@ describe('SvgPlot', () => {
     expect(await screen.findByText('BULK Test Data: T (air temperature)')).toBeInTheDocument()
     // No long_name — title stays as before.
     expect(screen.getByText('BULK Test Data: RH')).toBeInTheDocument()
+  })
+
+  it('adds each variable\'s units in parentheses to its y-axis label', async () => {
+    const time = hourlyTimes(18)
+    vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
+      time,
+      variables: {
+        T: { values: time.map((_, i) => i), flags: time.map(() => 'Z') },
+        RH: { values: time.map((_, i) => i), flags: time.map(() => 'Z') },
+      },
+    })
+    vi.spyOn(apiClient, 'getFileMetadata').mockResolvedValue({
+      variables: {
+        T: { dims: ['time'], shape: [19], dtype: 'float32', attrs: { units: 'celsius' } },
+        RH: { dims: ['time'], shape: [19], dtype: 'float32', attrs: {} },
+      },
+      dimensions: { time: 19 },
+      global_attrs: {},
+    })
+    const { container } = renderSvgPlot('FILE_A', ['T', 'RH'])
+    const yLabel = (svg: Element) => svg.querySelector('text[transform="rotate(-90)"]')?.textContent
+    await waitFor(() => expect(yLabel(container.querySelectorAll('svg')[0])).toBe('T (celsius)'))
+    // No units attribute — just the short name.
+    expect(yLabel(container.querySelectorAll('svg')[1])).toBe('RH')
   })
 
   it('labels latitude/longitude Y ticks with 3 decimals, one label per tick', async () => {
@@ -1032,6 +1373,88 @@ describe('SvgPlot', () => {
       fireEvent.mouseUp(window, { clientX: pxForIndex(14, 18) })
       expect(yMin.value).toBe('4')
       expect(yMax.value).toBe('14')
+    })
+  })
+
+  it('leaves missing values as gaps in the line instead of bridging them, dotting lone points', async () => {
+    const time = hourlyTimes(9) // 10 samples
+    const values: (number | null)[] = [0, 1, null, 3, 4, null, 6, null, 8, 9]
+    vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
+      time,
+      variables: { temperature: { values, flags: time.map(() => 'Z') } },
+    })
+    const { container } = renderSvgPlot('FILE_A', ['temperature'])
+    await waitFor(() => expect(container.querySelector('svg')).toBeInTheDocument())
+
+    const d = container.querySelector('[data-testid="data-line"]')!.getAttribute('d')!
+    // Runs [0,1], [3,4], [6], [8,9]: a new subpath (M) after every gap, and
+    // only in-run segments (L) — nothing drawn across a null.
+    expect(d.match(/M/g)).toHaveLength(4)
+    expect(d.match(/L/g)).toHaveLength(3)
+    // The lone sample at index 6 would be an invisible one-point subpath, so it
+    // gets a dot.
+    expect(container.querySelectorAll('[data-testid="isolated-point"]')).toHaveLength(1)
+  })
+
+  describe('time gaps (missing timestamps)', () => {
+    // Minute data with a ~3h hole between 00:02 and 03:00.
+    const time = [
+      '2025-01-01T00:00:00',
+      '2025-01-01T00:01:00',
+      '2025-01-01T00:02:00',
+      '2025-01-01T03:00:00',
+      '2025-01-01T03:01:00',
+    ]
+    const setup = async () => {
+      vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
+        time,
+        variables: { temperature: { values: [1, 2, 3, 4, 5], flags: ['Z', 'B', 'B', 'B', 'Z'] } },
+      })
+      const utils = renderSvgPlot('FILE_A', ['temperature'])
+      await waitFor(() => expect(utils.container.querySelector('svg')).toBeInTheDocument())
+      return utils
+    }
+    const xs = (d: string) => Array.from(d.matchAll(/[ML]([\d.]+),/g)).map((m) => Number(m[1]))
+
+    it('positions samples by time, so the hole is an empty stretch with no line across it', async () => {
+      const { container } = await setup()
+      const d = container.querySelector('[data-testid="data-line"]')!.getAttribute('d')!
+      expect(d.match(/M/g)).toHaveLength(2) // [00:00-00:02], [03:00-03:01]
+      const x = xs(d)
+      const innerWidth = 900 - 70 - 20
+      // 00:02 -> 03:00 is 178 of the window's 181 minutes.
+      expect(x[3] - x[2]).toBeCloseTo((178 / 181) * innerWidth, 0)
+      expect(x[1] - x[0]).toBeCloseTo((1 / 181) * innerWidth, 0)
+    })
+
+    it('a single missing minute also leaves a gap', async () => {
+      vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
+        time: ['2025-01-01T00:00:00', '2025-01-01T00:01:00', '2025-01-01T00:03:00', '2025-01-01T00:04:00'],
+        variables: { temperature: { values: [1, 2, 3, 4], flags: ['Z', 'Z', 'Z', 'Z'] } },
+      })
+      const { container } = renderSvgPlot('FILE_A', ['temperature'])
+      await waitFor(() => expect(container.querySelector('svg')).toBeInTheDocument())
+      const d = container.querySelector('[data-testid="data-line"]')!.getAttribute('d')!
+      expect(d.match(/M/g)).toHaveLength(2)
+    })
+
+    it('puts time ticks on their real times, including inside the hole', async () => {
+      await setup()
+      expect(screen.getByText('01:00Z')).toBeInTheDocument()
+      expect(screen.getByText('02:00Z')).toBeInTheDocument()
+    })
+
+    it('does not draw a flagged (magenta) segment across the hole', async () => {
+      const { container } = await setup()
+      // Flagged run B,B,B spans idx 1..3 but idx 2 -> 3 crosses the hole.
+      const flagPaths = Array.from(container.querySelectorAll('path')).filter(
+        (p) => p.getAttribute('stroke') === '#ff00ff'
+      )
+      expect(flagPaths.length).toBeGreaterThanOrEqual(1)
+      for (const p of flagPaths) {
+        const x = xs(p.getAttribute('d')!)
+        for (let i = 1; i < x.length; i++) expect(x[i] - x[i - 1]).toBeLessThan(100)
+      }
     })
   })
 

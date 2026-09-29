@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { AdminConfigSection } from '../components/AdminConfigSection'
 import * as client from '../api/client'
 import type { AppConfig } from '../api/types'
@@ -30,6 +30,21 @@ describe('AdminConfigSection', () => {
     expect(screen.getByLabelText('Tab content')).toHaveValue('## Hello\n\nUse {{x_zoom}} to zoom.')
     expect(screen.getByLabelText('Zoom X axis')).toHaveValue('shift')
     expect(screen.getByLabelText('Redo zoom')).toHaveValue('dblclick')
+    expect(screen.getByLabelText('Box zoom')).toHaveValue('shift+ctrl')
+    expect(screen.getByLabelText('Select flag range')).toHaveValue('none')
+  })
+
+  it('shows a binding outside the built-in list as an extra select option', async () => {
+    vi.spyOn(client, 'getConfig').mockResolvedValue({
+      ...SERVER_CONFIG,
+      keybindings: { ...DEFAULT_KEYBINDINGS, x_zoom: 'none/right/drag' },
+    })
+    render(<AdminConfigSection />)
+    await screen.findByRole('tab', { name: 'Intro' })
+
+    const select = screen.getByLabelText('Zoom X axis') as HTMLSelectElement
+    expect(select).toHaveValue('none/right/drag')
+    expect(within(select).getByText('Right-drag')).toBeInTheDocument()
   })
 
   it('blocks saving when two gestures share a binding', async () => {

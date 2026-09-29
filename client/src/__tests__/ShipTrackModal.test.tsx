@@ -54,20 +54,43 @@ vi.mock('leaflet', () => {
   return { default: L, ...L }
 })
 
+const sst = vi.hoisted(() => ({
+  created: [] as string[],
+  added: 0,
+  removed: 0,
+}))
+vi.mock('../sstLayer', () => ({
+  createSstLayer: (date: string) => {
+    sst.created.push(date)
+    const layer = {
+      addTo: () => {
+        sst.added++
+        return layer
+      },
+      remove: () => {
+        sst.removed++
+      },
+    }
+    return layer
+  },
+  sstLegendUrl: (date: string) => `legend:${date}`,
+}))
+
 import { ShipTrackModal } from '../components/ShipTrackModal'
 
-function Probe({ file }: { file: string | null }) {
+function Probe({ file, file2 }: { file: string | null; file2?: string }) {
   const sel = usePlotSelection()
   const { timeMarker } = useEditSession()
   return (
     <>
       {file && <button onClick={() => sel.setFile(file)}>set file</button>}
+      {file2 && <button onClick={() => sel.setFile(file2)}>set file 2</button>}
       <span data-testid="time-marker">{timeMarker ?? 'none'}</span>
     </>
   )
 }
 
-function renderModal(file: string | null) {
+function renderModal(file: string | null, file2?: string) {
   setToken('tok')
   localStorage.setItem('svidat_role', JSON.stringify(['user']))
   localStorage.setItem('svidat_username', 'u')
@@ -76,7 +99,7 @@ function renderModal(file: string | null) {
       <MemoryRouter>
         <PlotSelectionProvider>
           <EditSessionProvider>
-            <Probe file={file} />
+            <Probe file={file} file2={file2} />
             <ShipTrackModal onClose={() => {}} />
           </EditSessionProvider>
         </PlotSelectionProvider>
@@ -94,6 +117,9 @@ describe('ShipTrackModal', () => {
     drawn.markers.length = 0
     drawn.handlers = {}
     drawn.fitBounds.mockClear()
+    sst.created.length = 0
+    sst.added = 0
+    sst.removed = 0
   })
 
   it('asks for a file when none is selected', () => {
@@ -144,5 +170,59 @@ describe('ShipTrackModal', () => {
     expect(screen.getByTestId('time-marker')).toHaveTextContent('1')
     act(() => drawn.handlers.click({ containerPoint: { x: 500, y: 500 } }))
     expect(screen.getByTestId('time-marker')).toHaveTextContent('none')
+  })
+
+  it('has an Overlays toolbar whose SST toggle is disabled until the track loads', async () => {
+    let resolve!: (v: unknown) => void
+    vi.spyOn(apiClient, 'getVariableData').mockReturnValue(new Promise((r) => (resolve = r)) as never)
+    renderModal('FILE_A')
+    const sstBtn = screen.getByRole('button', { name: 'SST' })
+    expect(sstBtn).toBeDisabled()
+    expect(sstBtn).toHaveAttribute('aria-pressed', 'false')
+    await act(async () =>
+      resolve({
+        time: ['2019-03-01T14:19:00'],
+        variables: { lat: { values: [32.8], flags: null }, lon: { values: [280.05], flags: null } },
+      })
+    )
+    expect(sstBtn).toBeEnabled()
+  })
+
+  it('toggling SST adds the OISST layer for the file date and shows the legend; toggling off removes both', async () => {
+    vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
+      time: ['2019-03-01T14:19:00', '2019-03-01T15:19:00'],
+      variables: {
+        lat: { values: [32.8, 32.7], flags: null },
+        lon: { values: [280.05, 280.1], flags: null },
+      },
+    })
+    renderModal('FILE_A')
+    const sstBtn = screen.getByRole('button', { name: 'SST' })
+    await waitFor(() => expect(sstBtn).toBeEnabled())
+
+    act(() => sstBtn.click())
+    expect(sstBtn).toHaveAttribute('aria-pressed', 'true')
+    expect(sst.created).toEqual(['2019-03-01'])
+    expect(sst.added).toBe(1)
+    expect(screen.getByAltText('SST legend')).toHaveAttribute('src', 'legend:2019-03-01')
+
+    act(() => sstBtn.click())
+    expect(sst.removed).toBe(1)
+    expect(screen.queryByAltText('SST legend')).not.toBeInTheDocument()
+  })
+
+  it('switching files with SST on redraws it for the new file date', async () => {
+    vi.spyOn(apiClient, 'getVariableData').mockImplementation(async (file: string) => ({
+      time: [file === 'FILE_A' ? '2019-03-01T00:00:00' : '2020-07-04T00:00:00'],
+      variables: { lat: { values: [1], flags: null }, lon: { values: [2], flags: null } },
+    }))
+    renderModal('FILE_A', 'FILE_B')
+    const sstBtn = screen.getByRole('button', { name: 'SST' })
+    await waitFor(() => expect(sstBtn).toBeEnabled())
+    act(() => sstBtn.click())
+    act(() => screen.getByText('set file 2').click())
+    await waitFor(() => expect(sst.created).toEqual(['2019-03-01', '2020-07-04']))
+    expect(sst.removed).toBeGreaterThanOrEqual(1)
+    expect(screen.getByAltText('SST legend')).toHaveAttribute('src', 'legend:2020-07-04')
   })
 })

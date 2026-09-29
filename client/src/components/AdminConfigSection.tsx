@@ -1,33 +1,20 @@
 import { useEffect, useState } from 'react'
 import { getConfig, updateConfig } from '../api/client'
-import type { AppConfig, ClickTrigger, DocTab, KeyBindings } from '../api/types'
-import {
-  DEFAULT_DOCUMENTATION,
-  DEFAULT_KEYBINDINGS,
-  GESTURES,
-  applyConfig,
-  fillPlaceholders,
-  triggerLabel,
-} from '../appConfig'
+import type { AppConfig, DocTab, KeyBindings } from '../api/types'
+import { DEFAULT_DOCUMENTATION, DEFAULT_KEYBINDINGS, applyConfig, fillPlaceholders, findConflict } from '../appConfig'
+import { KeybindingsFields } from './KeybindingsFields'
 import { Markdown } from './Markdown'
 
-const DRAG_TRIGGERS: ClickTrigger[] = ['shift', 'ctrl', 'alt', 'meta']
-const CLICK_TRIGGERS: ClickTrigger[] = [...DRAG_TRIGGERS, 'dblclick']
 // Keep in sync with server/app/schemas.py.
 const MAX_DOC_TABS = 10
 const MAX_DOC_TAB_TITLE_LENGTH = 40
 
-function findConflict(bindings: KeyBindings): string | null {
-  const seen = new Map<string, string>()
-  for (const g of GESTURES) {
-    const other = seen.get(bindings[g.key])
-    if (other) return `"${other}" and "${g.label}" can't share the same binding.`
-    seen.set(bindings[g.key], g.label)
-  }
-  return null
-}
-
-export function AdminConfigSection() {
+// Keybindings + documentation share one form and one Save (the API takes
+// both together). `view` shows just one half — the admin page's
+// Configuration tabs mount a single instance and switch its view, so unsaved
+// edits in the other half survive; without `view` both halves render in
+// their own card.
+export function AdminConfigSection({ view }: { view?: 'keybindings' | 'documentation' } = {}) {
   const [form, setForm] = useState<AppConfig>({
     keybindings: DEFAULT_KEYBINDINGS,
     documentation: DEFAULT_DOCUMENTATION,
@@ -48,8 +35,7 @@ export function AdminConfigSection() {
   const conflict = findConflict(form.keybindings)
   const blankTitle = docs.some((t) => !t.title.trim())
 
-  const setBinding = (key: keyof KeyBindings, value: ClickTrigger) =>
-    setForm((prev) => ({ ...prev, keybindings: { ...prev.keybindings, [key]: value } }))
+  const setKeybindings = (kb: KeyBindings) => setForm((prev) => ({ ...prev, keybindings: kb }))
 
   const setDocs = (next: DocTab[]) => setForm((prev) => ({ ...prev, documentation: next }))
 
@@ -97,34 +83,26 @@ export function AdminConfigSection() {
     }
   }
 
-  return (
-    <section className="admin-card">
-      <h2>Configuration</h2>
+  const showKeybindings = view !== 'documentation'
+  const showDocs = view !== 'keybindings'
+  const Wrapper = view ? 'div' : 'section'
 
+  return (
+    <Wrapper className={view ? 'admin-config-panel' : 'admin-card'}>
+      {!view && <h2>Configuration</h2>}
+
+      {showKeybindings && (
+        <>
       <h3 className="admin-subheading">Plot keybindings</h3>
       <p className="admin-hint">
         Applies to every user. Right-click (undo) and Shift+right-click (redo) always work too.
       </p>
-      <div className="admin-form-row">
-        {GESTURES.map((g) => (
-          <label key={g.key} className="admin-field">
-            {g.label}
-            <select
-              value={form.keybindings[g.key]}
-              onChange={(e) => setBinding(g.key, e.target.value as ClickTrigger)}
-              disabled={submitting}
-            >
-              {(g.kind === 'drag' ? DRAG_TRIGGERS : CLICK_TRIGGERS).map((t) => (
-                <option key={t} value={t}>
-                  {triggerLabel(t, g.kind)}
-                </option>
-              ))}
-            </select>
-          </label>
-        ))}
-      </div>
-      {conflict && <p className="admin-status admin-status-error">{conflict}</p>}
+      <KeybindingsFields value={form.keybindings} onChange={setKeybindings} disabled={submitting} />
+        </>
+      )}
 
+      {showDocs && (
+        <>
       <h3 className="admin-subheading">Documentation</h3>
       <p className="admin-hint">
         Markdown: <code># Heading</code>, <code>- bullet</code>, <code>1. numbered</code>,{' '}
@@ -225,6 +203,8 @@ export function AdminConfigSection() {
           )}
         </div>
       )}
+        </>
+      )}
 
       <div className="admin-config-actions">
         <button
@@ -234,9 +214,11 @@ export function AdminConfigSection() {
         >
           Save configuration
         </button>
-        <button className="admin-btn" onClick={resetDocs} disabled={submitting}>
-          Reset documentation to defaults
-        </button>
+        {showDocs && (
+          <button className="admin-btn" onClick={resetDocs} disabled={submitting}>
+            Reset documentation to defaults
+          </button>
+        )}
       </div>
       {blankTitle && <p className="admin-status admin-status-error">Every tab needs a title.</p>}
       {status && (
@@ -244,6 +226,6 @@ export function AdminConfigSection() {
           {status}
         </p>
       )}
-    </section>
+    </Wrapper>
   )
 }

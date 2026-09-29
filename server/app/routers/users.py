@@ -1,3 +1,4 @@
+import json
 import os
 from typing import List
 
@@ -6,11 +7,12 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app import storage
+from app.app_config import config_to_dict, get_or_create_config
 from app.database import get_db
 from app.deps import get_current_user, require_role
 from app.file_locks import file_write_lock
 from app.models import Role, User
-from app.schemas import UserCreate, UserOut, UserRolesUpdate
+from app.schemas import AppConfigOut, KeyBindings, UserCreate, UserOut, UserRolesUpdate
 from app.security import hash_password
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -19,6 +21,29 @@ router = APIRouter(prefix="/users", tags=["users"])
 @router.get("/me", response_model=UserOut)
 def get_me(user: User = Depends(get_current_user)):
     return user
+
+
+@router.put("/me/keybindings", response_model=AppConfigOut)
+def save_my_keybindings(
+    payload: KeyBindings,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    user.keybindings = json.dumps(payload.model_dump())
+    db.commit()
+    db.refresh(user)
+    return config_to_dict(get_or_create_config(db), user)
+
+
+@router.delete("/me/keybindings", response_model=AppConfigOut)
+def reset_my_keybindings(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    user.keybindings = None
+    db.commit()
+    db.refresh(user)
+    return config_to_dict(get_or_create_config(db), user)
 
 
 ALLOWED_AVATAR_TYPES = {

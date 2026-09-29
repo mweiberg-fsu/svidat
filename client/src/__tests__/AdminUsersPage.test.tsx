@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { AdminUsersPage } from '../pages/AdminUsersPage'
 import * as client from '../api/client'
 
@@ -312,11 +312,56 @@ describe('AdminUsersPage theme', () => {
     expect(await screen.findByText('Error: 400: invalid hex color')).toBeInTheDocument()
   })
 
-  it('shows the Theme heading and current site name', async () => {
+  it('shows the Theme tab and current site name', async () => {
     render(<AdminUsersPage />)
     expect(await screen.findByDisplayValue('SVIDAT')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Theme' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Theme' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByText('No logo set')).toBeInTheDocument()
+  })
+
+  it('groups Theme, Keybindings and Documentation as tabs of one Configuration card', async () => {
+    vi.spyOn(client, 'getConfig').mockResolvedValue({
+      keybindings: {
+        x_zoom: 'shift',
+        y_zoom: 'ctrl',
+        box_zoom: 'shift+ctrl',
+        flag_select: 'none',
+        undo: 'meta',
+        redo: 'dblclick',
+      },
+      user_keybindings: null,
+      documentation: [{ title: 'Overview', body: 'Hello' }],
+    })
+    render(<AdminUsersPage />)
+    await screen.findByDisplayValue('SVIDAT')
+
+    const card = screen.getByRole('heading', { name: 'Configuration' }).closest('section')!
+    const tabs = within(card).getAllByRole('tab').map((t) => t.textContent)
+    expect(tabs).toEqual(['Theme', 'Keybindings', 'Documentation'])
+    // Only one Configuration card now — no separate Theme card.
+    expect(screen.queryByRole('heading', { name: 'Theme' })).not.toBeInTheDocument()
+
+    // Theme first: its fields show, the others don't.
+    expect(within(card).getByRole('tabpanel', { name: 'Theme' })).toBeVisible()
+    expect(within(card).queryByRole('combobox', { name: 'Zoom X axis' })).not.toBeInTheDocument()
+
+    fireEvent.click(within(card).getByRole('tab', { name: 'Keybindings' }))
+    expect(await within(card).findByRole('combobox', { name: 'Zoom X axis' })).toBeInTheDocument()
+    expect(within(card).queryByRole('tabpanel', { name: 'Theme' })).not.toBeInTheDocument()
+    expect(within(card).getByRole('button', { name: 'Save configuration' })).toBeInTheDocument()
+
+    fireEvent.click(within(card).getByRole('tab', { name: 'Documentation' }))
+    expect(within(card).getByRole('button', { name: 'Reset documentation to defaults' })).toBeInTheDocument()
+    expect(within(card).queryByRole('combobox', { name: 'Zoom X axis' })).not.toBeInTheDocument()
+  })
+
+  it('keeps unsaved edits when switching tabs', async () => {
+    render(<AdminUsersPage />)
+    const siteName = await screen.findByDisplayValue('SVIDAT')
+    fireEvent.change(siteName, { target: { value: 'Edited' } })
+    fireEvent.click(screen.getByRole('tab', { name: 'Keybindings' }))
+    fireEvent.click(screen.getByRole('tab', { name: 'Theme' }))
+    expect(screen.getByDisplayValue('Edited')).toBeInTheDocument()
   })
 
   it('uploads a logo and shows its preview', async () => {

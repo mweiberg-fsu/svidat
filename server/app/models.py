@@ -41,6 +41,9 @@ class User(Base):
     auth_provider = Column(String, nullable=False, default="local")
     is_admin = Column(Boolean, nullable=False, default=False)
     is_qca = Column(Boolean, nullable=False, default=False)
+    # The user's own plot keybindings (JSON, KeyBindings shape); NULL means
+    # "use the admin-configured defaults" (app_config.keybindings).
+    keybindings = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     audit_entries = relationship("AuditLog", back_populates="user")

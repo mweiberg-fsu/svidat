@@ -1,10 +1,20 @@
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ColorModeSwitch } from '../components/ColorModeSwitch'
-import { getMyAuditHistory, getMySessions, listDrafts, revertAuditEntry, uploadAvatar } from '../api/client'
+import { KeybindingsFields } from '../components/KeybindingsFields'
+import {
+  getMyAuditHistory,
+  getMySessions,
+  listDrafts,
+  resetMyKeybindings,
+  revertAuditEntry,
+  saveMyKeybindings,
+  uploadAvatar,
+} from '../api/client'
 import type { AuditEntry } from '../api/types'
 import { useAvatar } from '../hooks/useAvatar'
 import { useAuth } from '../context/AuthContext'
+import { useAppConfig, applyConfig, findConflict } from '../appConfig'
 import { PLOT_PATH } from '../routes'
 
 const REVERTIBLE_ACTIONS = new Set(['point_edit', 'bulk_edit', 'flag_edit'])
@@ -17,6 +27,43 @@ export function ProfilePage() {
   const [drafts, setDrafts] = useState<string[]>([])
   const [draftsError, setDraftsError] = useState<string | null>(null)
   const navigate = useNavigate()
+
+  const { keybindings, userKeybindings } = useAppConfig()
+  const [kbForm, setKbForm] = useState(keybindings)
+  const [kbStatus, setKbStatus] = useState<string | null>(null)
+  const [kbSubmitting, setKbSubmitting] = useState(false)
+
+  useEffect(() => {
+    setKbForm(keybindings)
+  }, [keybindings])
+
+  const saveKb = async () => {
+    setKbStatus(null)
+    setKbSubmitting(true)
+    try {
+      const res = await saveMyKeybindings(kbForm)
+      applyConfig(res)
+      setKbStatus('Keybindings saved')
+    } catch (err) {
+      setKbStatus(`Error: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setKbSubmitting(false)
+    }
+  }
+
+  const resetKb = async () => {
+    setKbStatus(null)
+    setKbSubmitting(true)
+    try {
+      const res = await resetMyKeybindings()
+      applyConfig(res)
+      setKbStatus('Reset to default bindings')
+    } catch (err) {
+      setKbStatus(`Error: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setKbSubmitting(false)
+    }
+  }
 
   const [auditEntries, setAuditEntries] = useState<AuditEntry[]>([])
   const [auditError, setAuditError] = useState<string | null>(null)
@@ -148,6 +195,35 @@ export function ProfilePage() {
         {status && <p role="status" className="profile-status">{status}</p>}
         <ColorModeSwitch className="profile-color-mode" />
       </div>
+
+      <section className="profile-card-wide profile-keybindings">
+        <h2>My plot keybindings</h2>
+        <p className="profile-hint">
+          {userKeybindings ? 'Using your own bindings.' : 'Using the default bindings.'} Right-click
+          (undo) and Shift+right-click (redo) always work too.
+        </p>
+        <KeybindingsFields value={kbForm} onChange={setKbForm} disabled={kbSubmitting} />
+        <div className="profile-keybindings-actions">
+          <button
+            type="button"
+            onClick={saveKb}
+            disabled={kbSubmitting || Boolean(findConflict(kbForm))}
+          >
+            Save
+          </button>
+          {userKeybindings && (
+            <button type="button" onClick={resetKb} disabled={kbSubmitting}>
+              Reset to default
+            </button>
+          )}
+        </div>
+        {kbStatus && (
+          <p role="status" className="profile-status profile-keybindings-status">
+            {kbStatus}
+          </p>
+        )}
+      </section>
+
       {roles.includes('qca') && (
         <section className="profile-drafts">
           <h2>My drafts</h2>

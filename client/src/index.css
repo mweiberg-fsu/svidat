@@ -1126,6 +1126,12 @@ code {
   font-size: 13px;
 }
 
+.profile-keybindings-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
 .profile-files-list {
   list-style: none;
   margin: 0;
@@ -1137,6 +1143,36 @@ code {
 
 .profile-files-list a {
   font-size: 14px;
+}
+
+.admin-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+/* Same look as the Profile page's file tabs. */
+.admin-tab {
+  font: inherit;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.admin-tab:hover {
+  background: var(--social-bg);
+}
+
+.admin-tab.active {
+  color: var(--text-h);
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
 }
 
 .profile-file-tabs {
@@ -1399,6 +1435,57 @@ code {
   color: var(--text-h);
   font-size: 12px;
   white-space: nowrap;
+}
+
+.ship-track-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  background: var(--subnav-bg);
+}
+
+.ship-track-toolbar-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text);
+  margin-right: 4px;
+}
+
+/* Same look as the secondary navbar toggles, sized for the small toolbar. */
+.ship-track-toolbar .files-toolbar-btn {
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  background: var(--code-bg);
+  color: var(--text-h);
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.ship-track-toolbar .files-toolbar-btn.active {
+  color: var(--text-h);
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+}
+
+.ship-track-toolbar .files-toolbar-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.ship-track-legend {
+  position: absolute;
+  /* Top-right: the zoom buttons are top-left and the (multi-line)
+     attribution runs along the bottom. */
+  top: 8px;
+  right: 8px;
+  width: 180px;
+  z-index: 800; /* above Leaflet panes, below controls */
+  border-radius: 4px;
+  pointer-events: none;
 }
 
 /* Leaflet's corner controls (attribution) sit at z-index 1000, so the resize

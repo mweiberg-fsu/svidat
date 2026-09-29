@@ -11,5 +11,5 @@ router = APIRouter(prefix="/config", tags=["config"])
 
 
 @router.get("", response_model=AppConfigOut)
-def get_config(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
-    return config_to_dict(get_or_create_config(db))
+def get_config(db: Session = Depends(get_db), user: User = Depends(get_current_user)):
+    return config_to_dict(get_or_create_config(db), user)

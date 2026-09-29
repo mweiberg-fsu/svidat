@@ -79,14 +79,14 @@ def update_theme_settings(
 def update_config(
     payload: AppConfigUpdate,
     db: Session = Depends(get_db),
-    _: User = Depends(require_role(Role.admin)),
+    user: User = Depends(require_role(Role.admin)),
 ):
     row = get_or_create_config(db)
     row.keybindings = json.dumps(payload.keybindings.model_dump())
     row.documentation = json.dumps([tab.model_dump() for tab in payload.documentation])
     db.commit()
     db.refresh(row)
-    return config_to_dict(row)
+    return config_to_dict(row, user)
 
 
 def _remove_logo_file(row) -> None:

@@ -18,9 +18,10 @@ describe('KeybindsModal', () => {
     const rows = within(screen.getByRole('table')).getAllByRole('row').map((r) => r.textContent)
     expect(rows).toEqual([
       'Click rowSet active variable',
-      'Drag rowSelect range (qca)',
+      'DragSelect range (qca)',
       'Shift+dragZoom X axis',
       'Ctrl+dragZoom Y axis',
+      'Shift+Ctrl+dragBox zoom',
       expect.stringMatching(/^(Cmd|Meta)\+clickRight-clickUndo zoom$/),
       'Double-clickShift+right-clickRedo zoom',
       'Drag right edgeResize sidebar',

@@ -6,6 +6,7 @@ import { usePlotSelection } from '../context/PlotSelectionContext'
 import { useEditSession } from '../context/EditSessionContext'
 import { useFloatingPanel } from '../hooks/useFloatingPanel'
 import { buildTrack, nearestFix, windowSegments, type TrackFix } from '../shipTrack'
+import { createSstLayer, sstLegendUrl } from '../sstLayer'
 
 const ESRI_OCEAN_URL =
   'https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}'
@@ -32,6 +33,8 @@ export function ShipTrackModal({ onClose }: { onClose: () => void }) {
   const [segments, setSegments] = useState<TrackFix[][] | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [hover, setHover] = useState<{ fix: TrackFix; x: number; y: number } | null>(null)
+  const [trackDate, setTrackDate] = useState<string | null>(null)
+  const [sstOn, setSstOn] = useState(false)
 
   // Create the map once.
   useEffect(() => {
@@ -70,6 +73,7 @@ export function ShipTrackModal({ onClose }: { onClose: () => void }) {
     setSegments(null)
     setError(null)
     setHover(null)
+    setTrackDate(null)
     if (!file) return
     let cancelled = false
     getVariableData(file, ['lat', 'lon'])
@@ -78,6 +82,7 @@ export function ShipTrackModal({ onClose }: { onClose: () => void }) {
         const segs = buildTrack(d.time, d.variables.lat?.values ?? [], d.variables.lon?.values ?? [])
         segmentsRef.current = segs
         setSegments(segs)
+        setTrackDate(d.time[0] ? d.time[0].slice(0, 10) : null)
         const all = segs.flat()
         if (all.length && mapRef.current) {
           mapRef.current.fitBounds(L.latLngBounds(all.map((f) => [f.lat, f.lon] as [number, number])), {
@@ -125,6 +130,16 @@ export function ShipTrackModal({ onClose }: { onClose: () => void }) {
     }
   }, [segments, xWindow, timeMarker])
 
+  // SST overlay for the loaded file's day; recreated when the day changes.
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !sstOn || !trackDate) return
+    const layer = createSstLayer(trackDate).addTo(map)
+    return () => {
+      layer.remove()
+    }
+  }, [sstOn, trackDate])
+
   const message = !file
     ? 'Select a file to see its track.'
     : error
@@ -143,6 +158,19 @@ export function ShipTrackModal({ onClose }: { onClose: () => void }) {
           &times;
         </button>
       </div>
+      <div className="ship-track-toolbar" role="toolbar" aria-label="Overlays">
+        <span className="ship-track-toolbar-label">Overlays</span>
+        <button
+          type="button"
+          className={`files-toolbar-btn${sstOn ? ' active' : ''}`}
+          aria-pressed={sstOn}
+          disabled={!trackDate}
+          onClick={() => setSstOn((v) => !v)}
+          title="Sea surface temperature (NOAA OISST v2.1) for the file's date"
+        >
+          SST
+        </button>
+      </div>
       <div className="ship-track-modal-body">
         <div ref={mapElRef} className="ship-track-map" />
         {message && <p className="ship-track-message">{message}</p>}
@@ -150,6 +178,9 @@ export function ShipTrackModal({ onClose }: { onClose: () => void }) {
           <div className="ship-track-tooltip" style={{ left: hover.x + 12, top: hover.y + 12 }}>
             {formatFix(hover.fix)}
           </div>
+        )}
+        {sstOn && trackDate && (
+          <img className="ship-track-legend" src={sstLegendUrl(trackDate)} alt="SST legend" />
         )}
       </div>
       <div className="keybinds-modal-resize-handle" onMouseDown={panel.onResizeMouseDown} />

@@ -12,9 +12,10 @@ function bindingRows(bindings: KeyBindings): [string[], string][] {
   }
   return [
     [['Click row'], 'Set active variable'],
-    [['Drag row'], 'Select range (qca)'],
+    [[label('flag_select')], 'Select range (qca)'],
     [[label('x_zoom')], 'Zoom X axis'],
     [[label('y_zoom')], 'Zoom Y axis'],
+    [[label('box_zoom')], 'Box zoom'],
     [[label('undo'), 'Right-click'], 'Undo zoom'],
     [[label('redo'), 'Shift+right-click'], 'Redo zoom'],
     [['Drag right edge'], 'Resize sidebar'],

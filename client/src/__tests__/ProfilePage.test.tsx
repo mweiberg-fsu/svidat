@@ -1,9 +1,10 @@
-import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react'
+import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest'
+import { render, renderHook, screen, fireEvent, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { ProfilePage } from '../pages/ProfilePage'
 import { AuthProvider } from '../context/AuthContext'
 import * as apiClient from '../api/client'
+import { DEFAULT_DOCUMENTATION, DEFAULT_KEYBINDINGS, applyConfig, useAppConfig } from '../appConfig'
 
 describe('ProfilePage', () => {
   beforeEach(() => {
@@ -12,6 +13,10 @@ describe('ProfilePage', () => {
     localStorage.setItem('svidat_username', 'testuser')
     localStorage.setItem('svidat_role', JSON.stringify(['qca']))
     vi.restoreAllMocks()
+  })
+
+  afterEach(() => {
+    applyConfig({ keybindings: DEFAULT_KEYBINDINGS, documentation: DEFAULT_DOCUMENTATION })
   })
 
   it('uploads a photo and shows a success status', async () => {
@@ -207,5 +212,100 @@ describe('ProfilePage', () => {
     await waitFor(() => expect(screen.getByText('No edits yet.')).toBeInTheDocument())
     fireEvent.click(screen.getByRole('button', { name: 'Temporary Files' }))
     expect(await screen.findByText('No open sessions.')).toBeInTheDocument()
+  })
+
+  describe('My plot keybindings card', () => {
+    const mockCommonEndpoints = () => {
+      vi.spyOn(apiClient, 'fetchAvatarBlobUrl').mockResolvedValue(null)
+      vi.spyOn(apiClient, 'listDrafts').mockResolvedValue([])
+      vi.spyOn(apiClient, 'getMySessions').mockResolvedValue([])
+      vi.spyOn(apiClient, 'getMyAuditHistory').mockResolvedValue([])
+    }
+
+    const renderProfile = async () => {
+      render(
+        <AuthProvider>
+          <MemoryRouter>
+            <ProfilePage />
+          </MemoryRouter>
+        </AuthProvider>
+      )
+      const heading = await screen.findByText('My plot keybindings')
+      return heading.closest('section') as HTMLElement
+    }
+
+    it('shows the six gesture selects pre-set to the effective bindings, defaulting to the admin bindings', async () => {
+      applyConfig({ keybindings: DEFAULT_KEYBINDINGS, documentation: DEFAULT_DOCUMENTATION, user_keybindings: null })
+      mockCommonEndpoints()
+
+      const card = await renderProfile()
+
+      expect(within(card).getByLabelText('Zoom X axis')).toHaveValue(DEFAULT_KEYBINDINGS.x_zoom)
+      expect(within(card).getByLabelText('Zoom Y axis')).toHaveValue(DEFAULT_KEYBINDINGS.y_zoom)
+      expect(within(card).getByLabelText('Box zoom')).toHaveValue(DEFAULT_KEYBINDINGS.box_zoom)
+      expect(within(card).getByLabelText('Select flag range')).toHaveValue(DEFAULT_KEYBINDINGS.flag_select)
+      expect(within(card).getByLabelText('Undo zoom')).toHaveValue(DEFAULT_KEYBINDINGS.undo)
+      expect(within(card).getByLabelText('Redo zoom')).toHaveValue(DEFAULT_KEYBINDINGS.redo)
+      expect(within(card).getByText(/Using the default bindings/)).toBeInTheDocument()
+    })
+
+    it('saves keybindings and applies the response', async () => {
+      applyConfig({ keybindings: DEFAULT_KEYBINDINGS, documentation: DEFAULT_DOCUMENTATION, user_keybindings: null })
+      mockCommonEndpoints()
+      const savedConfig = {
+        keybindings: DEFAULT_KEYBINDINGS,
+        user_keybindings: { ...DEFAULT_KEYBINDINGS, x_zoom: 'alt' as const },
+        documentation: DEFAULT_DOCUMENTATION,
+      }
+      const saveSpy = vi.spyOn(apiClient, 'saveMyKeybindings').mockResolvedValue(savedConfig)
+
+      const card = await renderProfile()
+      fireEvent.change(within(card).getByLabelText('Zoom X axis'), { target: { value: 'alt' } })
+      fireEvent.click(within(card).getByText('Save'))
+
+      await waitFor(() =>
+        expect(saveSpy).toHaveBeenCalledWith({ ...DEFAULT_KEYBINDINGS, x_zoom: 'alt' })
+      )
+
+      const { result } = renderHook(() => useAppConfig())
+      expect(result.current.keybindings.x_zoom).toBe('alt')
+      expect(within(card).getByText(/Using your own bindings/)).toBeInTheDocument()
+      expect(within(card).getByText('Keybindings saved')).toBeInTheDocument()
+    })
+
+    it('resets to the default bindings', async () => {
+      applyConfig({
+        keybindings: DEFAULT_KEYBINDINGS,
+        documentation: DEFAULT_DOCUMENTATION,
+        user_keybindings: { ...DEFAULT_KEYBINDINGS, x_zoom: 'alt' },
+      })
+      mockCommonEndpoints()
+      const resetSpy = vi.spyOn(apiClient, 'resetMyKeybindings').mockResolvedValue({
+        keybindings: DEFAULT_KEYBINDINGS,
+        user_keybindings: null,
+        documentation: DEFAULT_DOCUMENTATION,
+      })
+
+      const card = await renderProfile()
+      expect(within(card).getByText(/Using your own bindings/)).toBeInTheDocument()
+
+      fireEvent.click(within(card).getByText('Reset to default'))
+
+      await waitFor(() => expect(resetSpy).toHaveBeenCalled())
+      expect(within(card).getByText(/Using the default bindings/)).toBeInTheDocument()
+    })
+
+    it('shows a conflict message and disables Save when two gestures share a binding', async () => {
+      applyConfig({ keybindings: DEFAULT_KEYBINDINGS, documentation: DEFAULT_DOCUMENTATION, user_keybindings: null })
+      mockCommonEndpoints()
+
+      const card = await renderProfile()
+      fireEvent.change(within(card).getByLabelText('Zoom Y axis'), {
+        target: { value: DEFAULT_KEYBINDINGS.x_zoom },
+      })
+
+      expect(within(card).getByText(/can't share the same binding/)).toBeInTheDocument()
+      expect(within(card).getByText('Save')).toBeDisabled()
+    })
   })
 })

@@ -1,4 +1,4 @@
-import type { AppConfig, CurrentUser, Catalog, ClimatologyResponse, ShipNames, OAuthSettings, TempSessionEntry, VariableDataResponse, ThemeSettings, ThemeSettingsUpdate } from './types'
+import type { AppConfig, CurrentUser, Catalog, ClimatologyResponse, KeyBindings, ShipNames, OAuthSettings, TempSessionEntry, VariableDataResponse, ThemeSettings, ThemeSettingsUpdate } from './types'
 
 const BASE_URL = 'http://localhost:8000'
 const TOKEN_KEY = 'svidat_token'
@@ -180,6 +180,15 @@ export const updateConfig = (config: AppConfig): Promise<AppConfig> =>
     method: 'PUT',
     body: JSON.stringify(config),
   }).then((r) => r.json())
+
+export const saveMyKeybindings = (keybindings: KeyBindings): Promise<AppConfig> =>
+  apiFetch('/users/me/keybindings', {
+    method: 'PUT',
+    body: JSON.stringify(keybindings),
+  }).then((r) => r.json())
+
+export const resetMyKeybindings = (): Promise<AppConfig> =>
+  apiFetch('/users/me/keybindings', { method: 'DELETE' }).then((r) => r.json())
 
 export const uploadThemeLogo = (file: File): Promise<ThemeSettings> => {
   const form = new FormData()

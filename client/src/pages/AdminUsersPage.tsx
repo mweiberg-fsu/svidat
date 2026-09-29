@@ -30,8 +30,18 @@ const THEME_COLOR_FIELDS = [
   { key: 'tertiary_color', label: 'Tertiary color' },
 ] as const
 
+// Tabs of the Configuration card. Keybindings and Documentation are two views
+// of one AdminConfigSection form (they save together).
+const CONFIG_TABS = [
+  { id: 'theme', label: 'Theme' },
+  { id: 'keybindings', label: 'Keybindings' },
+  { id: 'documentation', label: 'Documentation' },
+] as const
+type ConfigTab = (typeof CONFIG_TABS)[number]['id']
+
 export function AdminUsersPage() {
   const [users, setUsers] = useState<UserRow[]>([])
+  const [configTab, setConfigTab] = useState<ConfigTab>('theme')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [newRoles, setNewRoles] = useState<string[]>([])
@@ -232,8 +242,6 @@ export function AdminUsersPage() {
 
   return (
     <div className="admin-page">
-      <h1>Users</h1>
-
       <section className="admin-card">
         <h2>All users</h2>
         <ul className="admin-user-list">
@@ -387,110 +395,140 @@ export function AdminUsersPage() {
       </section>
 
       <section className="admin-card">
-        <h2>Theme</h2>
-        <div className="admin-form-row">
-          <label className="admin-field">
-            Site name
-            <input
-              type="text"
-              value={themeForm.site_name}
-              maxLength={64}
-              onChange={(e) => setThemeForm((prev) => ({ ...prev, site_name: e.target.value }))}
-              disabled={themeSubmitting}
-            />
-          </label>
-        </div>
-        <div className="admin-form-row">
-          <label className="admin-field">
-            Save draft button text
-            <input
-              type="text"
-              value={themeForm.save_draft_label}
-              maxLength={32}
-              onChange={(e) =>
-                setThemeForm((prev) => ({ ...prev, save_draft_label: e.target.value }))
-              }
-              disabled={themeSubmitting}
-            />
-          </label>
-          <label className="admin-field">
-            Publish button text
-            <input
-              type="text"
-              value={themeForm.publish_label}
-              maxLength={32}
-              onChange={(e) =>
-                setThemeForm((prev) => ({ ...prev, publish_label: e.target.value }))
-              }
-              disabled={themeSubmitting}
-            />
-          </label>
-        </div>
-        <div className="admin-logo-row">
-          {logoPreviewUrl ? (
-            <img className="admin-logo-preview" src={logoPreviewUrl} alt="Current logo" />
-          ) : (
-            <span className="admin-hint">No logo set</span>
-          )}
-          <label className="admin-btn admin-btn-inline">
-            {logoPreviewUrl ? 'Replace logo' : 'Upload logo'}
-            <input
-              type="file"
-              accept="image/png,image/jpeg,image/webp,image/gif"
-              onChange={handleLogoFile}
-              disabled={themeSubmitting}
-              hidden
-            />
-          </label>
-          {logoPreviewUrl && (
+        <h2>Configuration</h2>
+        <div className="admin-tabs" role="tablist" aria-label="Configuration">
+          {CONFIG_TABS.map((t) => (
             <button
-              className="admin-btn admin-btn-inline admin-btn-danger"
-              onClick={() => runLogoChange(deleteThemeLogo, 'Logo removed')}
-              disabled={themeSubmitting}
+              key={t.id}
+              type="button"
+              role="tab"
+              id={`admin-config-tab-${t.id}`}
+              aria-selected={configTab === t.id}
+              aria-controls={t.id === 'theme' ? 'admin-config-panel-theme' : 'admin-config-panel-app'}
+              className={`admin-tab${configTab === t.id ? ' active' : ''}`}
+              onClick={() => setConfigTab(t.id)}
             >
-              Remove logo
+              {t.label}
             </button>
-          )}
-        </div>
-        <div className="admin-form-row">
-          {THEME_COLOR_FIELDS.map(({ key, label }) => (
-            <label key={key} className="admin-field">
-              {label}
-              <span className="admin-color-row">
-                <span
-                  className="admin-color-swatch"
-                  style={{ backgroundColor: themeForm[key] }}
-                  data-testid={`swatch-${key}`}
-                  aria-hidden="true"
-                />
-                <input
-                  type="color"
-                  value={themeForm[key]}
-                  onChange={(e) =>
-                    setThemeForm((prev) => ({ ...prev, [key]: e.target.value }))
-                  }
-                  disabled={themeSubmitting}
-                />
-              </span>
-            </label>
           ))}
         </div>
-        <button
-          className="admin-btn admin-btn-primary"
-          onClick={handleSaveTheme}
-          disabled={themeSubmitting}
+        {/* Panels stay mounted (just hidden) so unsaved edits survive tab switches. */}
+        <div
+          role="tabpanel"
+          id="admin-config-panel-theme"
+          aria-labelledby="admin-config-tab-theme"
+          hidden={configTab !== 'theme'}
         >
-          Save theme
-        </button>
+          <div className="admin-form-row">
+            <label className="admin-field">
+              Site name
+              <input
+                type="text"
+                value={themeForm.site_name}
+                maxLength={64}
+                onChange={(e) => setThemeForm((prev) => ({ ...prev, site_name: e.target.value }))}
+                disabled={themeSubmitting}
+              />
+            </label>
+          </div>
+          <div className="admin-form-row">
+            <label className="admin-field">
+              Save draft button text
+              <input
+                type="text"
+                value={themeForm.save_draft_label}
+                maxLength={32}
+                onChange={(e) =>
+                  setThemeForm((prev) => ({ ...prev, save_draft_label: e.target.value }))
+                }
+                disabled={themeSubmitting}
+              />
+            </label>
+            <label className="admin-field">
+              Publish button text
+              <input
+                type="text"
+                value={themeForm.publish_label}
+                maxLength={32}
+                onChange={(e) =>
+                  setThemeForm((prev) => ({ ...prev, publish_label: e.target.value }))
+                }
+                disabled={themeSubmitting}
+              />
+            </label>
+          </div>
+          <div className="admin-logo-row">
+            {logoPreviewUrl ? (
+              <img className="admin-logo-preview" src={logoPreviewUrl} alt="Current logo" />
+            ) : (
+              <span className="admin-hint">No logo set</span>
+            )}
+            <label className="admin-btn admin-btn-inline">
+              {logoPreviewUrl ? 'Replace logo' : 'Upload logo'}
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                onChange={handleLogoFile}
+                disabled={themeSubmitting}
+                hidden
+              />
+            </label>
+            {logoPreviewUrl && (
+              <button
+                className="admin-btn admin-btn-inline admin-btn-danger"
+                onClick={() => runLogoChange(deleteThemeLogo, 'Logo removed')}
+                disabled={themeSubmitting}
+              >
+                Remove logo
+              </button>
+            )}
+          </div>
+          <div className="admin-form-row">
+            {THEME_COLOR_FIELDS.map(({ key, label }) => (
+              <label key={key} className="admin-field">
+                {label}
+                <span className="admin-color-row">
+                  <span
+                    className="admin-color-swatch"
+                    style={{ backgroundColor: themeForm[key] }}
+                    data-testid={`swatch-${key}`}
+                    aria-hidden="true"
+                  />
+                  <input
+                    type="color"
+                    value={themeForm[key]}
+                    onChange={(e) =>
+                      setThemeForm((prev) => ({ ...prev, [key]: e.target.value }))
+                    }
+                    disabled={themeSubmitting}
+                  />
+                </span>
+              </label>
+            ))}
+          </div>
+          <button
+            className="admin-btn admin-btn-primary"
+            onClick={handleSaveTheme}
+            disabled={themeSubmitting}
+          >
+            Save theme
+          </button>
 
-        {themeStatus && (
-          <p className={`admin-status ${themeStatus.startsWith('Error') ? 'admin-status-error' : ''}`}>
-            {themeStatus}
-          </p>
-        )}
+          {themeStatus && (
+            <p className={`admin-status ${themeStatus.startsWith('Error') ? 'admin-status-error' : ''}`}>
+              {themeStatus}
+            </p>
+          )}
+        </div>
+        <div
+          role="tabpanel"
+          id="admin-config-panel-app"
+          aria-labelledby={`admin-config-tab-${configTab}`}
+          hidden={configTab === 'theme'}
+        >
+          <AdminConfigSection view={configTab === 'documentation' ? 'documentation' : 'keybindings'} />
+        </div>
       </section>
-
-      <AdminConfigSection />
     </div>
   )
 }

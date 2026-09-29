@@ -212,3 +212,28 @@ def test_run_migrations_adds_theme_branding_columns(tmp_path):
     assert cols.count("save_draft_label") == 1
     assert cols.count("publish_label") == 1
     assert row == ("SVIDAT", None, "Save draft (v250)", "Publish (v300)")
+
+
+def test_run_migrations_adds_keybindings_column(tmp_path):
+    db_path = tmp_path / "legacy_kb.db"
+    _make_legacy_users_table(db_path)
+    engine = create_engine(f"sqlite:///{db_path}")
+
+    run_migrations(engine)
+
+    with engine.connect() as conn:
+        cols = [row[1] for row in conn.execute(text("PRAGMA table_info(users)"))]
+    assert "keybindings" in cols
+
+
+def test_run_migrations_keybindings_column_idempotent(tmp_path):
+    db_path = tmp_path / "legacy_kb2.db"
+    _make_legacy_users_table(db_path)
+    engine = create_engine(f"sqlite:///{db_path}")
+
+    run_migrations(engine)
+    run_migrations(engine)  # must not raise on second call
+
+    with engine.connect() as conn:
+        cols = [row[1] for row in conn.execute(text("PRAGMA table_info(users)"))]
+    assert cols.count("keybindings") == 1

@@ -1,6 +1,7 @@
 import {
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
@@ -10,7 +11,15 @@ import { usePlotSelection } from '../context/PlotSelectionContext'
 import type { ClimatologyResponse, FileMetadata, VariableDataResponse, VariableSeries } from '../api/types'
 import { useEditSession } from '../context/EditSessionContext'
 import { FLAG_CODES } from '../constants/flagCodes'
-import { MODIFIER_KEY, hasModifier, useAppConfig } from '../appConfig'
+import {
+  GESTURES,
+  MODIFIER_KEY,
+  heldMatchesTrigger,
+  matchesPointer,
+  parseTrigger,
+  useAppConfig,
+  type MouseButton,
+} from '../appConfig'
 import { IS_MAC } from '../platform'
 
 // Fallbacks used only before the container's first real measurement (or in
@@ -40,6 +49,22 @@ function yTickMinStep(varName: string): number {
   return isCoordVariable(varName) ? COORD_MIN_TICK_STEP : 0
 }
 const MIN_DRAG_PX = 4
+// Two middle or right clicks within this window count as a double-click.
+const DOUBLE_CLICK_MS = 400
+
+// The fields matchesPointer reads, with `button` as the logical button index
+// (0 left, 1 middle, 2 right).
+interface PointerLike {
+  button: number
+  shiftKey: boolean
+  ctrlKey: boolean
+  altKey: boolean
+  metaKey: boolean
+}
+
+function withButton(e: PointerLike, button: number): PointerLike {
+  return { button, shiftKey: e.shiftKey, ctrlKey: e.ctrlKey, altKey: e.altKey, metaKey: e.metaKey }
+}
 
 const AXIS_COLOR = '#444444'
 const GRID_COLOR = '#eeeeee'
@@ -86,8 +111,57 @@ interface Scale {
   min: number
   max: number
   yTicks: number[]
-  x: (i: number) => number
+  x: (i: number) => number // sample index -> px, positioned by its time
+  xAtMs: (ms: number) => number // UTC epoch ms -> px
   y: (v: number) => number
+}
+
+// The file's sample times as UTC epoch ms, plus the spacing beyond which two
+// consecutive samples count as having missing data between them. X is
+// positioned by time (not sample number), so missing minutes keep their
+// place on the axis, and lines never bridge them.
+interface TimeAxis {
+  ms: number[]
+  gapMs: number
+}
+
+// A consecutive-sample spacing above this multiple of the file's typical
+// (median) interval means samples are missing there — for one-minute data,
+// any missing minute.
+const TIME_GAP_FACTOR = 1.5
+
+// The API's timestamps are UTC without a zone suffix; parse them as UTC so
+// positions don't shift with the browser's time zone or DST.
+function parseUtcMs(iso: string): number {
+  return Date.parse(/(Z|[+-]\d\d:?\d\d)$/i.test(iso) ? iso : `${iso}Z`)
+}
+
+function buildTimeAxis(time: string[]): TimeAxis {
+  const ms = time.map(parseUtcMs)
+  const diffs: number[] = []
+  for (let i = 1; i < ms.length; i++) diffs.push(ms[i] - ms[i - 1])
+  diffs.sort((a, b) => a - b)
+  const median = diffs.length ? diffs[Math.floor(diffs.length / 2)] : 0
+  return { ms, gapMs: median > 0 ? median * TIME_GAP_FACTOR : Infinity }
+}
+
+// True when samples are missing between i - 1 and i.
+function isTimeGap(axis: TimeAxis, i: number): boolean {
+  return i > 0 && axis.ms[i] - axis.ms[i - 1] > axis.gapMs
+}
+
+// Index in [lo, hi] whose time is closest to `target` (binary search; the
+// times are ascending).
+function closestIndexInRange(ms: number[], lo: number, hi: number, target: number): number {
+  let a = lo
+  let b = hi
+  while (a < b) {
+    const mid = (a + b) >> 1
+    if (ms[mid] < target) a = mid + 1
+    else b = mid
+  }
+  if (a > lo && Math.abs(ms[a - 1] - target) <= Math.abs(ms[a] - target)) return a - 1
+  return a
 }
 
 // Y auto-fits to whatever's visible in [startIdx, endIdx] — X maps that same
@@ -105,6 +179,7 @@ interface Scale {
 // the top/bottom as a side effect — standard charting behavior.
 function buildScale(
   values: (number | null)[],
+  axis: TimeAxis,
   startIdx: number,
   endIdx: number,
   width: number,
@@ -114,7 +189,9 @@ function buildScale(
 ): Scale {
   const innerWidth = width - MARGIN.left - MARGIN.right
   const innerHeight = height - MARGIN.top - MARGIN.bottom
-  const span = endIdx - startIdx || 1
+  const t0 = axis.ms[startIdx]
+  const spanMs = axis.ms[endIdx] - t0 || 1
+  const xAtMs = (ms: number) => MARGIN.left + ((ms - t0) / spanMs) * innerWidth
 
   let rawMin: number
   let rawMax: number
@@ -142,38 +219,27 @@ function buildScale(
     min,
     max,
     yTicks,
-    x: (i) => MARGIN.left + ((i - startIdx) / span) * innerWidth,
+    x: (i) => xAtMs(axis.ms[i]),
+    xAtMs,
     y: (v) => MARGIN.top + innerHeight - ((v - min) / range) * innerHeight,
   }
 }
 
-function buildPath(
-  values: (number | null)[],
-  scale: Scale,
-  startIdx: number,
-  endIdx: number
-): string {
-  let d = ''
-  for (let i = startIdx; i <= endIdx; i++) {
-    const v = values[i]
-    if (v === null || v === undefined) continue
-    d += d === '' ? `M${scale.x(i)},${scale.y(v)}` : `L${scale.x(i)},${scale.y(v)}`
-  }
-  return d
-}
-
-// Like buildPath, but starts a new subpath after each null instead of
-// bridging it — a climatology gap means "no nearby ocean cell", which
-// shouldn't be drawn as if the value were interpolated across it.
+// Line path over [startIdx, endIdx] that starts a new subpath after each
+// null or missing-time stretch instead of bridging it, so missing data (and,
+// for climatology, "no nearby ocean cell") shows as an empty gap rather than
+// an interpolated line.
 function buildGappedPath(
   values: (number | null)[],
   scale: Scale,
+  axis: TimeAxis,
   startIdx: number,
   endIdx: number
 ): string {
   let d = ''
   let penDown = false
   for (let i = startIdx; i <= endIdx; i++) {
+    if (isTimeGap(axis, i)) penDown = false
     const v = values[i]
     if (v === null || v === undefined) {
       penDown = false
@@ -185,21 +251,43 @@ function buildGappedPath(
   return d
 }
 
-// Converts a pixel offset (within one row's plot area) back to a data
-// index, given the index range [startIdx, endIdx] that pixel range
-// currently maps across. Shared by the X-zoom and flag-drag mouseup
-// handlers, which both need to turn a drag's pixel endpoints into indices.
+// Indices of valid samples with no linked neighbour inside [startIdx, endIdx]
+// (a null, or missing time, on both sides):
+// each is a one-point subpath in buildGappedPath, which draws nothing, so
+// these get a dot instead of vanishing.
+function isolatedIndices(
+  values: (number | null)[],
+  axis: TimeAxis,
+  startIdx: number,
+  endIdx: number
+): number[] {
+  const valid = (i: number) =>
+    i >= startIdx && i <= endIdx && values[i] !== null && values[i] !== undefined
+  const out: number[] = []
+  for (let i = startIdx; i <= endIdx; i++) {
+    const leftLinked = valid(i - 1) && !isTimeGap(axis, i)
+    const rightLinked = valid(i + 1) && !isTimeGap(axis, i + 1)
+    if (valid(i) && !leftLinked && !rightLinked) out.push(i)
+  }
+  return out
+}
+
+// Converts a pixel offset (within one row's plot area) back to the data
+// index whose time is nearest, given the index range [startIdx, endIdx] that
+// pixel range currently maps across (by time). Shared by the X-zoom,
+// flag-drag and hover handlers.
 function pxToIdx(
   px: number,
   startIdx: number,
   endIdx: number,
   plotWidth: number,
-  dataLength: number
+  axis: TimeAxis
 ): number {
   const innerWidth = plotWidth - MARGIN.left - MARGIN.right
-  const span = endIdx - startIdx || 1
-  const idx = startIdx + Math.round(((px - MARGIN.left) / innerWidth) * span)
-  return Math.max(0, Math.min(idx, dataLength - 1))
+  const t0 = axis.ms[startIdx]
+  const spanMs = axis.ms[endIdx] - t0
+  const target = t0 + ((px - MARGIN.left) / innerWidth) * spanMs
+  return closestIndexInRange(axis.ms, startIdx, endIdx, target)
 }
 
 // Converts a pixel offset (within one row's height) back to a data value on
@@ -275,11 +363,13 @@ function buildFlagMarkers(
 // buildFlagMarkers, but merges adjacent flagged points into one line
 // instead of separate markers, so a committed flag range reads as a
 // magenta segment on the data line itself. A run breaks on an unflagged
-// point, a null value, or the end of the window — it never spans a gap.
+// point, a null value, missing time, or the end of the window — it never
+// spans a gap.
 function buildFlagSegments(
   flags: string[] | null,
   values: (number | null)[],
   scale: Scale,
+  axis: TimeAxis,
   startIdx: number,
   endIdx: number
 ): string[] {
@@ -289,6 +379,10 @@ function buildFlagSegments(
   const segments: string[] = []
   let current = ''
   for (let i = startIdx; i <= endIdx; i++) {
+    if (isTimeGap(axis, i) && current !== '') {
+      segments.push(current)
+      current = ''
+    }
     const f = flags[i]
     const v = values[i]
     const flagged = f !== undefined && f !== modeCode && v !== null && v !== undefined
@@ -343,10 +437,10 @@ function computeDragHighlightRange(
   flagDrag: { varName: string; startPx: number; currentPx: number },
   start: FlagDragStart,
   plotWidth: number,
-  dataLength: number
+  axis: TimeAxis
 ): [number, number] {
-  const a = pxToIdx(flagDrag.startPx, start.startIdx, start.endIdx, plotWidth, dataLength)
-  const b = pxToIdx(flagDrag.currentPx, start.startIdx, start.endIdx, plotWidth, dataLength)
+  const a = pxToIdx(flagDrag.startPx, start.startIdx, start.endIdx, plotWidth, axis)
+  const b = pxToIdx(flagDrag.currentPx, start.startIdx, start.endIdx, plotWidth, axis)
   return [Math.min(a, b), Math.max(a, b)]
 }
 
@@ -400,6 +494,12 @@ function formatTimeTick(iso: string, showDate: boolean, showSeconds: boolean): s
   return showDate ? `${date} ${time}Z` : `${time}Z`
 }
 
+// A variable's `units` attribute, when it has a non-blank one.
+function unitsOf(metadata: FileMetadata | null, varName: string): string | null {
+  const units = metadata?.variables[varName]?.attrs.units
+  return typeof units === 'string' && units.trim() ? units.trim() : null
+}
+
 // A variable's descriptive `long_name` attribute, when it has one that adds
 // something beyond the short name.
 function longNameOf(metadata: FileMetadata | null, varName: string): string | null {
@@ -407,20 +507,6 @@ function longNameOf(metadata: FileMetadata | null, varName: string): string | nu
   return typeof longName === 'string' && longName.trim() && longName !== varName
     ? longName.trim()
     : null
-}
-
-// Finds the data index closest to a target timestamp via binary search —
-// `times` is sorted ascending, so this beats a linear scan per tick.
-function closestIndex(times: number[], target: number): number {
-  let lo = 0
-  let hi = times.length - 1
-  while (lo < hi) {
-    const mid = (lo + hi) >> 1
-    if (times[mid] < target) lo = mid + 1
-    else hi = mid
-  }
-  if (lo > 0 && Math.abs(times[lo - 1] - target) < Math.abs(times[lo] - target)) return lo - 1
-  return lo
 }
 
 const X_TICK_TARGET = 5
@@ -447,101 +533,77 @@ function chooseTimeStep(spanMs: number, targetTicks: number): number {
   return NICE_TIME_STEPS_MS[NICE_TIME_STEPS_MS.length - 1]
 }
 
-// Rounds `date` up to the next `stepMs` boundary in local wall-clock time.
-// Below the hour, native setSeconds/setMinutes already round in local time
-// with no DST/offset subtlety to worry about. At/above the hour, alignment
-// must go through getHours/setHours (not raw epoch-ms division) — dividing
-// epoch ms directly only lands on clean marks when the runtime's UTC offset
-// happens to be a whole multiple of the step; anywhere else it drifts.
-function alignToStep(date: Date, stepMs: number): Date {
-  const cursor = new Date(date)
-  if (stepMs < 60000) {
-    const stepSec = stepMs / 1000
-    cursor.setMilliseconds(0)
-    cursor.setSeconds(Math.ceil(cursor.getSeconds() / stepSec) * stepSec)
-  } else if (stepMs < 3600000) {
-    const stepMin = stepMs / 60000
-    cursor.setSeconds(0, 0)
-    cursor.setMinutes(Math.ceil(cursor.getMinutes() / stepMin) * stepMin)
-  } else if (stepMs < 86400000) {
-    const stepHour = stepMs / 3600000
-    cursor.setMinutes(0, 0, 0)
-    cursor.setHours(Math.ceil(cursor.getHours() / stepHour) * stepHour)
-  } else {
-    const stepDay = stepMs / 86400000
-    cursor.setHours(0, 0, 0, 0)
-    if (stepDay > 1) cursor.setDate(Math.ceil(cursor.getDate() / stepDay) * stepDay)
-  }
-  return cursor
+const DAY_MS = 86400000
+
+// Closest two x-axis labels may sit (px) before the one before the right
+// edge is dropped — about one "HH:MMZ" label's width.
+const MIN_TICK_LABEL_GAP_PX = 55
+
+// Rounds `ms` up to the next `stepMs` boundary in UTC (the data's time base).
+// UTC has no offset or DST, so sub-day steps are plain epoch-ms multiples.
+function alignToStep(ms: number, stepMs: number): number {
+  if (stepMs < DAY_MS) return Math.ceil(ms / stepMs) * stepMs
+  const stepDay = stepMs / DAY_MS
+  const d = new Date(ms)
+  d.setUTCHours(0, 0, 0, 0)
+  if (stepDay > 1) d.setUTCDate(Math.ceil(d.getUTCDate() / stepDay) * stepDay)
+  while (d.getTime() < ms) d.setUTCDate(d.getUTCDate() + stepDay)
+  return d.getTime()
 }
 
-function advanceByStep(cursor: Date, stepMs: number): void {
-  if (stepMs < 3600000) {
-    cursor.setTime(cursor.getTime() + stepMs)
-  } else if (stepMs < 86400000) {
-    cursor.setHours(cursor.getHours() + stepMs / 3600000)
-  } else {
-    cursor.setDate(cursor.getDate() + stepMs / 86400000)
-  }
+function advanceByStep(ms: number, stepMs: number): number {
+  if (stepMs < DAY_MS) return ms + stepMs
+  const d = new Date(ms)
+  d.setUTCDate(d.getUTCDate() + stepMs / DAY_MS)
+  return d.getTime()
 }
 
-// `YYYY-MM-DDTHH:MM:SS` from a Date's *local* fields — matches how the API's
-// timestamps are formatted, so a synthetic tick (see `overrideIso` below)
-// round-trips through `formatTimeTick` the same as a real sample would.
-function toLocalIso(date: Date): string {
-  const pad = (n: number) => String(n).padStart(2, '0')
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+// `YYYY-MM-DDTHH:MM:SS` in UTC — the API's timestamp format, so tick labels
+// go through `formatTimeTick` the same as a real sample's time would.
+function toUtcIso(ms: number): string {
+  return new Date(ms).toISOString().slice(0, 19)
 }
 
 interface TimeTick {
-  idx: number
-  // Set only on the synthetic right-edge tick (see below) — the label to
-  // show instead of the real sample at `idx`.
-  overrideIso?: string
+  ms: number // where the tick sits
+  iso: string // what it reads
 }
 
 // Ticks land on a "nice" interval (seconds, minutes, hours, or days — whatever
-// keeps the count near X_TICK_TARGET) within [startIdx, endIdx] (the current
-// zoom window, or the full range), each mapped to its nearest sample. The
-// interval automatically gets finer as the window narrows, matching how the
-// data is actually timestamped rather than splitting the point count into
-// evenly-spaced but time-irregular ticks.
-//
-// The right edge always gets one more tick beyond whatever real boundary
-// falls inside the window, labeled with the *next* one — e.g. a full day of
-// data ending around 23:59 gets a final tick reading the next day's 00:00,
-// rather than leaving the axis's last label at 18:00 just because the data
-// stops short of the next real boundary.
-function timeTickIndices(
-  isoTimes: string[],
+// keeps the count near X_TICK_TARGET) at their exact times within the window
+// [startIdx, endIdx] — including inside stretches of missing data, since X
+// is positioned by time. The right edge always gets a label: the next
+// boundary when the data stops just short of it (a day file ending 23:59
+// reads next day's 00:00), otherwise the window's actual end time. A regular
+// tick too close to that edge label to fit is dropped in its favour.
+function timeTicks(
+  axis: TimeAxis,
   startIdx: number,
-  endIdx: number
+  endIdx: number,
+  innerWidthPx: number
 ): { ticks: TimeTick[]; stepMs: number } {
-  if (isoTimes.length === 0 || endIdx < startIdx) return { ticks: [], stepMs: 0 }
-  const windowTimes = isoTimes.slice(startIdx, endIdx + 1).map((t) => new Date(t).getTime())
-  const start = windowTimes[0]
-  const end = windowTimes[windowTimes.length - 1]
+  if (axis.ms.length === 0 || endIdx < startIdx) return { ticks: [], stepMs: 0 }
+  const start = axis.ms[startIdx]
+  const end = axis.ms[endIdx]
   const stepMs = chooseTimeStep(end - start || 1, X_TICK_TARGET)
 
-  const cursor = alignToStep(new Date(start), stepMs)
   const ticks: TimeTick[] = []
-  let lastIdx = -1
-  while (cursor.getTime() <= end) {
-    const idx = startIdx + closestIndex(windowTimes, cursor.getTime())
-    if (idx !== lastIdx) {
-      ticks.push({ idx })
-      lastIdx = idx
-    }
-    advanceByStep(cursor, stepMs)
+  let cursor = alignToStep(start, stepMs)
+  while (cursor <= end) {
+    ticks.push({ ms: cursor, iso: toUtcIso(cursor) })
+    cursor = advanceByStep(cursor, stepMs)
   }
 
-  if (ticks.length === 0) return { ticks: [{ idx: startIdx }, { idx: endIdx }], stepMs }
-
-  // `cursor` now holds the first boundary past the visible range — that's
-  // the "next" round time the edge tick should read, unless a real tick
-  // already landed exactly on the last sample.
-  if (lastIdx !== endIdx) {
-    ticks.push({ idx: endIdx, overrideIso: toLocalIso(cursor) })
+  if (ticks.length === 0) {
+    return { ticks: [{ ms: start, iso: toUtcIso(start) }, { ms: end, iso: toUtcIso(end) }], stepMs }
+  }
+  if (ticks[ticks.length - 1].ms !== end) {
+    const edgeIso = cursor - end <= axis.gapMs ? toUtcIso(cursor) : toUtcIso(end)
+    const pxPerMs = innerWidthPx / (end - start || 1)
+    while (ticks.length > 1 && (end - ticks[ticks.length - 1].ms) * pxPerMs < MIN_TICK_LABEL_GAP_PX) {
+      ticks.pop()
+    }
+    ticks.push({ ms: end, iso: edgeIso })
   }
   return { ticks, stepMs }
 }
@@ -634,6 +696,9 @@ export function SvgPlot() {
     toggleVariableSelected,
   } = useEditSession()
   const [data, setData] = useState<VariableDataResponse | null>(null)
+  // Sample times parsed once per load; X positions, ticks and gap detection
+  // all work from these.
+  const timeAxis = useMemo(() => (data ? buildTimeAxis(data.time) : null), [data])
   const [climatology, setClimatology] = useState<ClimatologyResponse | null>(null)
   const [metadata, setMetadata] = useState<FileMetadata | null>(null)
   const [activeVariable, setActiveVariable] = useState<string | null>(null)
@@ -664,6 +729,12 @@ export function SvgPlot() {
   const undoStackRef = useRef<ViewSnapshot[]>([])
   const redoStackRef = useRef<ViewSnapshot[]>([])
   const flagDragStartRef = useRef<FlagDragStart | null>(null)
+  // The most recent press on a row and whether it started a drag gesture,
+  // so the auxclick/contextmenu that follows a middle/right drag isn't also
+  // read as a click gesture. Reset on every row press (capture phase).
+  const lastPressRef = useRef<{ button: number; startedDrag: boolean }>({ button: -1, startedDrag: false })
+  // When the last middle / right click happened, for the double-click window.
+  const lastAuxClickAtRef = useRef<Record<'middle' | 'right', number>>({ middle: -Infinity, right: -Infinity })
   const [flagDrag, setFlagDrag] = useState<{
     varName: string
     startPx: number
@@ -936,7 +1007,7 @@ export function SvgPlot() {
       const start = xDragStartRef.current
       xDragStartRef.current = null
       setXDrag(null)
-      if (!start || !data) return
+      if (!start || !data || !timeAxis) return
       const currentPx = e.clientX - start.originLeft
       if (Math.abs(currentPx - start.startPx) < MIN_DRAG_PX) return
 
@@ -945,14 +1016,14 @@ export function SvgPlot() {
         start.startIdx,
         start.endIdx,
         plotWidth,
-        data.time.length
+        timeAxis
       )
       const newEnd = pxToIdx(
         Math.max(start.startPx, currentPx),
         start.startIdx,
         start.endIdx,
         plotWidth,
-        data.time.length
+        timeAxis
       )
       if (newEnd - newStart < 1) return
 
@@ -1041,7 +1112,7 @@ export function SvgPlot() {
       const start = boxDragStartRef.current
       boxDragStartRef.current = null
       setBoxDrag(null)
-      if (!start || !data) return
+      if (!start || !data || !timeAxis) return
       const currentX = e.clientX - start.originLeft
       const currentY = e.clientY - start.originTop
       if (
@@ -1052,7 +1123,7 @@ export function SvgPlot() {
       }
 
       const toIdx = (px: number) =>
-        pxToIdx(px, start.startIdx, start.endIdx, plotWidth, data.time.length)
+        pxToIdx(px, start.startIdx, start.endIdx, plotWidth, timeAxis)
       const newStart = toIdx(Math.min(start.startX, currentX))
       const newEnd = toIdx(Math.max(start.startX, currentX))
       const toValue = (py: number) => pxToValue(py, start.scaleMin, start.scaleMax, rowHeight)
@@ -1098,7 +1169,7 @@ export function SvgPlot() {
       const start = flagDragStartRef.current
       flagDragStartRef.current = null
       setFlagDrag(null)
-      if (!start || !data) return
+      if (!start || !data || !timeAxis) return
       const currentPx = e.clientX - start.originLeft
       if (Math.abs(currentPx - start.startPx) < MIN_DRAG_PX) return
 
@@ -1107,14 +1178,14 @@ export function SvgPlot() {
         start.startIdx,
         start.endIdx,
         plotWidth,
-        data.time.length
+        timeAxis
       )
       const selEnd = pxToIdx(
         Math.max(start.startPx, currentPx),
         start.startIdx,
         start.endIdx,
         plotWidth,
-        data.time.length
+        timeAxis
       )
       if (selEnd - selStart < 1) return
 
@@ -1156,13 +1227,14 @@ export function SvgPlot() {
   // inputs — recomputed from the same inputs the row's own scale uses.
   useEffect(() => {
     const series = activeVariable ? data?.variables[activeVariable] : undefined
-    if (!data || !activeVariable || !series) {
+    if (!data || !timeAxis || !activeVariable || !series) {
       setActiveYRange(null)
       return
     }
     const [start, end] = xRange ?? [0, data.time.length - 1]
     const scale = buildScale(
       series.values,
+      timeAxis,
       start,
       end,
       plotWidth,
@@ -1171,7 +1243,7 @@ export function SvgPlot() {
       yTickMinStep(activeVariable)
     )
     setActiveYRange({ varName: activeVariable, min: scale.min, max: scale.max })
-  }, [data, activeVariable, xRange, yOverrides, plotWidth, rowHeight, setActiveYRange])
+  }, [data, timeAxis, activeVariable, xRange, yOverrides, plotWidth, rowHeight, setActiveYRange])
 
   useEffect(() => () => setActiveYRange(null), [setActiveYRange])
 
@@ -1206,15 +1278,29 @@ export function SvgPlot() {
   if (!file || variables.length === 0) {
     return <p>Select variables in the sidebar to view plots.</p>
   }
-  if (!data) return null
+  if (!data || !timeAxis) return null
 
   const [startIdx, endIdx] = xRange ?? [0, data.time.length - 1]
-  const { ticks: xTicks, stepMs: xTickStepMs } = timeTickIndices(data.time, startIdx, endIdx)
+  const { ticks: xTicks, stepMs: xTickStepMs } = timeTicks(
+    timeAxis,
+    startIdx,
+    endIdx,
+    plotWidth - MARGIN.left - MARGIN.right
+  )
   const xTickShowSeconds = xTickStepMs < 60000
   const firstTickDate =
-    xTicks.length > 0 ? (xTicks[0].overrideIso ?? data.time[xTicks[0].idx]).slice(0, 10) : ''
+    xTicks.length > 0 ? xTicks[0].iso.slice(0, 10) : ''
   const datasetTitle = metadata?.global_attrs.title
   const titlePrefix = typeof datasetTitle === 'string' ? datasetTitle : null
+
+  // Whether any assigned binding (of the six) uses `button` with exactly the
+  // modifiers held in `e`. Such a binding disables the built-in fallback on
+  // that button: middle-drag X zoom, right-click undo / Shift+right-click redo.
+  const bindingUsesButton = (e: PointerLike, button: MouseButton): boolean =>
+    GESTURES.some(({ key, kind }) => {
+      const spec = parseTrigger(keybindings[key], kind)
+      return !!spec && spec.button === button && matchesPointer(e, keybindings[key], kind, spec.action)
+    })
 
   const handleRowMouseDown = (
     e: ReactMouseEvent<SVGSVGElement>,
@@ -1223,10 +1309,22 @@ export function SvgPlot() {
     scaleMax: number
   ) => {
     setHoverTip(null)
-    // Checked first: holding both zoom modifiers would otherwise match the
-    // X-zoom branch alone.
-    if (hasModifier(e, keybindings.x_zoom) && hasModifier(e, keybindings.y_zoom)) {
+    const startDrag = () => {
       e.preventDefault()
+      lastPressRef.current = { button: e.button, startedDrag: true }
+    }
+    // Each binding must match the pressed button and the exact modifier set;
+    // precedence: box, X, Y, then flag select (qca only).
+    const boxZoom = matchesPointer(e, keybindings.box_zoom, 'drag', 'drag')
+    const xZoom = !boxZoom && matchesPointer(e, keybindings.x_zoom, 'drag', 'drag')
+    const yZoom = !boxZoom && !xZoom && matchesPointer(e, keybindings.y_zoom, 'drag', 'drag')
+    const flag = !boxZoom && !xZoom && !yZoom && canEdit && matchesPointer(e, keybindings.flag_select, 'drag', 'drag')
+    // Built-in: an unmatched middle press X-zooms, unless an assigned binding
+    // (e.g. a middle-click undo) claims the middle button with these modifiers.
+    const middleXZoom =
+      e.button === 1 && !boxZoom && !xZoom && !yZoom && !flag && !bindingUsesButton(e, 'middle')
+    if (boxZoom) {
+      startDrag()
       const rect = e.currentTarget.getBoundingClientRect()
       const startX = e.clientX - rect.left
       const startY = e.clientY - rect.top
@@ -1244,29 +1342,33 @@ export function SvgPlot() {
       setBoxDrag({ varName, startX, startY, currentX: startX, currentY: startY })
       return
     }
-    if (hasModifier(e, keybindings.x_zoom) || e.button === 1) {
-      e.preventDefault()
+    if (xZoom || middleXZoom) {
+      startDrag()
       const rect = e.currentTarget.getBoundingClientRect()
       const startPx = e.clientX - rect.left
       xDragStartRef.current = { originLeft: rect.left, startPx, startIdx, endIdx }
       setXDrag({ startPx, currentPx: startPx })
       return
     }
-    if (hasModifier(e, keybindings.y_zoom)) {
-      e.preventDefault()
+    if (yZoom) {
+      startDrag()
       const rect = e.currentTarget.getBoundingClientRect()
       const startPx = e.clientY - rect.top
       yDragStartRef.current = { varName, originTop: rect.top, startPx, scaleMin, scaleMax }
       setYDrag({ varName, startPx, currentPx: startPx })
       return
     }
-    if (canEdit) {
-      e.preventDefault()
+    if (flag) {
+      startDrag()
       const rect = e.currentTarget.getBoundingClientRect()
       const startPx = e.clientX - rect.left
       flagDragStartRef.current = { originLeft: rect.left, startPx, varName, startIdx, endIdx }
       setFlagDrag({ varName, startPx, currentPx: startPx })
+      return
     }
+    // Keep a bare middle press (e.g. a middle-click binding) from starting
+    // the browser's autoscroll.
+    if (e.button === 1) e.preventDefault()
   }
 
   // Updates the pointer-tracking tooltip as the mouse moves over a row's
@@ -1286,7 +1388,7 @@ export function SvgPlot() {
     const rect = e.currentTarget.getBoundingClientRect()
     const px = e.clientX - rect.left
     const py = e.clientY - rect.top
-    const idx = pxToIdx(px, startIdx, endIdx, plotWidth, data.time.length)
+    const idx = pxToIdx(px, startIdx, endIdx, plotWidth, timeAxis)
     const value = series.values[idx]
     if (value === null || value === undefined || Math.abs(scale.y(value) - py) > LINE_HOVER_THRESHOLD_PX) {
       setHoverTip(null)
@@ -1349,22 +1451,66 @@ export function SvgPlot() {
     applySnapshot(next)
   }
 
-  // Right-click still works as a secondary trigger alongside the configurable
-  // undo/redo bindings (shift+right-click for redo, matching the original
-  // pattern before those bindings were introduced).
+  // Runs undo or redo if either binding matches this click or double-click
+  // (`e.button` being the logical button). True when one ran.
+  const runClickGesture = (e: PointerLike, action: 'click' | 'dblclick'): boolean => {
+    if (matchesPointer(e, keybindings.undo, 'click', action)) {
+      undoOnce()
+      return true
+    }
+    if (matchesPointer(e, keybindings.redo, 'click', action)) {
+      redoOnce()
+      return true
+    }
+    return false
+  }
+
+  // A middle or right click: the second click within DOUBLE_CLICK_MS first
+  // tries the double-click bindings, then (like any click) the click
+  // bindings. True when an assigned binding ran.
+  const runAuxClick = (e: PointerLike, button: 'middle' | 'right'): boolean => {
+    const now = performance.now()
+    if (now - lastAuxClickAtRef.current[button] < DOUBLE_CLICK_MS && runClickGesture(e, 'dblclick')) {
+      lastAuxClickAtRef.current[button] = -Infinity
+      return true
+    }
+    lastAuxClickAtRef.current[button] = now
+    return runClickGesture(e, 'click')
+  }
+
+  const pressStartedDrag = (button: number) =>
+    lastPressRef.current.button === button && lastPressRef.current.startedDrag
+
+  // Middle click (auxclick, button 1). The auxclick ending a middle drag
+  // doesn't count.
+  const handleRowAuxClick = (e: ReactMouseEvent) => {
+    if (e.button !== 1 || pressStartedDrag(1)) return
+    runAuxClick(e, 'middle')
+  }
+
+  // Right click, via contextmenu (always preventDefault'd). Skipped when the
+  // right press started a drag gesture. Assigned right-button click /
+  // double-click bindings run first; the built-in plain right-click = undo
+  // and Shift+right-click = redo apply only when no assigned binding uses the
+  // right button with exactly those modifiers.
   //
-  // macOS turns ctrl+click into a secondary click: it fires contextmenu here
-  // (on mousedown) instead of a click. So a ctrl+drag zoom must not be read
-  // as a right-click undo — or a second Y-zoom's mousedown would undo the
-  // first before the drag starts — and a Ctrl-bound undo/redo has to run
-  // from here, since no click event follows.
+  // contextmenu is read as a right click whatever its `button` (jsdom and the
+  // keyboard context-menu key report 0) — except macOS ctrl+click, which
+  // turns a left click into a secondary click: it fires contextmenu here (on
+  // mousedown) with ctrlKey and button 0 instead of a click. So a ctrl+drag
+  // zoom must not be read as a right-click undo — or a second Y-zoom's
+  // mousedown would undo the first before the drag starts — and a Ctrl-bound
+  // left undo/redo has to run from here, since no click event follows.
   const handleRowContextMenu = (e: ReactMouseEvent) => {
     e.preventDefault()
-    if (e.ctrlKey) {
-      if (IS_MAC && keybindings.undo === 'ctrl') undoOnce()
-      else if (IS_MAC && keybindings.redo === 'ctrl') redoOnce()
+    if (e.ctrlKey && e.button === 0) {
+      if (IS_MAC) runClickGesture(e, 'click')
       return
     }
+    if (pressStartedDrag(2)) return
+    const right = withButton(e, 2)
+    if (runAuxClick(right, 'right')) return
+    if (e.ctrlKey || e.altKey || e.metaKey || bindingUsesButton(right, 'right')) return
     if (e.shiftKey) redoOnce()
     else undoOnce()
   }
@@ -1413,6 +1559,7 @@ export function SvgPlot() {
         if (!series) return null
         const scale = buildScale(
           series.values,
+          timeAxis,
           startIdx,
           endIdx,
           plotWidth,
@@ -1421,12 +1568,12 @@ export function SvgPlot() {
           yTickMinStep(varName)
         )
         const flagMarkers = buildFlagMarkers(series.flags, series.values, startIdx, endIdx)
-        const flagSegments = buildFlagSegments(series.flags, series.values, scale, startIdx, endIdx)
+        const flagSegments = buildFlagSegments(series.flags, series.values, scale, timeAxis, startIdx, endIdx)
         const highlightRange: [number, number] | null =
           flagSelection && flagSelection.varName === varName
             ? [flagSelection.startIdx, flagSelection.endIdx]
             : flagDrag && flagDrag.varName === varName && flagDragStartRef.current
-              ? computeDragHighlightRange(flagDrag, flagDragStartRef.current, plotWidth, data.time.length)
+              ? computeDragHighlightRange(flagDrag, flagDragStartRef.current, plotWidth, timeAxis)
               : null
         const highlightBand = highlightRange
           ? computeTightBand(series.values, highlightRange[0], highlightRange[1], scale, rowHeight)
@@ -1439,6 +1586,8 @@ export function SvgPlot() {
         const longName = longNameOf(metadata, varName)
         const titleName = longName ? `${varName} (${longName})` : varName
         const plotTitle = titlePrefix ? `${titlePrefix}: ${titleName}` : titleName
+        const units = unitsOf(metadata, varName)
+        const yAxisTitle = units ? `${varName} (${units})` : varName
 
         const isDraggedRow = tabDrag?.varName === varName
         // Highlights the slot the dragged row would land in: the row
@@ -1468,23 +1617,19 @@ export function SvgPlot() {
               boxShadow: isDraggedRow ? '0 8px 20px rgba(0, 0, 0, 0.3)' : undefined,
               pointerEvents: isDraggedRow ? 'none' : undefined,
             }}
+            onMouseDownCapture={(e) => {
+              lastPressRef.current = { button: e.button, startedDrag: false }
+            }}
             onClick={(e) => {
-              if (hasModifier(e, keybindings.undo)) {
-                undoOnce()
-                return
-              }
-              if (hasModifier(e, keybindings.redo)) {
-                redoOnce()
-                return
-              }
+              if (runClickGesture(e, 'click')) return
               // Any other held modifier means this click ended a zoom drag.
               if (!e.shiftKey && !e.ctrlKey && !e.altKey && !e.metaKey) setActiveVariable(varName)
             }}
             onDoubleClick={(e) => {
               e.preventDefault()
-              if (keybindings.undo === 'dblclick') undoOnce()
-              else if (keybindings.redo === 'dblclick') redoOnce()
+              runClickGesture(e, 'dblclick')
             }}
+            onAuxClick={handleRowAuxClick}
             onContextMenu={handleRowContextMenu}
             role="button"
             tabIndex={0}
@@ -1522,15 +1667,18 @@ export function SvgPlot() {
               onMouseMove={(e) => handleRowMouseMove(e, varName, scale, series)}
               onMouseLeave={handleRowMouseLeave}
               style={{
+                // Guarded on heldKeys.size so a `none`-bound gesture (held
+                // whenever nothing is pressed) doesn't give a permanent cursor.
                 cursor:
-                  heldKeys.has(MODIFIER_KEY[keybindings.x_zoom]) &&
-                  heldKeys.has(MODIFIER_KEY[keybindings.y_zoom])
-                    ? 'cell'
-                    : heldKeys.has(MODIFIER_KEY[keybindings.x_zoom])
-                      ? 'crosshair'
-                      : heldKeys.has(MODIFIER_KEY[keybindings.y_zoom])
-                        ? 'ns-resize'
-                        : undefined,
+                  heldKeys.size === 0
+                    ? undefined
+                    : heldMatchesTrigger(heldKeys, keybindings.box_zoom)
+                      ? 'cell'
+                      : heldMatchesTrigger(heldKeys, keybindings.x_zoom)
+                        ? 'crosshair'
+                        : heldMatchesTrigger(heldKeys, keybindings.y_zoom)
+                          ? 'ns-resize'
+                          : undefined,
               }}
             >
               <rect x={0} y={0} width={plotWidth} height={rowHeight} fill="#ffffff" />
@@ -1581,10 +1729,9 @@ export function SvgPlot() {
               ))}
 
               {/* x-axis gridlines + ticks */}
-              {xTicks.map(({ idx, overrideIso }, tickPos) => {
+              {xTicks.map(({ ms, iso: tickIso }, tickPos) => {
                 const isFirst = tickPos === 0
                 const isLast = tickPos === xTicks.length - 1
-                const tickIso = overrideIso ?? data.time[idx]
                 // Only the first tick anchors the date by default; later ticks
                 // (including the synthetic edge tick) repeat it only when they
                 // land on a different calendar day, so a tight zoom window
@@ -1593,16 +1740,16 @@ export function SvgPlot() {
                 // for the case where it IS needed).
                 const showDate = isFirst || tickIso.slice(0, 10) !== firstTickDate
                 return (
-                  <g key={idx}>
+                  <g key={ms}>
                     <line
-                      x1={scale.x(idx)}
+                      x1={scale.xAtMs(ms)}
                       y1={MARGIN.top}
-                      x2={scale.x(idx)}
+                      x2={scale.xAtMs(ms)}
                       y2={rowHeight - MARGIN.bottom}
                       stroke={GRID_COLOR}
                     />
                     <text
-                      x={scale.x(idx)}
+                      x={scale.xAtMs(ms)}
                       y={rowHeight - MARGIN.bottom + 16}
                       textAnchor={isFirst ? 'start' : isLast ? 'end' : 'middle'}
                       fontSize={11}
@@ -1630,7 +1777,7 @@ export function SvgPlot() {
                 stroke={axisColor}
               />
 
-              {/* axis titles: y = variable name (every row), x = "Time" (last row only) */}
+              {/* axis titles: y = variable name (units), x = "Time (UTC)" */}
               <text
                 x={-(rowHeight / 2)}
                 y={16}
@@ -1639,7 +1786,7 @@ export function SvgPlot() {
                 fill={tickLabelColor}
                 transform="rotate(-90)"
               >
-                {varName}
+                {yAxisTitle}
               </text>
               <text
                 x={MARGIN.left + (plotWidth - MARGIN.left - MARGIN.right) / 2}
@@ -1655,7 +1802,7 @@ export function SvgPlot() {
                 {climatology?.variables[varName] && (
                   <path
                     data-testid={`climatology-${varName}`}
-                    d={buildGappedPath(climatology.variables[varName], scale, startIdx, endIdx)}
+                    d={buildGappedPath(climatology.variables[varName], scale, timeAxis, startIdx, endIdx)}
                     fill="none"
                     stroke={CLIMATOLOGY_COLOR}
                     strokeWidth={1.5}
@@ -1692,11 +1839,22 @@ export function SvgPlot() {
                     )
                   })}
                 <path
-                  d={buildPath(series.values, scale, startIdx, endIdx)}
+                  data-testid="data-line"
+                  d={buildGappedPath(series.values, scale, timeAxis, startIdx, endIdx)}
                   fill="none"
                   stroke={lineColor}
                   strokeWidth={1}
                 />
+                {isolatedIndices(series.values, timeAxis, startIdx, endIdx).map((idx) => (
+                  <circle
+                    key={`iso-${idx}`}
+                    data-testid="isolated-point"
+                    cx={scale.x(idx)}
+                    cy={scale.y(series.values[idx] as number)}
+                    r={1.5}
+                    fill={lineColor}
+                  />
+                ))}
 
                 {timeMarker !== null && timeMarker >= startIdx && timeMarker <= endIdx && (
                   <line

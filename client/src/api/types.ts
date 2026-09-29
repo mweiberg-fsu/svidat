@@ -85,14 +85,29 @@ export interface ThemeSettings {
 
 export type ThemeSettingsUpdate = Omit<ThemeSettings, 'has_logo'>
 
-export type DragTrigger = 'shift' | 'ctrl' | 'alt' | 'meta'
-export type ClickTrigger = DragTrigger | 'dblclick'
+export type Modifier = 'shift' | 'ctrl' | 'alt' | 'meta'
+export type DragTrigger =
+  | 'none'
+  | Modifier
+  | 'shift+ctrl'
+  | 'shift+alt'
+  | 'shift+meta'
+  | 'ctrl+alt'
+  | 'ctrl+meta'
+  | 'alt+meta'
+export type ClickTrigger = Modifier | 'dblclick'
 
+// Phase A widens a binding to any canonical "<mods>/<button>/<action>"
+// string (see appConfig.ts parseTrigger), not just the built-in legacy
+// tokens below — so these fields are validated at runtime, not by type.
+// DragTrigger/ClickTrigger remain the built-in dropdown option lists.
 export interface KeyBindings {
-  x_zoom: DragTrigger
-  y_zoom: DragTrigger
-  undo: ClickTrigger
-  redo: ClickTrigger
+  x_zoom: string
+  y_zoom: string
+  box_zoom: string
+  flag_select: string
+  undo: string
+  redo: string
 }
 
 export interface DocTab {
@@ -102,5 +117,6 @@ export interface DocTab {
 
 export interface AppConfig {
   keybindings: KeyBindings
+  user_keybindings?: KeyBindings | null
   documentation: DocTab[]
 }

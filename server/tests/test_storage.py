@@ -69,3 +69,79 @@ def test_atomic_copy_creates_dest_and_no_partial_on_failure(tmp_path):
 def test_avatar_path_layout():
     assert storage.avatar_path(1, "png") == storage.base_dir() / "avatars" / "1.png"
     assert storage.avatar_path(42, "jpg") == storage.base_dir() / "avatars" / "42.jpg"
+
+
+# --- configurable dirs ---------------------------------------------------
+
+
+def _iso(monkeypatch, tmp_path):
+    monkeypatch.setattr("app.storage.settings.data_dir", str(tmp_path / "data"))
+    a, b = tmp_path / "a", tmp_path / "b"
+    a.mkdir()
+    b.mkdir()
+    return a, b
+
+
+def test_raw_dirs_default_and_configured(monkeypatch, tmp_path):
+    a, b = _iso(monkeypatch, tmp_path)
+    assert storage.raw_dirs([]) == [storage.base_dir() / "raw"]
+    assert storage.raw_dirs([a, b]) == [a, b]
+
+
+def test_find_raw(monkeypatch, tmp_path):
+    a, b = _iso(monkeypatch, tmp_path)
+    assert storage.find_raw("f", []) == storage.raw_path("f")
+    assert storage.find_raw("f", [a, b]) == a / "f.nc"  # none exist
+    (b / "f.nc").write_bytes(b"x")
+    assert storage.find_raw("f", [a, b]) == b / "f.nc"
+    (a / "f.nc").write_bytes(b"x")
+    assert storage.find_raw("f", [a, b]) == a / "f.nc"
+
+
+def test_list_raw_files_first_dir_wins(monkeypatch, tmp_path):
+    a, b = _iso(monkeypatch, tmp_path)
+    (a / "x.nc").write_bytes(b"x")
+    (b / "x.nc").write_bytes(b"x")
+    (b / "y.nc").write_bytes(b"x")
+    (b / "z.txt").write_bytes(b"x")
+    assert storage.list_raw_files([a, b]) == {"x": a / "x.nc", "y": b / "y.nc"}
+
+
+def test_draft_paths_and_find_and_list(monkeypatch, tmp_path):
+    a, b = _iso(monkeypatch, tmp_path)
+    assert storage.draft_paths("u", "f", []) == [storage.draft_path("u", "f")]
+    assert storage.draft_paths("u", "f", [a, b]) == [
+        a / "u" / "f_v250.nc",
+        b / "u" / "f_v250.nc",
+    ]
+    assert storage.find_draft("u", "f", [a, b]) == a / "u" / "f_v250.nc"
+    (b / "u").mkdir()
+    (b / "u" / "f_v250.nc").write_bytes(b"x")
+    (a / "u").mkdir()
+    (a / "u" / "g_v250.nc").write_bytes(b"x")
+    assert storage.find_draft("u", "f", [a, b]) == b / "u" / "f_v250.nc"
+    assert storage.list_drafts("u", [a, b]) == ["f", "g"]
+    legacy = storage.draft_path("u", "h")
+    legacy.parent.mkdir(parents=True)
+    legacy.write_bytes(b"x")
+    assert storage.list_drafts("u", []) == ["h"]
+
+
+def test_published_paths(monkeypatch, tmp_path):
+    a, b = _iso(monkeypatch, tmp_path)
+    assert storage.published_paths("f", []) == [storage.published_path("f")]
+    assert storage.published_paths("f", [a, b]) == [a / "f_v300.nc", b / "f_v300.nc"]
+
+
+def test_configured_helpers_validate_segments(monkeypatch, tmp_path):
+    a, _ = _iso(monkeypatch, tmp_path)
+    for call in (
+        lambda: storage.find_raw("../x", [a]),
+        lambda: storage.draft_paths("u", "../x", [a]),
+        lambda: storage.draft_paths("a/b", "f", [a]),
+        lambda: storage.find_draft("a/b", "f", [a]),
+        lambda: storage.list_drafts("a/b", [a]),
+        lambda: storage.published_paths("../x", [a]),
+    ):
+        with pytest.raises(ValueError):
+            call()

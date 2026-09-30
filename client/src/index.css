@@ -433,11 +433,81 @@ code {
   margin-bottom: 6px;
 }
 
-.profile-upload-label {
+/* Profile Information: photo + upload | username/email/roles | color mode.
+   Stacks into one column on narrow screens. */
+.profile-info-grid {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 24px;
+  align-items: start;
+}
+
+.profile-info-photo .profile-avatar {
   display: block;
-  margin-top: 14px;
+}
+
+.profile-info-details .profile-row {
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 600px) {
+  .profile-info-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.profile-upload-label {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
   font-size: 13px;
   color: var(--text);
+  white-space: nowrap;
+}
+
+/* Hidden but still focusable, so keyboard users can open the picker. */
+.profile-upload-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+}
+
+.profile-upload-button {
+  display: inline-flex;
+  align-items: center;
+  box-sizing: border-box;
+  height: 20px;
+  padding: 0 10px;
+  /* line-height 1: otherwise it inherits the root's 145% (26px). */
+  line-height: 1;
+  border-radius: 8px;
+  background: linear-gradient(135deg, var(--accent), var(--accent-border));
+  color: #fff;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: filter 0.15s, transform 0.15s;
+}
+
+.profile-upload-label:hover .profile-upload-button {
+  filter: brightness(1.08);
+  transform: translateY(-1px);
+}
+
+.profile-upload-input:focus-visible + .profile-upload-button {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.profile-upload-label.is-disabled .profile-upload-button {
+  opacity: 0.6;
+  cursor: not-allowed;
+  filter: none;
+  transform: none;
 }
 
 .profile-status {
@@ -569,6 +639,10 @@ code {
 
 .profile-color-mode {
   margin-top: 12px;
+}
+
+.profile-info-mode .profile-color-mode {
+  margin-top: 0;
 }
 
 .color-mode-switch {

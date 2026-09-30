@@ -91,7 +91,7 @@ describe('ProfilePage', () => {
         </MemoryRouter>
       </AuthProvider>
     )
-    await waitFor(() => expect(screen.getByText('My drafts')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('region', { name: 'My drafts' })).toBeInTheDocument())
     const link = screen.getByText('shipx_2026-07-30')
     expect(link.closest('a')).toHaveAttribute(
       'href',
@@ -110,7 +110,7 @@ describe('ProfilePage', () => {
       </AuthProvider>
     )
     await waitFor(() => expect(screen.getByText('Profile Information')).toBeInTheDocument())
-    expect(screen.queryByText('My drafts')).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'My drafts' })).not.toBeInTheDocument()
   })
 
   it('hides My drafts section for view-only role (no roles)', async () => {
@@ -124,7 +124,7 @@ describe('ProfilePage', () => {
       </AuthProvider>
     )
     await waitFor(() => expect(screen.getByText('Profile Information')).toBeInTheDocument())
-    expect(screen.queryByText('My drafts')).not.toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'My drafts' })).not.toBeInTheDocument()
   })
 
   it('shows Files Edited tab by default, listing unique edited filenames', async () => {

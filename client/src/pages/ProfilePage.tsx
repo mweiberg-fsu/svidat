@@ -183,33 +183,48 @@ export function ProfilePage() {
     <div className="profile-page">
       <section className="profile-card-wide profile-info">
         <h2>Profile Information</h2>
-        {avatarUrl ? (
-          <img className="profile-avatar" src={avatarUrl} alt="avatar" width={80} height={80} />
-        ) : (
-          <span className="profile-avatar profile-avatar-placeholder" aria-hidden="true" />
-        )}
-        <p className="profile-row">
-          <b>Username:</b> {username}
-        </p>
-        {email && (
-          <p className="profile-row">
-            <b>Email:</b> {email}
-          </p>
-        )}
-        <p className="profile-row">
-          <b>Roles:</b> {roles.length ? roles.join(', ') : 'view only'}
-        </p>
-        <label className="profile-upload-label">
-          Upload photo
-          <input
-            type="file"
-            accept="image/png,image/jpeg,image/webp,image/gif"
-            onChange={handleFileChange}
-            disabled={uploading}
-          />
-        </label>
-        {status && <p role="status" className="profile-status">{status}</p>}
-        <ColorModeSwitch className="profile-color-mode" />
+        <div className="profile-info-grid">
+          <div className="profile-info-photo">
+            {avatarUrl ? (
+              <img className="profile-avatar" src={avatarUrl} alt="avatar" width={80} height={80} />
+            ) : (
+              <span className="profile-avatar profile-avatar-placeholder" aria-hidden="true" />
+            )}
+            {/* The native file input is visually hidden (no "No file chosen"
+                text); the styled span is its visible button. */}
+            <label className={`profile-upload-label${uploading ? ' is-disabled' : ''}`}>
+              Upload photo
+              <input
+                type="file"
+                className="profile-upload-input"
+                aria-label="Upload photo"
+                accept="image/png,image/jpeg,image/webp,image/gif"
+                onChange={handleFileChange}
+                disabled={uploading}
+              />
+              <span className="profile-upload-button" aria-hidden="true">
+                {uploading ? 'Uploading…' : 'Choose file'}
+              </span>
+            </label>
+            {status && <p role="status" className="profile-status">{status}</p>}
+          </div>
+          <div className="profile-info-details">
+            <p className="profile-row">
+              <b>Username:</b> {username}
+            </p>
+            {email && (
+              <p className="profile-row">
+                <b>Email:</b> {email}
+              </p>
+            )}
+            <p className="profile-row">
+              <b>Roles:</b> {roles.length ? roles.join(', ') : 'view only'}
+            </p>
+          </div>
+          <div className="profile-info-mode">
+            <ColorModeSwitch className="profile-color-mode" />
+          </div>
+        </div>
       </section>
 
       <section className="profile-card-wide profile-keybindings">
@@ -258,8 +273,7 @@ export function ProfilePage() {
       </section>
 
       {roles.includes('qca') && (
-        <section className="profile-drafts">
-          <h2>My drafts</h2>
+        <section className="profile-drafts" aria-label="My drafts">
           {draftsError && <p role="status">Error: {draftsError}</p>}
           <ul>
             {drafts.map((f) => (
@@ -281,6 +295,7 @@ export function ProfilePage() {
 
       {roles.includes('qca') && (
         <section className="profile-card-wide">
+          <h2>My Files</h2>
           <div className="profile-file-tabs">
             <button
               type="button"

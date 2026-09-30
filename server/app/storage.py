@@ -52,13 +52,32 @@ def logo_path(ext: str) -> Path:
 def atomic_copy(src: Path, dst: Path) -> None:
     dst.parent.mkdir(parents=True, exist_ok=True)
     tmp_dst = dst.with_suffix(dst.suffix + ".tmp")
-    shutil.copyfile(src, tmp_dst)
-    os.replace(tmp_dst, dst)
+    try:
+        shutil.copyfile(src, tmp_dst)
+        os.replace(tmp_dst, dst)
+    except BaseException:
+        tmp_dst.unlink(missing_ok=True)
+        raise
 
 
 # Configurable dirs (app/path_settings.py). Each helper takes the admin's
 # configured list for its stage; an empty list means the default layout
 # under DATA_DIR (raw_path/draft_path/published_path above).
+
+
+def _exists(p: Path) -> bool:
+    # Path.exists()/is_dir() raise PermissionError on EACCES (py3.9).
+    try:
+        return p.exists()
+    except OSError:
+        return False
+
+
+def _is_dir(p: Path) -> bool:
+    try:
+        return p.is_dir()
+    except OSError:
+        return False
 
 
 def raw_dirs(configured: List[Path]) -> List[Path]:
@@ -72,15 +91,19 @@ def find_raw(filename: str, configured: List[Path]) -> Path:
     if not configured:
         return raw_path(filename)
     candidates = [d / f"{filename}.nc" for d in configured]
-    return next((p for p in candidates if p.exists()), candidates[0])
+    return next((p for p in candidates if _exists(p)), candidates[0])
 
 
 def list_raw_files(configured: List[Path]) -> Dict[str, Path]:
     """Stem -> path of every raw *.nc; the earlier dir wins a duplicate."""
     files: Dict[str, Path] = {}
     for d in raw_dirs(configured):
-        if d.is_dir():
-            for p in sorted(d.glob("*.nc")):
+        if _is_dir(d):
+            try:
+                found = sorted(d.glob("*.nc"))
+            except OSError:
+                continue
+            for p in found:
                 files.setdefault(p.stem, p)
     return files
 
@@ -96,7 +119,7 @@ def draft_paths(username: str, filename: str, configured: List[Path]) -> List[Pa
 
 def find_draft(username: str, filename: str, configured: List[Path]) -> Path:
     candidates = draft_paths(username, filename, configured)
-    return next((p for p in candidates if p.exists()), candidates[0])
+    return next((p for p in candidates if _exists(p)), candidates[0])
 
 
 def list_drafts(username: str, configured: List[Path]) -> List[str]:
@@ -105,12 +128,15 @@ def list_drafts(username: str, configured: List[Path]) -> List[str]:
         dirs = [d / username for d in configured]
     else:
         dirs = [base_dir() / "drafts" / username / "v250"]
-    stems = {
-        p.stem[: -len("_v250")]
-        for d in dirs
-        if d.is_dir()
-        for p in d.glob("*_v250.nc")
-    }
+    stems = set()
+    for d in dirs:
+        if not _is_dir(d):
+            continue
+        try:
+            found = list(d.glob("*_v250.nc"))
+        except OSError:
+            continue
+        stems.update(p.stem[: -len("_v250")] for p in found)
     return sorted(stems)
 
 

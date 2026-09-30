@@ -85,8 +85,9 @@ def ship_names(
     names: dict[str, Optional[str]] = {}
     for ship, stem in sorted(latest.items()):
         cached = _ship_name_cache.get(ship)
-        if cached is None or cached[0] != stem:
-            cached = (stem, netcdf_ops.read_site_name(files[stem]))
+        key = str(files[stem])
+        if cached is None or cached[0] != key:
+            cached = (key, netcdf_ops.read_site_name(files[stem]))
             _ship_name_cache[ship] = cached
         names[ship] = cached[1]
     return names

@@ -145,3 +145,49 @@ def test_configured_helpers_validate_segments(monkeypatch, tmp_path):
     ):
         with pytest.raises(ValueError):
             call()
+
+
+def test_helpers_skip_unreadable_dirs(monkeypatch, tmp_path):
+    from pathlib import Path
+
+    a, b = _iso(monkeypatch, tmp_path)
+    (b / "f.nc").write_bytes(b"x")
+    (b / "u").mkdir()
+    (b / "u" / "f_v250.nc").write_bytes(b"x")
+
+    real_exists, real_is_dir = Path.exists, Path.is_dir
+
+    def exists(self):
+        if a in self.parents or self == a:
+            raise PermissionError("denied")
+        return real_exists(self)
+
+    def is_dir(self):
+        if self == a or self == a / "u":
+            raise PermissionError("denied")
+        return real_is_dir(self)
+
+    monkeypatch.setattr(Path, "exists", exists)
+    monkeypatch.setattr(Path, "is_dir", is_dir)
+    assert storage.find_raw("f", [a, b]) == b / "f.nc"
+    assert storage.list_raw_files([a, b]) == {"f": b / "f.nc"}
+    assert storage.find_draft("u", "f", [a, b]) == b / "u" / "f_v250.nc"
+    assert storage.list_drafts("u", [a, b]) == ["f"]
+
+
+def test_atomic_copy_cleans_tmp_on_failure(monkeypatch, tmp_path):
+    src = tmp_path / "src.nc"
+    src.write_bytes(b"new")
+    dst = tmp_path / "out" / "dst.nc"
+    dst.parent.mkdir()
+    dst.write_bytes(b"old")
+
+    def boom(s, d):
+        open(d, "wb").write(b"par")
+        raise OSError("disk full")
+
+    monkeypatch.setattr("app.storage.shutil.copyfile", boom)
+    with pytest.raises(OSError):
+        storage.atomic_copy(src, dst)
+    assert list(dst.parent.iterdir()) == [dst]
+    assert dst.read_bytes() == b"old"

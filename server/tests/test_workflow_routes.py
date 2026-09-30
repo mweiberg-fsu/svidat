@@ -150,6 +150,27 @@ def _configure(db_session, draft=(), published=()):
     db_session.commit()
 
 
+def _user_id(db_session, username):
+    return db_session.query(User).filter(User.username == username).first().id
+
+
+def _mark_dirty(db_session, filename, username):
+    from app import temp_sessions
+
+    temp_sessions.mark_dirty(db_session, filename, _user_id(db_session, username))
+    db_session.commit()
+
+
+def _session_row(db_session, filename, username):
+    from app.models import TempSession
+
+    return (
+        db_session.query(TempSession)
+        .filter(TempSession.filename == filename, TempSession.user_id == _user_id(db_session, username))
+        .first()
+    )
+
+
 def test_save_writes_every_configured_draft_dir(client, auth_header, synthetic_nc, db_session, tmp_path):
     a, b = tmp_path / "a", tmp_path / "b"
     a.mkdir()
@@ -196,6 +217,7 @@ def test_save_failure_keeps_temp_and_lock(client, auth_header, synthetic_nc, db_
     synthetic_nc("shipx_cfg_fail")
     headers = auth_header("cfgfail", is_qca=True)
     client.post("/session/shipx_cfg_fail/open", params={"source": "raw"}, headers=headers)
+    _mark_dirty(db_session, "shipx_cfg_fail", "cfgfail")
 
     shutil.rmtree(dest)
     parent.chmod(0o555)
@@ -208,4 +230,40 @@ def test_save_failure_keeps_temp_and_lock(client, auth_header, synthetic_nc, db_
     assert str(dest / "cfgfail" / "shipx_cfg_fail_v250.nc") in resp.json()["detail"]
     assert storage.temp_path("cfgfail", "shipx_cfg_fail").exists()
     db_session.expire_all()
+    assert _session_row(db_session, "shipx_cfg_fail", "cfgfail").dirty is True
     assert db_session.query(Lock).filter(Lock.filename == "shipx_cfg_fail").count() == 1
+
+
+@pytest.mark.skipif(sys.platform == "win32" or os.geteuid() == 0, reason="chmod has no effect")
+def test_publish_failure_keeps_temp_and_dirty(client, auth_header, synthetic_nc, db_session, tmp_path):
+    from app.models import AuditLog
+
+    a = tmp_path / "a"
+    a.mkdir()
+    parent = tmp_path / "parent"
+    parent.mkdir()
+    b = parent / "pub"
+    b.mkdir()
+    _configure(db_session, published=[a, b])
+    synthetic_nc("shipx_cfg_pubfail")
+    headers = auth_header("cfgpubfail", is_qca=True)
+    client.post("/session/shipx_cfg_pubfail/open", params={"source": "raw"}, headers=headers)
+    _mark_dirty(db_session, "shipx_cfg_pubfail", "cfgpubfail")
+
+    shutil.rmtree(b)
+    parent.chmod(0o555)
+    try:
+        resp = client.post("/publish", json={"filename": "shipx_cfg_pubfail"}, headers=headers)
+    finally:
+        parent.chmod(0o755)
+    assert resp.status_code == 500
+    assert str(b / "shipx_cfg_pubfail_v300.nc") in resp.json()["detail"]
+    assert storage.temp_path("cfgpubfail", "shipx_cfg_pubfail").exists()
+    db_session.expire_all()
+    assert (
+        db_session.query(AuditLog)
+        .filter(AuditLog.filename == "shipx_cfg_pubfail", AuditLog.action == "publish")
+        .count()
+        == 0
+    )
+    assert _session_row(db_session, "shipx_cfg_pubfail", "cfgpubfail").dirty is True

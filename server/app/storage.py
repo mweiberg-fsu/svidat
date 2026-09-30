@@ -80,17 +80,25 @@ def _is_dir(p: Path) -> bool:
         return False
 
 
+def _norm(p: Path) -> str:
+    return os.path.normpath(str(p))
+
+
 def raw_dirs(configured: List[Path]) -> List[Path]:
-    return list(configured) or [base_dir() / "raw"]
+    """Configured raw dirs (first wins), then the default dir as a fallback
+    for reads. Empty configured list means just the default."""
+    default = base_dir() / "raw"
+    dirs = list(configured)
+    if _norm(default) not in {_norm(d) for d in dirs}:
+        dirs.append(default)
+    return dirs
 
 
 def find_raw(filename: str, configured: List[Path]) -> Path:
     """First raw dir holding {filename}.nc; else the first candidate (so the
     caller's .exists() check reports it missing)."""
     validate_segment(filename, "filename")
-    if not configured:
-        return raw_path(filename)
-    candidates = [d / f"{filename}.nc" for d in configured]
+    candidates = [d / f"{filename}.nc" for d in raw_dirs(configured)]
     return next((p for p in candidates if _exists(p)), candidates[0])
 
 
@@ -109,7 +117,8 @@ def list_raw_files(configured: List[Path]) -> Dict[str, Path]:
 
 
 def draft_paths(username: str, filename: str, configured: List[Path]) -> List[Path]:
-    """Every v250 destination; configured dirs get a per-user subfolder."""
+    """Every v250 write destination; configured dirs get a per-user
+    subfolder. Configured-only (legacy layout when none are configured)."""
     if not configured:
         return [draft_path(username, filename)]
     validate_segment(username, "username")
@@ -117,17 +126,25 @@ def draft_paths(username: str, filename: str, configured: List[Path]) -> List[Pa
     return [d / username / f"{filename}_v250.nc" for d in configured]
 
 
+def _draft_read_paths(username: str, filename: str, configured: List[Path]) -> List[Path]:
+    paths = draft_paths(username, filename, configured)
+    legacy = draft_path(username, filename)
+    if _norm(legacy) not in {_norm(p) for p in paths}:
+        paths.append(legacy)
+    return paths
+
+
 def find_draft(username: str, filename: str, configured: List[Path]) -> Path:
-    candidates = draft_paths(username, filename, configured)
+    """First existing draft (configured dirs, then legacy); else the first
+    write destination."""
+    candidates = _draft_read_paths(username, filename, configured)
     return next((p for p in candidates if _exists(p)), candidates[0])
 
 
 def list_drafts(username: str, configured: List[Path]) -> List[str]:
     validate_segment(username, "username")
-    if configured:
-        dirs = [d / username for d in configured]
-    else:
-        dirs = [base_dir() / "drafts" / username / "v250"]
+    dirs = [d / username for d in configured]
+    dirs.append(base_dir() / "drafts" / username / "v250")
     stems = set()
     for d in dirs:
         if not _is_dir(d):

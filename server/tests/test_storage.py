@@ -85,7 +85,7 @@ def _iso(monkeypatch, tmp_path):
 def test_raw_dirs_default_and_configured(monkeypatch, tmp_path):
     a, b = _iso(monkeypatch, tmp_path)
     assert storage.raw_dirs([]) == [storage.base_dir() / "raw"]
-    assert storage.raw_dirs([a, b]) == [a, b]
+    assert storage.raw_dirs([a, b]) == [a, b, storage.base_dir() / "raw"]
 
 
 def test_find_raw(monkeypatch, tmp_path):
@@ -191,3 +191,41 @@ def test_atomic_copy_cleans_tmp_on_failure(monkeypatch, tmp_path):
         storage.atomic_copy(src, dst)
     assert list(dst.parent.iterdir()) == [dst]
     assert dst.read_bytes() == b"old"
+
+
+def test_reads_fall_back_to_default_raw_dir(monkeypatch, tmp_path):
+    a, b = _iso(monkeypatch, tmp_path)
+    default = storage.base_dir() / "raw"
+    default.mkdir(parents=True)
+    (default / "d.nc").write_bytes(b"x")
+    (default / "dup.nc").write_bytes(b"x")
+    (a / "dup.nc").write_bytes(b"x")
+    assert storage.find_raw("d", [a, b]) == default / "d.nc"
+    files = storage.list_raw_files([a, b])
+    assert files["d"] == default / "d.nc"
+    assert files["dup"] == a / "dup.nc"
+    assert storage.find_raw("dup", [a, b]) == a / "dup.nc"
+
+
+def test_default_raw_dir_configured_not_listed_twice(monkeypatch, tmp_path):
+    a, _ = _iso(monkeypatch, tmp_path)
+    default = storage.base_dir() / "raw"
+    default.mkdir(parents=True)
+    assert storage.raw_dirs([default, a]) == [default, a]
+    assert storage.raw_dirs([a, default]) == [a, default]
+
+
+def test_legacy_drafts_found_when_dirs_configured(monkeypatch, tmp_path):
+    a, b = _iso(monkeypatch, tmp_path)
+    legacy = storage.draft_path("u", "old")
+    legacy.parent.mkdir(parents=True)
+    legacy.write_bytes(b"x")
+    assert storage.find_draft("u", "old", [a, b]) == legacy
+    assert storage.list_drafts("u", [a, b]) == ["old"]
+    # nothing exists: first write destination
+    assert storage.find_draft("u", "zzz", [a, b]) == a / "u" / "zzz_v250.nc"
+    # writes stay configured-only
+    assert storage.draft_paths("u", "old", [a, b]) == [
+        a / "u" / "old_v250.nc",
+        b / "u" / "old_v250.nc",
+    ]

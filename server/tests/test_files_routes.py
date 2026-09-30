@@ -271,16 +271,13 @@ def test_configured_raw_listing_and_catalog_union(client, auth_header, db_sessio
     _nc(b / "CFGA_20260101v100.nc")  # duplicate stem
     _configure(db_session, raw=[a, b])
     headers = auth_header("cfgviewer1")
-    assert client.get("/files/raw", headers=headers).json() == [
-        "CFGA_20260101v100",
-        "CFGB_20260101v100",
-    ]
+    listed = client.get("/files/raw", headers=headers).json()
+    assert listed.count("CFGA_20260101v100") == 1
+    assert "CFGB_20260101v100" in listed
     catalog = client.get("/files/catalog", headers=headers).json()
-    assert catalog == {
-        "CFGA": {"2026": ["CFGA_20260101v100"]},
-        "CFGB": {"2026": ["CFGB_20260101v100"]},
-    }
-    assert set(client.get("/files/ships", headers=headers).json()) == {"CFGA", "CFGB"}
+    assert catalog["CFGA"] == {"2026": ["CFGA_20260101v100"]}
+    assert catalog["CFGB"] == {"2026": ["CFGB_20260101v100"]}
+    assert {"CFGA", "CFGB"} <= set(client.get("/files/ships", headers=headers).json())
 
 
 def test_configured_raw_metadata_and_data_from_second_dir(client, auth_header, db_session, tmp_path):
@@ -314,7 +311,16 @@ def test_configured_drafts_list_and_open(client, auth_header, db_session, tmp_pa
     _nc(b / "cfgeditor2" / "dr_f_v250.nc")
     _configure(db_session, draft=[a, b])
     headers = auth_header("cfgeditor2", is_qca=True)
-    assert client.get("/files/drafts", headers=headers).json() == ["dr_f"]
+    assert "dr_f" in client.get("/files/drafts", headers=headers).json()
     resp = client.post("/session/dr_f/open", params={"source": "draft"}, headers=headers)
     assert resp.status_code == 200, resp.text
     assert storage.temp_path("cfgeditor2", "dr_f").exists()
+
+
+def test_raw_listing_includes_default_dir_alongside_configured(client, auth_header, db_session, synthetic_nc, tmp_path):
+    synthetic_nc("default_dir_file")
+    a = tmp_path / "a"
+    _nc(a / "configured_dir_file.nc")
+    _configure(db_session, raw=[a])
+    listed = client.get("/files/raw", headers=auth_header("cfgviewer9")).json()
+    assert "default_dir_file" in listed and "configured_dir_file" in listed

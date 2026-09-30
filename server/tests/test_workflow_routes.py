@@ -1,3 +1,10 @@
+import json
+import os
+import shutil
+import sys
+
+import pytest
+
 from app import storage
 from app.database import SessionLocal
 from app.models import Lock, User
@@ -132,3 +139,73 @@ def test_admin_alone_cannot_save(client, auth_header):
     headers = auth_header("adminonly_workflow1", is_admin=True)
     resp = client.post("/save", headers=headers, json={"filename": "shipx_2026-08-10"})
     assert resp.status_code == 403
+
+
+def _configure(db_session, draft=(), published=()):
+    from app.path_settings import get_or_create_path_settings
+
+    row = get_or_create_path_settings(db_session)
+    row.draft_dirs = json.dumps([str(p) for p in draft])
+    row.published_dirs = json.dumps([str(p) for p in published])
+    db_session.commit()
+
+
+def test_save_writes_every_configured_draft_dir(client, auth_header, synthetic_nc, db_session, tmp_path):
+    a, b = tmp_path / "a", tmp_path / "b"
+    a.mkdir()
+    b.mkdir()
+    _configure(db_session, draft=[a, b])
+    synthetic_nc("shipx_cfg_save")
+    headers = auth_header("cfgsaver", is_qca=True)
+    client.post("/session/shipx_cfg_save/open", params={"source": "raw"}, headers=headers)
+
+    resp = client.post("/save", json={"filename": "shipx_cfg_save"}, headers=headers)
+    assert resp.status_code == 200, resp.text
+    expected = [a / "cfgsaver" / "shipx_cfg_save_v250.nc", b / "cfgsaver" / "shipx_cfg_save_v250.nc"]
+    assert all(p.exists() for p in expected)
+    body = resp.json()
+    assert body["draft_paths"] == [str(p) for p in expected]
+    assert body["draft_path"] == str(expected[0])
+    assert not storage.temp_path("cfgsaver", "shipx_cfg_save").exists()
+
+
+def test_publish_writes_every_configured_published_dir(client, auth_header, synthetic_nc, db_session, tmp_path):
+    a, b = tmp_path / "a", tmp_path / "b"
+    a.mkdir()
+    b.mkdir()
+    _configure(db_session, published=[a, b])
+    synthetic_nc("shipx_cfg_pub")
+    headers = auth_header("cfgpub", is_qca=True)
+    client.post("/session/shipx_cfg_pub/open", params={"source": "raw"}, headers=headers)
+
+    resp = client.post("/publish", json={"filename": "shipx_cfg_pub"}, headers=headers)
+    assert resp.status_code == 200, resp.text
+    expected = [a / "shipx_cfg_pub_v300.nc", b / "shipx_cfg_pub_v300.nc"]
+    assert all(p.exists() for p in expected)
+    assert resp.json()["published_paths"] == [str(p) for p in expected]
+    assert resp.json()["published_path"] == str(expected[0])
+
+
+@pytest.mark.skipif(sys.platform == "win32" or os.geteuid() == 0, reason="chmod has no effect")
+def test_save_failure_keeps_temp_and_lock(client, auth_header, synthetic_nc, db_session, tmp_path):
+    parent = tmp_path / "parent"
+    parent.mkdir()
+    dest = parent / "drafts"
+    dest.mkdir()
+    _configure(db_session, draft=[dest])
+    synthetic_nc("shipx_cfg_fail")
+    headers = auth_header("cfgfail", is_qca=True)
+    client.post("/session/shipx_cfg_fail/open", params={"source": "raw"}, headers=headers)
+
+    shutil.rmtree(dest)
+    parent.chmod(0o555)
+    try:
+        resp = client.post("/save", json={"filename": "shipx_cfg_fail"}, headers=headers)
+    finally:
+        parent.chmod(0o755)
+    assert resp.status_code == 500
+    assert "could not write" in resp.json()["detail"]
+    assert str(dest / "cfgfail" / "shipx_cfg_fail_v250.nc") in resp.json()["detail"]
+    assert storage.temp_path("cfgfail", "shipx_cfg_fail").exists()
+    db_session.expire_all()
+    assert db_session.query(Lock).filter(Lock.filename == "shipx_cfg_fail").count() == 1

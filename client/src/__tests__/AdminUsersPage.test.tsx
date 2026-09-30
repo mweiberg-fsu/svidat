@@ -16,7 +16,6 @@ describe('AdminUsersPage OAuth domain allowlist', () => {
     vi.spyOn(client, 'getPathSettings').mockResolvedValue(emptyPaths)
     vi.spyOn(client, 'listUsers').mockResolvedValue([])
     vi.spyOn(client, 'getOAuthSettings').mockResolvedValue({ allowed_domains: ['fsu.edu'] })
-    vi.spyOn(client, 'getPathSettings').mockResolvedValue(emptyPaths)
     vi.spyOn(client, 'getTheme').mockResolvedValue({
       primary_color: '#ed1f21',
       secondary_color: '#5e6cb3',
@@ -359,7 +358,7 @@ describe('AdminUsersPage theme', () => {
     await screen.findByDisplayValue('SVIDAT')
     fireEvent.click(screen.getByRole('tab', { name: 'Paths' }))
     expect(await screen.findByRole('heading', { name: 'Read files from' })).toBeVisible()
-    expect(screen.queryByRole('combobox', { name: 'Zoom X axis' })).not.toBeInTheDocument()
+    expect(document.getElementById('admin-config-panel-app')).toHaveAttribute('hidden')
   })
 
   it('groups Theme, Keybindings and Documentation as tabs of one Configuration card', async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { setToken, getToken, apiFetch } from '../api/client'
+import { setToken, getToken, apiFetch, errorMessage } from '../api/client'
 import {
   getOAuthSettings,
   loginWithGoogle,
@@ -239,5 +239,21 @@ describe('user-management client functions', () => {
     expect(url).toContain('/users/5/roles')
     expect(options.method).toBe('PATCH')
     expect(JSON.parse(options.body)).toEqual({ roles: ['admin', 'qca'] })
+  })
+})
+
+describe('errorMessage', () => {
+  it('joins pydantic detail msgs, stripping "Value error, "', () => {
+    const body = JSON.stringify({ detail: [{ msg: 'Value error, a bad' }, { msg: 'b bad' }] })
+    expect(errorMessage(new Error(`422: ${body}`))).toBe('a bad; b bad')
+  })
+  it('returns a string detail', () => {
+    expect(errorMessage(new Error('403: {"detail":"Forbidden"}'))).toBe('Forbidden')
+  })
+  it('falls back to the original message for non-JSON bodies', () => {
+    expect(errorMessage(new Error('500: boom'))).toBe('500: boom')
+  })
+  it('stringifies non-Error values', () => {
+    expect(errorMessage('oops')).toBe('oops')
   })
 })

@@ -309,3 +309,24 @@ export const getPathSettings = (): Promise<PathSettings> => apiFetch('/admin/pat
 
 export const updatePathSettings = (lists: PathLists): Promise<PathSettings> =>
   apiFetch('/admin/paths', { method: 'PUT', body: JSON.stringify(lists) }).then((r) => r.json())
+
+// Turns an apiFetch error ("NNN: <body>") into readable text: unwraps FastAPI's
+// {"detail": "..."} / pydantic {"detail": [{"msg": "Value error, ..."}]} bodies.
+export function errorMessage(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err)
+  const match = message.match(/^\d{3}: ([\s\S]*)$/)
+  if (!match) return message
+  try {
+    const detail = JSON.parse(match[1])?.detail
+    if (typeof detail === 'string') return detail
+    if (Array.isArray(detail)) {
+      const msgs = detail
+        .map((d) => (typeof d?.msg === 'string' ? d.msg.replace(/^Value error, /, '') : null))
+        .filter((m): m is string => m !== null)
+      if (msgs.length) return msgs.join('; ')
+    }
+  } catch {
+    // not JSON
+  }
+  return message
+}

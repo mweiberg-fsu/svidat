@@ -11,6 +11,7 @@ import {
   updateThemeSettings,
   updateUserRoles,
   uploadThemeLogo,
+  errorMessage,
 } from '../api/client'
 import type { ThemeSettings } from '../api/types'
 import { applyTheme } from '../theme'
@@ -87,7 +88,7 @@ export function AdminUsersPage() {
     getOAuthSettings()
       .then((s) => setAllowedDomains(s.allowed_domains))
       .catch((err) => {
-        setOauthStatus(`Error: ${err instanceof Error ? err.message : String(err)}`)
+        setOauthStatus(`Error: ${errorMessage(err)}`)
       })
   }, [])
 
@@ -191,7 +192,7 @@ export function AdminUsersPage() {
       setAllowedDomains(saved.allowed_domains)
       setOauthStatus('Domain list updated')
     } catch (err) {
-      setOauthStatus(`Error: ${err instanceof Error ? err.message : String(err)}`)
+      setOauthStatus(`Error: ${errorMessage(err)}`)
     } finally {
       setOauthSubmitting(false)
     }

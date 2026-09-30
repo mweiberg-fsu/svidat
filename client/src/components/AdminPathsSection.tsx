@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { getPathSettings, updatePathSettings } from '../api/client'
+import { errorMessage, getPathSettings, updatePathSettings } from '../api/client'
 import type { PathLists, PathSettings } from '../api/types'
 
 const BLOCKS = [
@@ -9,8 +9,6 @@ const BLOCKS = [
 ] as const
 
 type ListKey = (typeof BLOCKS)[number]['key']
-
-const errMsg = (err: unknown) => `Error: ${err instanceof Error ? err.message : String(err)}`
 
 function PathListEditor({
   label,
@@ -62,7 +60,7 @@ function PathListEditor({
         </ul>
       )}
       <div className="admin-form-row">
-        <label className="admin-field" style={{ flex: 1 }}>
+        <div className="admin-field admin-path-input">
           <input
             type="text"
             aria-label={`New ${label} path`}
@@ -77,7 +75,7 @@ function PathListEditor({
               }
             }}
           />
-        </label>
+        </div>
         <button
           type="button"
           className="admin-btn admin-btn-inline"
@@ -103,7 +101,7 @@ export function AdminPathsSection() {
   useEffect(() => {
     getPathSettings()
       .then(setSettings)
-      .catch((err) => setStatuses({ load: errMsg(err) }))
+      .catch((err) => setStatuses({ load: `Error: ${errorMessage(err)}` }))
   }, [])
 
   const save = async (key: ListKey, next: string[]): Promise<boolean> => {
@@ -120,7 +118,7 @@ export function AdminPathsSection() {
       setSettings(await updatePathSettings(lists))
       return true
     } catch (err) {
-      setStatuses({ [key]: errMsg(err) })
+      setStatuses({ [key]: `Error saving paths: ${errorMessage(err)}` })
       return false
     } finally {
       setSaving(false)

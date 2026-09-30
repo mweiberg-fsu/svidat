@@ -2392,3 +2392,7 @@ code {
 .admin-path-row code {
   overflow-wrap: anywhere;
 }
+
+.admin-path-input {
+  flex: 1;
+}

@@ -2369,3 +2369,26 @@ code {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+.admin-path-list {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.admin-path-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 4px 10px;
+}
+
+.admin-path-row code {
+  overflow-wrap: anywhere;
+}

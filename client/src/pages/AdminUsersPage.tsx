@@ -15,6 +15,7 @@ import {
 import type { ThemeSettings } from '../api/types'
 import { applyTheme } from '../theme'
 import { AdminConfigSection } from '../components/AdminConfigSection'
+import { AdminPathsSection } from '../components/AdminPathsSection'
 
 interface UserRow {
   id: number
@@ -37,6 +38,7 @@ const CONFIG_TABS = [
   { id: 'theme', label: 'Theme' },
   { id: 'keybindings', label: 'Keybindings' },
   { id: 'documentation', label: 'Documentation' },
+  { id: 'paths', label: 'Paths' },
 ] as const
 type ConfigTab = (typeof CONFIG_TABS)[number]['id']
 
@@ -414,7 +416,13 @@ export function AdminUsersPage() {
               role="tab"
               id={`admin-config-tab-${t.id}`}
               aria-selected={configTab === t.id}
-              aria-controls={t.id === 'theme' ? 'admin-config-panel-theme' : 'admin-config-panel-app'}
+              aria-controls={
+                t.id === 'theme'
+                  ? 'admin-config-panel-theme'
+                  : t.id === 'paths'
+                    ? 'admin-config-panel-paths'
+                    : 'admin-config-panel-app'
+              }
               className={`admin-tab${configTab === t.id ? ' active' : ''}`}
               onClick={() => setConfigTab(t.id)}
             >
@@ -534,9 +542,17 @@ export function AdminUsersPage() {
           role="tabpanel"
           id="admin-config-panel-app"
           aria-labelledby={`admin-config-tab-${configTab}`}
-          hidden={configTab === 'theme'}
+          hidden={configTab === 'theme' || configTab === 'paths'}
         >
           <AdminConfigSection view={configTab === 'documentation' ? 'documentation' : 'keybindings'} />
+        </div>
+        <div
+          role="tabpanel"
+          id="admin-config-panel-paths"
+          aria-labelledby="admin-config-tab-paths"
+          hidden={configTab !== 'paths'}
+        >
+          <AdminPathsSection />
         </div>
       </section>
     </div>

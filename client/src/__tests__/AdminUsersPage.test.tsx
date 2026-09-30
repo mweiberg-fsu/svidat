@@ -3,11 +3,20 @@ import { render, screen, fireEvent, waitFor, within } from '@testing-library/rea
 import { AdminUsersPage } from '../pages/AdminUsersPage'
 import * as client from '../api/client'
 
+const emptyPaths = {
+  raw_dirs: [],
+  draft_dirs: [],
+  published_dirs: [],
+  defaults: { raw: '/srv/raw', draft: '/srv/drafts', published: '/srv/published' },
+}
+
 describe('AdminUsersPage OAuth domain allowlist', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
+    vi.spyOn(client, 'getPathSettings').mockResolvedValue(emptyPaths)
     vi.spyOn(client, 'listUsers').mockResolvedValue([])
     vi.spyOn(client, 'getOAuthSettings').mockResolvedValue({ allowed_domains: ['fsu.edu'] })
+    vi.spyOn(client, 'getPathSettings').mockResolvedValue(emptyPaths)
     vi.spyOn(client, 'getTheme').mockResolvedValue({
       primary_color: '#ed1f21',
       secondary_color: '#5e6cb3',
@@ -80,6 +89,7 @@ describe('AdminUsersPage OAuth domain allowlist', () => {
 describe('AdminUsersPage role management', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
+    vi.spyOn(client, 'getPathSettings').mockResolvedValue(emptyPaths)
     vi.spyOn(client, 'getOAuthSettings').mockResolvedValue({ allowed_domains: [] })
     vi.spyOn(client, 'getTheme').mockResolvedValue({
       primary_color: '#ed1f21',
@@ -239,6 +249,7 @@ describe('AdminUsersPage role management', () => {
 describe('AdminUsersPage theme', () => {
   beforeEach(() => {
     vi.restoreAllMocks()
+    vi.spyOn(client, 'getPathSettings').mockResolvedValue(emptyPaths)
     vi.spyOn(client, 'listUsers').mockResolvedValue([])
     vi.spyOn(client, 'getOAuthSettings').mockResolvedValue({ allowed_domains: [] })
     vi.spyOn(client, 'getTheme').mockResolvedValue({
@@ -343,6 +354,14 @@ describe('AdminUsersPage theme', () => {
     expect(screen.getByText('No logo set')).toBeInTheDocument()
   })
 
+  it('shows the path blocks on the Paths tab', async () => {
+    render(<AdminUsersPage />)
+    await screen.findByDisplayValue('SVIDAT')
+    fireEvent.click(screen.getByRole('tab', { name: 'Paths' }))
+    expect(await screen.findByRole('heading', { name: 'Read files from' })).toBeVisible()
+    expect(screen.queryByRole('combobox', { name: 'Zoom X axis' })).not.toBeInTheDocument()
+  })
+
   it('groups Theme, Keybindings and Documentation as tabs of one Configuration card', async () => {
     vi.spyOn(client, 'getConfig').mockResolvedValue({
       keybindings: {
@@ -361,7 +380,7 @@ describe('AdminUsersPage theme', () => {
 
     const card = screen.getByRole('heading', { name: 'Configuration' }).closest('section')!
     const tabs = within(card).getAllByRole('tab').map((t) => t.textContent)
-    expect(tabs).toEqual(['Theme', 'Keybindings', 'Documentation'])
+    expect(tabs).toEqual(['Theme', 'Keybindings', 'Documentation', 'Paths'])
     // Only one Configuration card now — no separate Theme card.
     expect(screen.queryByRole('heading', { name: 'Theme' })).not.toBeInTheDocument()
 

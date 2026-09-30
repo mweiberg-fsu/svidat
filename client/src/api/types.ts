@@ -130,3 +130,13 @@ export interface AppConfig {
   custom_triggers?: CustomTrigger[]
   user_custom_triggers?: CustomTrigger[]
 }
+
+export interface PathLists {
+  raw_dirs: string[]
+  draft_dirs: string[]
+  published_dirs: string[]
+}
+
+export interface PathSettings extends PathLists {
+  defaults: { raw: string; draft: string; published: string }
+}

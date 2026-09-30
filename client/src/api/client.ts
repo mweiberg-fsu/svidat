@@ -1,4 +1,4 @@
-import type { AppConfig, CurrentUser, CustomTrigger, Catalog, ClimatologyResponse, KeyBindings, ShipNames, OAuthSettings, TempSessionEntry, VariableDataResponse, ThemeSettings, ThemeSettingsUpdate } from './types'
+import type { AppConfig, CurrentUser, CustomTrigger, Catalog, ClimatologyResponse, KeyBindings, ShipNames, OAuthSettings, TempSessionEntry, VariableDataResponse, ThemeSettings, ThemeSettingsUpdate, PathLists, PathSettings } from './types'
 
 const BASE_URL = 'http://localhost:8000'
 const TOKEN_KEY = 'svidat_token'
@@ -304,3 +304,8 @@ export const applyFlag = (
       flag_code: flagCode,
     }),
   }).then((r) => r.json())
+
+export const getPathSettings = (): Promise<PathSettings> => apiFetch('/admin/paths').then((r) => r.json())
+
+export const updatePathSettings = (lists: PathLists): Promise<PathSettings> =>
+  apiFetch('/admin/paths', { method: 'PUT', body: JSON.stringify(lists) }).then((r) => r.json())

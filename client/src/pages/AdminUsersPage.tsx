@@ -19,6 +19,7 @@ import { AdminConfigSection } from '../components/AdminConfigSection'
 interface UserRow {
   id: number
   username: string
+  email?: string | null
   roles: string[]
 }
 
@@ -44,6 +45,7 @@ export function AdminUsersPage() {
   const [configTab, setConfigTab] = useState<ConfigTab>('theme')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
+  const [email, setEmail] = useState('')
   const [newRoles, setNewRoles] = useState<string[]>([])
   const [status, setStatus] = useState<string | null>(null)
   const [submitting, setSubmitting] = useState(false)
@@ -124,9 +126,10 @@ export function AdminUsersPage() {
   const handleCreate = async () => {
     setSubmitting(true)
     try {
-      await createUser(username, password, newRoles)
+      await createUser(username, password, newRoles, email)
       setUsername('')
       setPassword('')
+      setEmail('')
       setNewRoles([])
       setStatus('User created')
       refresh()
@@ -278,7 +281,10 @@ export function AdminUsersPage() {
                 </>
               ) : (
                 <>
-                  <span className="admin-user-name">{u.username}</span>
+                  <span className="admin-user-name">
+                    {u.username}
+                    {u.email && <span className="admin-user-email">{u.email}</span>}
+                  </span>
                   <div className="admin-role-badges">
                     {u.roles.length ? (
                       u.roles.map((r) => (
@@ -323,6 +329,10 @@ export function AdminUsersPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
+          </label>
+          <label className="admin-field">
+            Email (optional)
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
           </label>
         </div>
         <div className="admin-role-checks">

@@ -209,7 +209,20 @@ describe('user-management client functions', () => {
     await createUser('x', 'pw', ['qca'])
 
     const [, options] = fetchMock.mock.calls[0]
-    expect(JSON.parse(options.body)).toEqual({ username: 'x', password: 'pw', roles: ['qca'] })
+    expect(JSON.parse(options.body)).toEqual({ username: 'x', password: 'pw', roles: ['qca'], email: null })
+  })
+
+  it('createUser sends a trimmed email when given', async () => {
+    setToken('abc123')
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ id: 1, username: 'x', roles: [] }), { status: 201 }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await createUser('x', 'pw', [], ' x@y.org ')
+
+    const [, options] = fetchMock.mock.calls[0]
+    expect(JSON.parse(options.body).email).toBe('x@y.org')
   })
 
   it('updateUserRoles PATCHes the roles endpoint', async () => {

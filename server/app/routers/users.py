@@ -149,8 +149,13 @@ def create_user(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT, detail="username taken"
         )
+    if payload.email and db.query(User).filter(User.email == payload.email).first():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="email taken"
+        )
     user = User(
         username=payload.username,
+        email=payload.email,
         password_hash=hash_password(payload.password),
         is_admin="admin" in payload.roles,
         is_qca="qca" in payload.roles,

@@ -4,6 +4,7 @@ import { ColorModeSwitch } from '../components/ColorModeSwitch'
 import { KeybindingsFields } from '../components/KeybindingsFields'
 import { CustomTriggersList } from '../components/CustomTriggersList'
 import {
+  getCurrentUser,
   getMyAuditHistory,
   getMySessions,
   listDrafts,
@@ -29,6 +30,14 @@ export function ProfilePage() {
   const [drafts, setDrafts] = useState<string[]>([])
   const [draftsError, setDraftsError] = useState<string | null>(null)
   const navigate = useNavigate()
+
+  // Email isn't kept in AuthContext (it's only shown here), so fetch it.
+  const [email, setEmail] = useState<string | null>(null)
+  useEffect(() => {
+    getCurrentUser()
+      .then((me) => setEmail(me.email ?? null))
+      .catch(() => setEmail(null))
+  }, [id])
 
   const { keybindings, userKeybindings, sharedTriggers, myTriggers } = useAppConfig()
   const [kbForm, setKbForm] = useState(keybindings)
@@ -172,8 +181,8 @@ export function ProfilePage() {
 
   return (
     <div className="profile-page">
-      <h1>Profile</h1>
-      <div className="profile-card">
+      <section className="profile-card-wide profile-info">
+        <h2>Profile Information</h2>
         {avatarUrl ? (
           <img className="profile-avatar" src={avatarUrl} alt="avatar" width={80} height={80} />
         ) : (
@@ -182,6 +191,11 @@ export function ProfilePage() {
         <p className="profile-row">
           <b>Username:</b> {username}
         </p>
+        {email && (
+          <p className="profile-row">
+            <b>Email:</b> {email}
+          </p>
+        )}
         <p className="profile-row">
           <b>Roles:</b> {roles.length ? roles.join(', ') : 'view only'}
         </p>
@@ -196,7 +210,7 @@ export function ProfilePage() {
         </label>
         {status && <p role="status" className="profile-status">{status}</p>}
         <ColorModeSwitch className="profile-color-mode" />
-      </div>
+      </section>
 
       <section className="profile-card-wide profile-keybindings">
         <h2>My plot keybindings</h2>

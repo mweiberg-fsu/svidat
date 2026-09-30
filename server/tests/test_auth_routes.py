@@ -35,8 +35,9 @@ def test_oauth_google_creates_new_user(client, db_session):
     assert body["token_type"] == "bearer"
     assert body["access_token"]
 
-    user = db_session.query(User).filter(User.username == "new@example.com").first()
+    user = db_session.query(User).filter(User.email == "new@example.com").first()
     assert user is not None
+    assert user.username == "new"
     assert user.auth_provider == "google"
     assert user.roles == []
 
@@ -59,7 +60,7 @@ def test_oauth_microsoft_creates_new_user(client, db_session):
     with patch("app.routers.auth.verify_microsoft_id_token", return_value="ms@example.com"):
         resp = client.post("/auth/oauth/microsoft", json={"id_token": "fake"})
     assert resp.status_code == 200
-    user = db_session.query(User).filter(User.username == "ms@example.com").first()
+    user = db_session.query(User).filter(User.email == "ms@example.com").first()
     assert user.auth_provider == "microsoft"
 
 
@@ -101,3 +102,21 @@ def test_oauth_login_matches_existing_user_case_insensitively(client, make_user,
         .all()
     )
     assert len(matches) == 1
+
+
+def test_oauth_new_user_username_collision_gets_number(client, make_user, db_session):
+    make_user("collide")
+    with patch("app.routers.auth.verify_google_id_token", return_value="Collide@Example.com"):
+        resp = client.post("/auth/oauth/google", json={"id_token": "fake"})
+    assert resp.status_code == 200
+    user = db_session.query(User).filter(User.email == "collide@example.com").one()
+    assert user.username == "collide2"
+
+
+def test_oauth_login_matches_existing_user_by_email(client, db_session):
+    with patch("app.routers.auth.verify_microsoft_id_token", return_value="byemail@example.com"):
+        client.post("/auth/oauth/microsoft", json={"id_token": "fake"})
+    with patch("app.routers.auth.verify_microsoft_id_token", return_value="BYEMAIL@example.com"):
+        resp = client.post("/auth/oauth/microsoft", json={"id_token": "fake"})
+    assert resp.status_code == 200
+    assert db_session.query(User).filter(User.email == "byemail@example.com").count() == 1

@@ -48,6 +48,10 @@ class User(Base):
     # trigger canonical); NULL means none. Offered in their keybinding
     # dropdowns alongside the shared list (app_config.custom_triggers).
     custom_triggers = Column(Text, nullable=True)
+    # Optional, stored lowercased. OAuth sign-ups get their verified address
+    # here (their username is its local part, see app/usernames.py); local
+    # accounts may have none. Unique when set (NULLs don't collide).
+    email = Column(String, nullable=True, unique=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     audit_entries = relationship("AuditLog", back_populates="user")

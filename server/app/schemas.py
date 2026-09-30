@@ -23,10 +23,25 @@ def _validate_role_values(v: List[str]) -> List[str]:
     return v
 
 
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+
 class UserCreate(BaseModel):
     username: str
     password: str
     roles: List[str] = []
+    email: Optional[str] = None
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, v: Optional[str]) -> Optional[str]:
+        # Optional: blank means none. Stored lowercased, like OAuth addresses.
+        if v is None or not v.strip():
+            return None
+        v = v.strip().lower()
+        if not _EMAIL_RE.match(v):
+            raise ValueError("invalid email address")
+        return v
 
     @field_validator("roles")
     @classmethod
@@ -37,6 +52,7 @@ class UserCreate(BaseModel):
 class UserOut(BaseModel):
     id: int
     username: str
+    email: Optional[str] = None
     roles: List[Role]
 
     class Config:

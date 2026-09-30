@@ -277,3 +277,64 @@ def test_run_migrations_skips_missing_app_config_table(tmp_path):
     with engine.connect() as conn:
         config_cols = [row[1] for row in conn.execute(text("PRAGMA table_info(app_config)"))]
     assert config_cols == []
+
+
+def _make_users_with_provider(db_path, rows):
+    _make_legacy_users_table(db_path)
+    conn = sqlite3.connect(db_path)
+    conn.execute("ALTER TABLE users ADD COLUMN auth_provider VARCHAR NOT NULL DEFAULT 'local'")
+    for username, provider in rows:
+        conn.execute(
+            "INSERT INTO users (username, password_hash, role, auth_provider) VALUES (?, 'x', 'user', ?)",
+            (username, provider),
+        )
+    conn.commit()
+    conn.close()
+
+
+def test_run_migrations_moves_oauth_address_into_email(tmp_path, monkeypatch):
+    monkeypatch.setattr("app.storage.settings.data_dir", str(tmp_path / "data"))
+    db_path = tmp_path / "legacy_email.db"
+    _make_users_with_provider(
+        db_path,
+        [
+            ("sam", "local"),
+            ("Sam@Gmail.com", "google"),
+            ("keep@local.org", "local"),
+        ],
+    )
+    engine = create_engine(f"sqlite:///{db_path}")
+
+    run_migrations(engine)
+    run_migrations(engine)  # idempotent
+
+    with engine.connect() as conn:
+        rows = conn.execute(text("SELECT username, email FROM users ORDER BY id")).all()
+    assert rows == [("sam", None), ("sam2", "sam@gmail.com"), ("keep@local.org", None)]
+
+
+def test_run_migrations_renames_oauth_user_data_dirs(tmp_path, monkeypatch):
+    data = tmp_path / "data"
+    monkeypatch.setattr("app.storage.settings.data_dir", str(data))
+    (data / "temp" / "ms@example.com").mkdir(parents=True)
+    (data / "temp" / "ms@example.com" / "f_temp.nc").write_text("x")
+    (data / "drafts" / "ms@example.com" / "v250").mkdir(parents=True)
+    db_path = tmp_path / "legacy_dirs.db"
+    _make_users_with_provider(db_path, [("ms@example.com", "microsoft")])
+    engine = create_engine(f"sqlite:///{db_path}")
+
+    run_migrations(engine)
+
+    assert (data / "temp" / "ms" / "f_temp.nc").read_text() == "x"
+    assert (data / "drafts" / "ms" / "v250").is_dir()
+    assert not (data / "temp" / "ms@example.com").exists()
+
+
+def test_run_migrations_email_is_unique(tmp_path):
+    db_path = tmp_path / "legacy_email_unique.db"
+    _make_legacy_users_table(db_path)
+    engine = create_engine(f"sqlite:///{db_path}")
+    run_migrations(engine)
+    with engine.connect() as conn:
+        indexes = conn.execute(text("PRAGMA index_list(users)")).all()
+    assert any(row[1] == "ix_users_email" and row[2] == 1 for row in indexes)

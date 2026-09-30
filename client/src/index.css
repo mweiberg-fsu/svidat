@@ -409,14 +409,9 @@ code {
   padding: 24px;
 }
 
-.profile-card {
-  max-width: 360px;
-  margin: 0 auto;
-  background: var(--code-bg);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 24px;
-  text-align: left;
+/* First card on the page: no gap above it now that there's no page title. */
+.profile-card-wide.profile-info {
+  margin-top: 0;
 }
 
 .profile-avatar {
@@ -2073,6 +2068,13 @@ code {
   font-weight: 500;
   color: var(--text-h);
   min-width: 140px;
+}
+
+.admin-user-email {
+  display: block;
+  font-weight: 400;
+  font-size: 12px;
+  color: var(--text);
 }
 
 .admin-role-badges {

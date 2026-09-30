@@ -47,6 +47,7 @@ export interface JobStatusResponse {
 export interface CurrentUser {
   id: number
   username: string
+  email?: string | null
   roles: Role[]
 }
 

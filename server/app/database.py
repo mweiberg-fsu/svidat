@@ -1,7 +1,9 @@
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, declarative_base
 
+from app import storage
 from app.config import settings
+from app.usernames import username_from_email
 
 engine = create_engine(
     settings.database_url, connect_args={"check_same_thread": False}
@@ -54,6 +56,14 @@ def run_migrations(bind=None) -> None:
         if "custom_triggers" not in cols:
             conn.execute(text("ALTER TABLE users ADD COLUMN custom_triggers TEXT"))
             conn.commit()
+        if "email" not in cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN email VARCHAR"))
+            conn.commit()
+        # Same name SQLAlchemy gives the model's unique index, so a fresh DB
+        # built by create_all doesn't get a second one.
+        conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_email ON users (email)"))
+        conn.commit()
+        _move_oauth_addresses_to_email(conn)
         theme_cols = [row[1] for row in conn.execute(text("PRAGMA table_info(theme_settings)"))]
         # Empty list means the table doesn't exist yet; create_all will build
         # it with every column, so there's nothing to alter.
@@ -86,3 +96,34 @@ def run_migrations(bind=None) -> None:
         if config_cols and "custom_triggers" not in config_cols:
             conn.execute(text("ALTER TABLE app_config ADD COLUMN custom_triggers TEXT"))
             conn.commit()
+
+
+def _move_oauth_addresses_to_email(conn) -> None:
+    """OAuth accounts created before User.email existed used the full address
+    as their username. Move it into email and rename them to the local part
+    (app/usernames.py), carrying their temp/drafts folders along, since those
+    are keyed by username. Idempotent: converted rows have an email."""
+    rows = conn.execute(
+        text(
+            "SELECT id, username FROM users "
+            "WHERE email IS NULL AND auth_provider != 'local' AND username LIKE '%@%'"
+        )
+    ).all()
+    if not rows:
+        return
+    taken = {row[0] for row in conn.execute(text("SELECT username FROM users"))}
+    stage_dirs = [storage.base_dir() / "temp", storage.base_dir() / "drafts"]
+    for stage in stage_dirs:
+        if stage.is_dir():
+            taken.update(p.name for p in stage.iterdir())
+    for user_id, old in rows:
+        new = username_from_email(old, taken)
+        taken.add(new)
+        conn.execute(
+            text("UPDATE users SET username = :new, email = :email WHERE id = :id"),
+            {"new": new, "email": old.strip().lower(), "id": user_id},
+        )
+        conn.commit()
+        for stage in stage_dirs:
+            if (stage / old).is_dir():
+                (stage / old).rename(stage / new)

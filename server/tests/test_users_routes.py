@@ -232,3 +232,40 @@ def test_save_my_custom_triggers_empty_list_clears(client, auth_header):
     client.put("/users/me/custom-triggers", json=MY_TRIGGERS, headers=me)
     resp = client.put("/users/me/custom-triggers", json={"custom_triggers": []}, headers=me)
     assert resp.json()["user_custom_triggers"] == []
+
+
+def test_admin_create_user_with_optional_email(client, auth_header):
+    headers = auth_header("emailadmin1", is_admin=True)
+    resp = client.post(
+        "/users",
+        json={"username": "withmail", "password": "pw12345", "roles": [], "email": " With@Mail.com "},
+        headers=headers,
+    )
+    assert resp.status_code == 201, resp.text
+    assert resp.json()["email"] == "with@mail.com"
+
+    resp = client.post("/users", json={"username": "nomail", "password": "pw12345", "roles": []}, headers=headers)
+    assert resp.status_code == 201
+    assert resp.json()["email"] is None
+
+    resp = client.post(
+        "/users", json={"username": "blankmail", "password": "pw12345", "roles": [], "email": ""}, headers=headers
+    )
+    assert resp.json()["email"] is None
+
+
+def test_admin_create_user_rejects_bad_or_taken_email(client, auth_header):
+    headers = auth_header("emailadmin2", is_admin=True)
+    bad = {"username": "badmail", "password": "pw12345", "roles": [], "email": "not-an-email"}
+    assert client.post("/users", json=bad, headers=headers).status_code == 422
+    first = {"username": "mail1", "password": "pw12345", "roles": [], "email": "dup@mail.com"}
+    assert client.post("/users", json=first, headers=headers).status_code == 201
+    second = {"username": "mail2", "password": "pw12345", "roles": [], "email": "DUP@mail.com"}
+    resp = client.post("/users", json=second, headers=headers)
+    assert resp.status_code == 409
+    assert "email" in resp.text
+
+
+def test_get_me_includes_email(client, auth_header):
+    headers = auth_header("meemail1")
+    assert client.get("/users/me", headers=headers).json()["email"] is None

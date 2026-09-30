@@ -11,6 +11,7 @@ from app.oauth_providers import verify_google_id_token, verify_microsoft_id_toke
 from app.oauth_settings import is_domain_allowed
 from app.schemas import OAuthLoginRequest
 from app.security import create_access_token, hash_password, verify_password
+from app.usernames import username_from_email
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -34,15 +35,21 @@ def login(
 
 
 def _oauth_login(db: Session, email: str, provider: str) -> dict:
-    user = db.query(User).filter(func.lower(User.username) == email.lower()).first()
+    email = email.strip().lower()
+    user = db.query(User).filter(User.email == email).first()
+    if user is None:
+        # A local account an admin created with the address as its username.
+        user = db.query(User).filter(func.lower(User.username) == email).first()
     if user is None:
         if not is_domain_allowed(db, email):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="this email domain isn't authorized to sign in",
             )
+        taken = [row[0] for row in db.query(User.username)]
         user = User(
-            username=email.lower(),
+            username=username_from_email(email, taken),
+            email=email,
             password_hash=hash_password(secrets.token_urlsafe(32)),
             auth_provider=provider,
         )

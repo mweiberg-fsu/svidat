@@ -103,7 +103,31 @@ describe('AdminUsersPage role management', () => {
     fireEvent.click(screen.getByLabelText('qca'))
     fireEvent.click(screen.getByText('Create user'))
 
-    await waitFor(() => expect(client.createUser).toHaveBeenCalledWith('newqca', 'pw', ['qca']))
+    await waitFor(() => expect(client.createUser).toHaveBeenCalledWith('newqca', 'pw', ['qca'], ''))
+  })
+
+  it('creates a user with an optional email', async () => {
+    vi.spyOn(client, 'listUsers').mockResolvedValue([])
+    vi.spyOn(client, 'createUser').mockResolvedValue({ id: 1, username: 'mailuser', roles: [] })
+
+    render(<AdminUsersPage />)
+
+    fireEvent.change(screen.getByLabelText('Username'), { target: { value: 'mailuser' } })
+    fireEvent.change(screen.getByLabelText('Password'), { target: { value: 'pw' } })
+    fireEvent.change(screen.getByLabelText('Email (optional)'), { target: { value: 'mail@x.org' } })
+    fireEvent.click(screen.getByText('Create user'))
+
+    await waitFor(() => expect(client.createUser).toHaveBeenCalledWith('mailuser', 'pw', [], 'mail@x.org'))
+  })
+
+  it("shows a user's email next to their name", async () => {
+    vi.spyOn(client, 'listUsers').mockResolvedValue([
+      { id: 8, username: 'ustropics', email: 'ustropics@gmail.com', roles: [] },
+    ])
+
+    render(<AdminUsersPage />)
+
+    expect(await screen.findByText('ustropics@gmail.com')).toBeInTheDocument()
   })
 
   it('shows existing users with their current roles', async () => {

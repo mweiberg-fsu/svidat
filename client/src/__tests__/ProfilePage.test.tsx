@@ -41,6 +41,26 @@ describe('ProfilePage', () => {
     await waitFor(() => expect(screen.getByText('Photo updated')).toBeInTheDocument())
   })
 
+  it('shows the email from the current user when set', async () => {
+    vi.spyOn(apiClient, 'fetchAvatarBlobUrl').mockResolvedValue(null)
+    vi.spyOn(apiClient, 'getCurrentUser').mockResolvedValue({
+      id: 1,
+      username: 'testuser',
+      email: 'testuser@example.com',
+      roles: ['qca'],
+    })
+
+    render(
+      <AuthProvider>
+        <MemoryRouter>
+          <ProfilePage />
+        </MemoryRouter>
+      </AuthProvider>
+    )
+
+    expect(await screen.findByText('testuser@example.com')).toBeInTheDocument()
+  })
+
   it('shows an error status when upload fails', async () => {
     vi.spyOn(apiClient, 'fetchAvatarBlobUrl').mockResolvedValue(null)
     vi.spyOn(apiClient, 'uploadAvatar').mockRejectedValue(new Error('400: upload failed'))
@@ -89,7 +109,7 @@ describe('ProfilePage', () => {
         </MemoryRouter>
       </AuthProvider>
     )
-    await waitFor(() => expect(screen.getByText('Profile')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Profile Information')).toBeInTheDocument())
     expect(screen.queryByText('My drafts')).not.toBeInTheDocument()
   })
 
@@ -103,7 +123,7 @@ describe('ProfilePage', () => {
         </MemoryRouter>
       </AuthProvider>
     )
-    await waitFor(() => expect(screen.getByText('Profile')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Profile Information')).toBeInTheDocument())
     expect(screen.queryByText('My drafts')).not.toBeInTheDocument()
   })
 

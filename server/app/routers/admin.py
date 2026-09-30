@@ -17,9 +17,12 @@ from app.schemas import (
     CustomTriggerList,
     OAuthSettingsOut,
     OAuthSettingsUpdate,
+    PathSettingsOut,
+    PathSettingsUpdate,
     ThemeSettingsOut,
     ThemeSettingsUpdate,
 )
+from app.path_settings import get_or_create_path_settings, settings_to_dict
 from app.routers.users import ALLOWED_AVATAR_TYPES as ALLOWED_IMAGE_TYPES
 from app.theme_settings import get_or_create_settings as get_or_create_theme_settings
 
@@ -165,3 +168,27 @@ def delete_theme_logo(
         db.commit()
         db.refresh(row)
     return row
+
+
+@router.get("/paths", response_model=PathSettingsOut)
+def get_path_settings(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role(Role.admin)),
+):
+    return settings_to_dict(get_or_create_path_settings(db))
+
+
+# Admin-only: these let the server read/write any directory it can reach.
+@router.put("/paths", response_model=PathSettingsOut)
+def update_path_settings(
+    payload: PathSettingsUpdate,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_role(Role.admin)),
+):
+    row = get_or_create_path_settings(db)
+    row.raw_dirs = json.dumps(payload.raw_dirs)
+    row.draft_dirs = json.dumps(payload.draft_dirs)
+    row.published_dirs = json.dumps(payload.published_dirs)
+    db.commit()
+    db.refresh(row)
+    return settings_to_dict(row)

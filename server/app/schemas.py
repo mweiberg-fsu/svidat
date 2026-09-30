@@ -1,3 +1,4 @@
+import os
 import re
 from typing import List, Optional
 
@@ -321,3 +322,58 @@ class AppConfigUpdate(BaseModel):
         if len(v) > MAX_DOC_TABS:
             raise ValueError(f"documentation allows at most {MAX_DOC_TABS} tabs")
         return v
+
+
+MAX_PATHS_PER_LIST = 10
+
+
+def _validate_dirs(v: List[str], writable: bool) -> List[str]:
+    if len(v) > MAX_PATHS_PER_LIST:
+        raise ValueError(f"at most {MAX_PATHS_PER_LIST} paths per list")
+    seen: List[str] = []
+    for entry in v:
+        entry = entry.strip()
+        if not entry:
+            raise ValueError("paths can't be blank")
+        if "\x00" in entry or not os.path.isabs(entry):
+            raise ValueError(f"{entry} must be an absolute path")
+        entry = os.path.normpath(entry)
+        if not os.path.exists(entry):
+            raise ValueError(f"{entry} does not exist")
+        if not os.path.isdir(entry):
+            raise ValueError(f"{entry} is not a directory")
+        mode = (os.W_OK if writable else os.R_OK) | os.X_OK
+        if not os.access(entry, mode):
+            raise ValueError(f"{entry} is not {'writable' if writable else 'readable'}")
+        if entry not in seen:
+            seen.append(entry)
+    return seen
+
+
+class PathSettingsUpdate(BaseModel):
+    raw_dirs: List[str] = []
+    draft_dirs: List[str] = []
+    published_dirs: List[str] = []
+
+    @field_validator("raw_dirs")
+    @classmethod
+    def validate_raw(cls, v: List[str]) -> List[str]:
+        return _validate_dirs(v, writable=False)
+
+    @field_validator("draft_dirs", "published_dirs")
+    @classmethod
+    def validate_write(cls, v: List[str]) -> List[str]:
+        return _validate_dirs(v, writable=True)
+
+
+class PathDefaults(BaseModel):
+    raw: str
+    draft: str
+    published: str
+
+
+class PathSettingsOut(BaseModel):
+    raw_dirs: List[str]
+    draft_dirs: List[str]
+    published_dirs: List[str]
+    defaults: PathDefaults

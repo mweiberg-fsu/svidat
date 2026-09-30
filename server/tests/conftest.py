@@ -17,7 +17,7 @@ from fastapi.testclient import TestClient
 
 from app.database import Base, SessionLocal, engine
 from app.main import app
-from app.models import AppConfig, OAuthSettings, ThemeSettings, User
+from app.models import AppConfig, OAuthSettings, PathSettings, ThemeSettings, User
 from app.security import hash_password
 
 Base.metadata.create_all(bind=engine)
@@ -41,6 +41,7 @@ def _clean_oauth_settings(db_session):
     db_session.query(OAuthSettings).delete()
     db_session.query(ThemeSettings).delete()
     db_session.query(AppConfig).delete()
+    db_session.query(PathSettings).delete()
     db_session.commit()
     yield
 

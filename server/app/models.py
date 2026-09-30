@@ -148,3 +148,16 @@ class AppConfig(Base):
     # Shared named custom triggers (JSON list of {name, trigger}), managed by
     # admins and offered in every user's keybinding dropdowns; NULL means none.
     custom_triggers = Column(Text, nullable=True)
+
+
+class PathSettings(Base):
+    """Admin-configured directories (single row). Each column is a JSON list
+    of absolute paths; NULL/[] means "use the default under DATA_DIR" (see
+    app/path_settings.py and app/storage.py)."""
+
+    __tablename__ = "path_settings"
+
+    id = Column(Integer, primary_key=True)
+    raw_dirs = Column(Text, nullable=True)
+    draft_dirs = Column(Text, nullable=True)
+    published_dirs = Column(Text, nullable=True)

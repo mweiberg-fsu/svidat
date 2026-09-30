@@ -119,4 +119,26 @@ describe('AdminPathsSection', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add Read files from path' }))
     expect(await screen.findByText('Error saving paths: /x does not exist')).toBeInTheDocument()
   })
+
+  it('Browse… opens the folder browser and fills the input with the chosen folder', async () => {
+    const browse = vi.spyOn(client, 'browseDirectory').mockResolvedValue({
+      path: '/mnt/ship',
+      parent: '/mnt',
+      readable: true,
+      writable: true,
+      dirs: [],
+      truncated: false,
+      shortcuts: [],
+    })
+    const update = vi.spyOn(client, 'updatePathSettings')
+    render(<AdminPathsSection />)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Browse for Read files from path' }))
+    expect(browse).toHaveBeenCalledWith(undefined)
+    fireEvent.click(await screen.findByRole('button', { name: 'Select this folder' }))
+
+    expect(screen.getByLabelText('New Read files from path')).toHaveValue('/mnt/ship')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(update).not.toHaveBeenCalled()
+  })
 })

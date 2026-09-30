@@ -377,3 +377,25 @@ class PathSettingsOut(BaseModel):
     draft_dirs: List[str]
     published_dirs: List[str]
     defaults: PathDefaults
+
+
+class DirectoryEntry(BaseModel):
+    name: str
+    path: str
+    readable: bool
+    writable: bool
+
+
+class DirectoryShortcut(BaseModel):
+    label: str
+    path: str
+
+
+class DirectoryListing(BaseModel):
+    path: str
+    parent: Optional[str] = None
+    readable: bool
+    writable: bool
+    dirs: List[DirectoryEntry]
+    truncated: bool
+    shortcuts: List[DirectoryShortcut]

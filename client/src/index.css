@@ -2396,3 +2396,106 @@ code {
 .admin-path-input {
   flex: 1;
 }
+
+/* Server folder picker (Admin → Configuration → Paths → Browse…) */
+.dir-browser-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.dir-browser {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: min(560px, 100%);
+  max-height: min(640px, 100%);
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--bg);
+  color: var(--text);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.3);
+  outline: none;
+}
+
+.dir-browser-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 600;
+  color: var(--text-h);
+}
+
+.dir-browser-close {
+  border: none;
+  background: none;
+  color: var(--text);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.dir-browser-shortcuts,
+.dir-browser-location,
+.dir-browser-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.dir-browser-actions {
+  justify-content: flex-end;
+}
+
+.dir-browser-path {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+
+.dir-browser-list {
+  flex: 1;
+  min-height: 160px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 4px;
+  list-style: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.dir-browser-entry {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  padding: 5px 8px;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-h);
+  font: inherit;
+  font-size: 13px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dir-browser-entry:hover:not(:disabled) {
+  background: var(--accent-bg);
+}
+
+.dir-browser-entry.is-dim {
+  opacity: 0.5;
+}
+
+.dir-browser-empty {
+  padding: 8px;
+  font-size: 13px;
+  color: var(--text);
+}

@@ -1,6 +1,8 @@
 import json
 import os
 
+from typing import Optional
+
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
@@ -12,6 +14,7 @@ from app.models import Role, User
 from app.oauth_settings import domains_list, get_or_create_settings
 from app.app_config import config_to_dict, get_or_create_config
 from app.schemas import (
+    DirectoryListing,
     AppConfigOut,
     AppConfigUpdate,
     CustomTriggerList,
@@ -22,6 +25,7 @@ from app.schemas import (
     ThemeSettingsOut,
     ThemeSettingsUpdate,
 )
+from app.dir_browser import list_directory
 from app.path_settings import get_or_create_path_settings, settings_to_dict
 from app.routers.users import ALLOWED_AVATAR_TYPES as ALLOWED_IMAGE_TYPES
 from app.theme_settings import get_or_create_settings as get_or_create_theme_settings
@@ -192,3 +196,26 @@ def update_path_settings(
     db.commit()
     db.refresh(row)
     return settings_to_dict(row)
+
+
+# Folder picker for the Paths tab: lists subfolders of a server directory.
+# Admin-only, like the path settings it feeds.
+@router.get("/browse", response_model=DirectoryListing)
+def browse_directory(
+    path: Optional[str] = None,
+    _: User = Depends(require_role(Role.admin)),
+):
+    data_dir = os.path.abspath(str(storage.base_dir()))
+    home = os.path.expanduser("~")
+    # Start in the data folder, or home if it hasn't been created yet.
+    start = data_dir if os.path.isdir(data_dir) else home
+    try:
+        listing = list_directory(path if path else start)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    listing["shortcuts"] = [
+        {"label": "Data folder", "path": data_dir},
+        {"label": "Home", "path": home},
+        {"label": "Root", "path": os.path.abspath(os.sep)},
+    ]
+    return listing

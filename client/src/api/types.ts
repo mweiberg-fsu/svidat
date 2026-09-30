@@ -140,3 +140,22 @@ export interface PathLists {
 export interface PathSettings extends PathLists {
   defaults: { raw: string; draft: string; published: string }
 }
+
+// GET /admin/browse: subfolders of a directory on the *server* (the browser's
+// own folder picker can't see server paths).
+export interface DirectoryEntry {
+  name: string
+  path: string
+  readable: boolean
+  writable: boolean
+}
+
+export interface DirectoryListing {
+  path: string
+  parent: string | null
+  readable: boolean
+  writable: boolean
+  dirs: DirectoryEntry[]
+  truncated: boolean
+  shortcuts: { label: string; path: string }[]
+}

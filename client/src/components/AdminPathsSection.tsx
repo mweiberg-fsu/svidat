@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react'
 import { errorMessage, getPathSettings, updatePathSettings } from '../api/client'
 import type { PathLists, PathSettings } from '../api/types'
+import { DirectoryBrowser } from './DirectoryBrowser'
 
 const BLOCKS = [
-  { key: 'raw_dirs', label: 'Read files from', defaultKey: 'raw' },
-  { key: 'draft_dirs', label: 'Save v250 drafts to', defaultKey: 'draft' },
-  { key: 'published_dirs', label: 'Publish v300 files to', defaultKey: 'published' },
+  { key: 'raw_dirs', label: 'Read files from', defaultKey: 'raw', writable: false },
+  { key: 'draft_dirs', label: 'Save v250 drafts to', defaultKey: 'draft', writable: true },
+  { key: 'published_dirs', label: 'Publish v300 files to', defaultKey: 'published', writable: true },
 ] as const
 
 type ListKey = (typeof BLOCKS)[number]['key']
@@ -17,6 +18,7 @@ function PathListEditor({
   onSave,
   disabled,
   status,
+  requireWritable,
 }: {
   label: string
   paths: string[]
@@ -24,8 +26,10 @@ function PathListEditor({
   onSave: (next: string[]) => Promise<boolean>
   disabled: boolean
   status: string | null
+  requireWritable: boolean
 }) {
   const [draft, setDraft] = useState('')
+  const [browsing, setBrowsing] = useState(false)
 
   const add = async () => {
     const value = draft.trim()
@@ -79,6 +83,15 @@ function PathListEditor({
         <button
           type="button"
           className="admin-btn admin-btn-inline"
+          aria-label={`Browse for ${label} path`}
+          disabled={disabled}
+          onClick={() => setBrowsing(true)}
+        >
+          Browse…
+        </button>
+        <button
+          type="button"
+          className="admin-btn admin-btn-inline"
           aria-label={`Add ${label} path`}
           disabled={disabled || !draft.trim()}
           onClick={() => void add()}
@@ -86,6 +99,18 @@ function PathListEditor({
           +
         </button>
       </div>
+      {browsing && (
+        <DirectoryBrowser
+          initialPath={draft.trim() || undefined}
+          requireWritable={requireWritable}
+          onClose={() => setBrowsing(false)}
+          onSelect={(path) => {
+            // Fill the input; the admin still confirms with +.
+            setDraft(path)
+            setBrowsing(false)
+          }}
+        />
+      )}
       {status && (
         <p className={`admin-status ${status.startsWith('Error') ? 'admin-status-error' : ''}`}>{status}</p>
       )}
@@ -139,6 +164,7 @@ export function AdminPathsSection() {
           defaultPath={settings.defaults[b.defaultKey]}
           disabled={saving}
           status={statuses[b.key] ?? null}
+          requireWritable={b.writable}
           onSave={(next) => save(b.key, next)}
         />
       ))}

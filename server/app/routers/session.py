@@ -9,6 +9,7 @@ from app.database import get_db
 from app.deps import require_role
 from app.file_locks import file_write_lock
 from app.models import Lock, Role, TempSession, User
+from app.path_settings import configured_paths
 
 router = APIRouter(prefix="/session", tags=["session"])
 
@@ -42,9 +43,13 @@ def open_session(
     if need_copy:
         try:
             if source == "raw":
-                src = storage.raw_path(filename)
+                src = storage.find_raw(filename, configured_paths(db).raw)
             elif source == "draft":
-                src = storage.draft_path(source_username or user.username, filename)
+                src = storage.find_draft(
+                    source_username or user.username,
+                    filename,
+                    configured_paths(db).draft,
+                )
             elif source == "temp":
                 src = storage.temp_path(source_username or user.username, filename)
             else:

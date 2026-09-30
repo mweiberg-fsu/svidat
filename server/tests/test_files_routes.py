@@ -233,3 +233,88 @@ def test_file_data_does_not_leak_another_users_open_session(
     )
     assert resp_a.status_code == 200, resp_a.text
     assert resp_a.json()["variables"]["temperature"]["values"][0] == 999.0
+
+
+# --- configured raw / draft dirs -------------------------------------------
+
+
+def _nc(path, values=(1.0, 2.0, 3.0)):
+    import netCDF4
+    import numpy as np
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with netCDF4.Dataset(path, "w") as ds:
+        ds.createDimension("time", len(values))
+        t = ds.createVariable("time", "i4", ("time",))
+        t[:] = np.arange(len(values), dtype="i4") * 60
+        t.units = "minutes since 1-1-2025 00:00 UTC"
+        var = ds.createVariable("temperature", "f4", ("time",))
+        var[:] = np.array(values, dtype="f4")
+
+
+def _configure(db_session, raw=(), draft=(), published=()):
+    import json
+
+    from app.path_settings import get_or_create_path_settings
+
+    row = get_or_create_path_settings(db_session)
+    row.raw_dirs = json.dumps([str(p) for p in raw])
+    row.draft_dirs = json.dumps([str(p) for p in draft])
+    row.published_dirs = json.dumps([str(p) for p in published])
+    db_session.commit()
+
+
+def test_configured_raw_listing_and_catalog_union(client, auth_header, db_session, tmp_path):
+    a, b = tmp_path / "a", tmp_path / "b"
+    _nc(a / "CFGA_20260101v100.nc")
+    _nc(b / "CFGB_20260101v100.nc")
+    _nc(b / "CFGA_20260101v100.nc")  # duplicate stem
+    _configure(db_session, raw=[a, b])
+    headers = auth_header("cfgviewer1")
+    assert client.get("/files/raw", headers=headers).json() == [
+        "CFGA_20260101v100",
+        "CFGB_20260101v100",
+    ]
+    catalog = client.get("/files/catalog", headers=headers).json()
+    assert catalog == {
+        "CFGA": {"2026": ["CFGA_20260101v100"]},
+        "CFGB": {"2026": ["CFGB_20260101v100"]},
+    }
+    assert set(client.get("/files/ships", headers=headers).json()) == {"CFGA", "CFGB"}
+
+
+def test_configured_raw_metadata_and_data_from_second_dir(client, auth_header, db_session, tmp_path):
+    a, b = tmp_path / "a", tmp_path / "b"
+    a.mkdir()
+    _nc(b / "only_in_b.nc", (7.0, 8.0, 9.0))
+    _configure(db_session, raw=[a, b])
+    headers = auth_header("cfgviewer2")
+    meta = client.get("/files/only_in_b/metadata", headers=headers)
+    assert meta.status_code == 200
+    assert meta.json()["dimensions"]["time"] == 3
+    data = client.get("/files/only_in_b/data", params={"vars": "temperature"}, headers=headers)
+    assert data.status_code == 200, data.text
+    assert client.get("/files/nowhere/metadata", headers=headers).status_code == 404
+
+
+def test_configured_raw_open_session_from_second_dir(client, auth_header, db_session, tmp_path):
+    a, b = tmp_path / "a", tmp_path / "b"
+    a.mkdir()
+    _nc(b / "sess_in_b.nc")
+    _configure(db_session, raw=[a, b])
+    headers = auth_header("cfgeditor1", is_qca=True)
+    resp = client.post("/session/sess_in_b/open", params={"source": "raw"}, headers=headers)
+    assert resp.status_code == 200, resp.text
+    assert storage.temp_path("cfgeditor1", "sess_in_b").exists()
+
+
+def test_configured_drafts_list_and_open(client, auth_header, db_session, tmp_path):
+    a, b = tmp_path / "a", tmp_path / "b"
+    a.mkdir()
+    _nc(b / "cfgeditor2" / "dr_f_v250.nc")
+    _configure(db_session, draft=[a, b])
+    headers = auth_header("cfgeditor2", is_qca=True)
+    assert client.get("/files/drafts", headers=headers).json() == ["dr_f"]
+    resp = client.post("/session/dr_f/open", params={"source": "draft"}, headers=headers)
+    assert resp.status_code == 200, resp.text
+    assert storage.temp_path("cfgeditor2", "dr_f").exists()

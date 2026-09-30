@@ -11,6 +11,7 @@ from app.database import get_db
 from app.deps import get_current_user
 from app.file_locks import file_write_lock
 from app.models import Lock, User
+from app.path_settings import configured_paths
 
 router = APIRouter(prefix="/files", tags=["files"])
 
@@ -18,16 +19,17 @@ CATALOG_FILENAME_RE = re.compile(r"^([A-Za-z0-9]+)_(\d{4})\d{4}v\d+$")
 
 
 @router.get("/raw")
-def list_raw(_: User = Depends(get_current_user)):
-    raw_dir = storage.base_dir() / "raw"
-    if not raw_dir.exists():
-        return []
-    return sorted(p.stem for p in raw_dir.glob("*.nc"))
+def list_raw(
+    db: Session = Depends(get_db), _: User = Depends(get_current_user)
+):
+    return sorted(storage.list_raw_files(configured_paths(db).raw))
 
 
 @router.get("/drafts")
 def list_drafts(
-    username: Optional[str] = None, user: User = Depends(get_current_user)
+    username: Optional[str] = None,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
     target = username or user.username
     if target != user.username and not (user.is_admin or user.is_qca):
@@ -39,21 +41,15 @@ def list_drafts(
         storage.validate_segment(target, "username")
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
-    draft_dir = storage.base_dir() / "drafts" / target / "v250"
-    if not draft_dir.exists():
-        return []
-    return sorted(p.stem.replace("_v250", "") for p in draft_dir.glob("*_v250.nc"))
+    return storage.list_drafts(target, configured_paths(db).draft)
 
 
 @router.get("/catalog")
-def file_catalog(_: User = Depends(get_current_user)):
-    raw_dir = storage.base_dir() / "raw"
-    if not raw_dir.exists():
-        return {}
-
+def file_catalog(
+    db: Session = Depends(get_db), _: User = Depends(get_current_user)
+):
     catalog: dict = defaultdict(lambda: defaultdict(list))
-    for path in raw_dir.glob("*.nc"):
-        stem = path.stem
+    for stem in storage.list_raw_files(configured_paths(db).raw):
         match = CATALOG_FILENAME_RE.match(stem)
         if not match:
             continue
@@ -73,33 +69,37 @@ _ship_name_cache: dict[str, tuple[str, Optional[str]]] = {}
 
 
 @router.get("/ships")
-def ship_names(_: User = Depends(get_current_user)):
+def ship_names(
+    db: Session = Depends(get_db), _: User = Depends(get_current_user)
+):
     """Call sign -> ship name (the `site` global attribute of that ship's
     latest raw file, or None if it has none)."""
-    raw_dir = storage.base_dir() / "raw"
-    if not raw_dir.exists():
-        return {}
+    files = storage.list_raw_files(configured_paths(db).raw)
 
     latest: dict[str, str] = {}
-    for path in raw_dir.glob("*.nc"):
-        match = CATALOG_FILENAME_RE.match(path.stem)
-        if match and path.stem > latest.get(match.group(1), ""):
-            latest[match.group(1)] = path.stem
+    for stem in files:
+        match = CATALOG_FILENAME_RE.match(stem)
+        if match and stem > latest.get(match.group(1), ""):
+            latest[match.group(1)] = stem
 
     names: dict[str, Optional[str]] = {}
     for ship, stem in sorted(latest.items()):
         cached = _ship_name_cache.get(ship)
         if cached is None or cached[0] != stem:
-            cached = (stem, netcdf_ops.read_site_name(raw_dir / f"{stem}.nc"))
+            cached = (stem, netcdf_ops.read_site_name(files[stem]))
             _ship_name_cache[ship] = cached
         names[ship] = cached[1]
     return names
 
 
 @router.get("/{filename}/metadata")
-def file_metadata(filename: str, _: User = Depends(get_current_user)):
+def file_metadata(
+    filename: str,
+    db: Session = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
     try:
-        path = storage.raw_path(filename)
+        path = storage.find_raw(filename, configured_paths(db).raw)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
     if not path.exists():
@@ -114,7 +114,7 @@ def file_metadata(filename: str, _: User = Depends(get_current_user)):
 
 def _resolve_read_path(filename: str, db: Session, user: User) -> Path:
     try:
-        path = storage.raw_path(filename)
+        path = storage.find_raw(filename, configured_paths(db).raw)
         # If the requesting user has an open edit session for this file,
         # read their in-progress temp copy instead of the untouched raw
         # file, so a flag/point/bulk edit is reflected immediately without

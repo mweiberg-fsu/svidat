@@ -119,8 +119,8 @@ describe('FilesPage', () => {
     )
 
     act(() => applyTheme(theme))
-    expect(screen.getByText('Save QC')).toBeInTheDocument()
-    expect(screen.getByText('Release')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save QC' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Release' })).toBeInTheDocument()
 
     act(() =>
       applyTheme({ ...theme, save_draft_label: 'Save draft (v250)', publish_label: 'Publish (v300)' })
@@ -137,7 +137,7 @@ describe('FilesPage', () => {
       expect(screen.getByRole('button', { name: 'Close Session' })).toBeEnabled()
     )
 
-    fireEvent.click(screen.getByText('Close Session'))
+    fireEvent.click(screen.getByRole('button', { name: 'Close Session' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Exit file' }))
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Exit file' }))
     await waitFor(() =>
@@ -157,7 +157,7 @@ describe('FilesPage', () => {
       expect(screen.getByRole('button', { name: 'Close Session' })).toBeEnabled()
     )
 
-    fireEvent.click(screen.getByText('Close Session'))
+    fireEvent.click(screen.getByRole('button', { name: 'Close Session' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Exit file' }))
     const dialog = screen.getByRole('dialog')
     expect(dialog).toHaveTextContent('FILE_A')
@@ -166,7 +166,7 @@ describe('FilesPage', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(closeSpy).not.toHaveBeenCalled()
-    expect(screen.getByText('Close Session')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Close Session' })).toBeInTheDocument()
   })
 
   it('Escape dismisses the exit-file confirmation', async () => {
@@ -179,7 +179,7 @@ describe('FilesPage', () => {
       expect(screen.getByRole('button', { name: 'Close Session' })).toBeEnabled()
     )
 
-    fireEvent.click(screen.getByText('Close Session'))
+    fireEvent.click(screen.getByRole('button', { name: 'Close Session' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Exit file' }))
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
@@ -192,9 +192,9 @@ describe('FilesPage', () => {
 
     renderFilesPageWithFile('qca', 'FILE_A')
     fireEvent.click(screen.getByTestId('open-session'))
-    await waitFor(() => expect(screen.getByText('Save draft (v250)')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save draft (v250)' })).toBeInTheDocument())
 
-    fireEvent.click(screen.getByText('Save draft (v250)'))
+    fireEvent.click(screen.getByRole('button', { name: 'Save draft (v250)' }))
 
     await waitFor(() => expect(saveDraftSpy).toHaveBeenCalledWith('FILE_A'))
     await waitFor(() => expect(screen.getByText('Saved as v250 draft')).toBeInTheDocument())
@@ -206,9 +206,9 @@ describe('FilesPage', () => {
 
     renderFilesPageWithFile('qca', 'FILE_A')
     fireEvent.click(screen.getByTestId('open-session'))
-    await waitFor(() => expect(screen.getByText('Publish (v300)')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Publish (v300)' })).toBeInTheDocument())
 
-    fireEvent.click(screen.getByText('Publish (v300)'))
+    fireEvent.click(screen.getByRole('button', { name: 'Publish (v300)' }))
 
     await waitFor(() => expect(publishFileSpy).toHaveBeenCalledWith('FILE_A'))
     await waitFor(() => expect(screen.getByText('Published as v300')).toBeInTheDocument())
@@ -287,7 +287,7 @@ describe('FilesPage', () => {
       expect(screen.getByRole('button', { name: 'Close Session' })).toBeEnabled()
     )
 
-    fireEvent.click(screen.getByText('Close Session'))
+    fireEvent.click(screen.getByRole('button', { name: 'Close Session' }))
     fireEvent.click(screen.getByRole('menuitem', { name: 'Exit file' }))
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Exit file' }))
 

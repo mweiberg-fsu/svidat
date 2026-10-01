@@ -21,6 +21,7 @@ import {
   type MouseButton,
 } from '../appConfig'
 import { IS_MAC } from '../platform'
+import { CurrentUserPlotGuide } from './PlotGuide'
 
 // Fallbacks used only before the container's first real measurement (or in
 // environments without ResizeObserver, e.g. jsdom in tests) — actual
@@ -1276,7 +1277,7 @@ export function SvgPlot() {
   }, [yRangeRequest])
 
   if (!file || variables.length === 0) {
-    return <p>Select variables in the sidebar to view plots.</p>
+    return <CurrentUserPlotGuide />
   }
   if (!data || !timeAxis) return null
 

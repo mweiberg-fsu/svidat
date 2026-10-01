@@ -337,14 +337,20 @@ describe('EditSessionContext', () => {
     await waitFor(() => expect(screen.getByText('sessionOpen:true')).toBeInTheDocument())
 
     // Session open — beforeunload is intercepted (preventDefault called,
-    // dispatchEvent returns false).
-    expect(window.dispatchEvent(new Event('beforeunload', { cancelable: true }))).toBe(false)
+    // dispatchEvent returns false). The listener is attached in an effect
+    // after the render that shows sessionOpen:true, so wait for it rather
+    // than racing it under a loaded test run.
+    await waitFor(() =>
+      expect(window.dispatchEvent(new Event('beforeunload', { cancelable: true }))).toBe(false)
+    )
 
     fireEvent.click(screen.getByText('close'))
     await waitFor(() => expect(screen.getByText('sessionOpen:false')).toBeInTheDocument())
 
     // Session closed again — no longer intercepted.
-    expect(window.dispatchEvent(new Event('beforeunload', { cancelable: true }))).toBe(true)
+    await waitFor(() =>
+      expect(window.dispatchEvent(new Event('beforeunload', { cancelable: true }))).toBe(true)
+    )
   })
 
   it('shares flagSelection across separate sibling components under the same provider', () => {

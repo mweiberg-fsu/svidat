@@ -120,8 +120,7 @@ export function PlotGuide({ roles }: { roles: string[] }) {
               <>
                 Flag several variables at once: turn on <strong>Bulk edit</strong> in the top bar, tick the checkbox
                 on each plot's tab you want included, then {kb('flag_select')} a time range on any of them and pick a
-                flag code. It's applied to every ticked variable over that range; the button shows how many are
-                selected.
+                flag code.
               </>
             ),
           },

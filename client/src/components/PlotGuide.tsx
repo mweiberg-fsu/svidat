@@ -94,8 +94,8 @@ export function PlotGuide({ roles }: { roles: string[] }) {
       title: 'Climo & data points',
       body: (
         <>
-          <strong>Show climo</strong> in the top bar overlays a dashed line of the monthly climatology (UWM/COADS,
-          1945–89) along the ship's track, so out-of-range values stand out. <strong>Show points</strong> marks every
+          <strong>Show climo</strong> in the top bar overlays a dashed line of the monthly climatology.{' '}
+          <strong>Show points</strong> marks every
           individual observation, which makes gaps and spikes easy to spot.
         </>
       ),

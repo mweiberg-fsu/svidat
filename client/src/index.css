@@ -559,7 +559,9 @@ code {
   align-items: center;
   gap: 12px;
   flex-wrap: wrap;
-  padding: 8px 24px;
+  /* Left inset matches the navbar tab underline's (.navbar-tab::after
+     left: 10px), so the first button lines up under the main nav tabs. */
+  padding: 8px 24px 8px 10px;
   border-bottom: 1px solid var(--border);
   background: var(--subnav-bg);
 }

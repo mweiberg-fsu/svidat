@@ -1509,17 +1509,26 @@ code {
   font-weight: 600;
 }
 
+/* Shows 10 files, then scrolls: height = 10 rows + the 9 gaps between them. */
 .profile-files-list {
+  --profile-file-row: 20px;
+  --profile-file-gap: 6px;
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 0 8px 0 0;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--profile-file-gap);
+  max-height: calc(10 * var(--profile-file-row) + 9 * var(--profile-file-gap));
+  overflow-y: auto;
 }
 
-.profile-files-list a {
+/* Font size on the row (not just the link) so the line box is exactly one
+   row tall; a 14px link inside an 18px row's line box adds ~2px. */
+.profile-files-list li {
+  flex-shrink: 0;
   font-size: 14px;
+  line-height: var(--profile-file-row);
 }
 
 .admin-tabs {

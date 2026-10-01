@@ -934,8 +934,11 @@ code {
   display: inline-flex;
   padding: 8px;
   border-radius: 10px;
-  color: var(--secondary);
-  background: color-mix(in srgb, var(--tertiary) 40%, transparent);
+  /* Mixed toward the heading text color so it stays legible in both modes
+     (darker on light cards, lighter on dark ones), whatever the theme. */
+  color: color-mix(in srgb, var(--secondary) 55%, var(--text-h));
+  background: color-mix(in srgb, var(--secondary) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--secondary) 35%, transparent);
 }
 
 .plot-guide-card h3 {

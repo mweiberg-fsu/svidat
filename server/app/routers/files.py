@@ -1,12 +1,13 @@
 import re
 from collections import defaultdict
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from app import climatology, netcdf_ops, storage
+from app import climatology, netcdf_ops, sst, storage
 from app.database import get_db
 from app.deps import get_current_user
 from app.file_locks import file_write_lock
@@ -91,6 +92,26 @@ def ship_names(
             _ship_name_cache[ship] = cached
         names[ship] = cached[1]
     return names
+
+
+@router.get("/sst-point")
+def sst_point(
+    date: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    lat: float = Query(..., ge=-90, le=90),
+    lon: float = Query(..., ge=-180, le=180),
+    _: User = Depends(get_current_user),
+):
+    """OISST sea surface temperature (deg C) at the 0.25 deg cell containing
+    (lat, lon) on `date`; `sst` is null over land. For the ship-track
+    widget's pointer readout (see app/sst.py)."""
+    try:
+        datetime.strptime(date, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"invalid date: {date}")
+    try:
+        return sst.sst_at(date, lat, lon)
+    except sst.SstUnavailable:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="SST service unavailable")
 
 
 @router.get("/{filename}/metadata")

@@ -1,4 +1,4 @@
-import type { AppConfig, CurrentUser, CustomTrigger, Catalog, ClimatologyResponse, KeyBindings, ShipNames, OAuthSettings, TempSessionEntry, VariableDataResponse, ThemeSettings, ThemeSettingsUpdate, PathLists, PathSettings, DirectoryListing } from './types'
+import type { AppConfig, CurrentUser, CustomTrigger, Catalog, ClimatologyResponse, KeyBindings, ShipNames, OAuthSettings, TempSessionEntry, VariableDataResponse, ThemeSettings, ThemeSettingsUpdate, PathLists, PathSettings, DirectoryListing, SstPoint } from './types'
 
 const BASE_URL = 'http://localhost:8000'
 const TOKEN_KEY = 'svidat_token'
@@ -334,3 +334,8 @@ export function errorMessage(err: unknown): string {
   }
   return message
 }
+
+export const getSstPoint = (date: string, lat: number, lon: number): Promise<SstPoint> =>
+  apiFetch(
+    `/files/sst-point?${new URLSearchParams({ date, lat: String(lat), lon: String(lon) }).toString()}`
+  ).then((r) => r.json())

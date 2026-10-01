@@ -159,3 +159,12 @@ export interface DirectoryListing {
   truncated: boolean
   shortcuts: { label: string; path: string }[]
 }
+
+// GET /files/sst-point: OISST at the 0.25 deg cell containing a point
+// (lat/lon are that cell's centre); sst is null over land.
+export interface SstPoint {
+  date: string
+  lat: number
+  lon: number
+  sst: number | null
+}

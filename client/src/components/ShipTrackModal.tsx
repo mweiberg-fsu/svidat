@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { getVariableData } from '../api/client'
+import { getSstPoint, getVariableData } from '../api/client'
 import { usePlotSelection } from '../context/PlotSelectionContext'
 import { useEditSession } from '../context/EditSessionContext'
 import { useFloatingPanel } from '../hooks/useFloatingPanel'
 import { buildTrack, nearestFix, windowSegments, type TrackFix } from '../shipTrack'
 import { createSstLayer, sstLegendUrl } from '../sstLayer'
+import { formatLatLon, snapToSstCell, wrapLon } from '../sstPoint'
 
 const ESRI_OCEAN_URL =
   'https://server.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Base/MapServer/tile/{z}/{y}/{x}'
@@ -14,6 +15,8 @@ const ESRI_ATTRIBUTION =
   'Tiles &copy; Esri &mdash; Sources: GEBCO, NOAA, CHS, OSU, UNH, CSUMB, National Geographic, DeLorme, NAVTEQ, and Esri'
 const TRACK_COLOR = '#2563eb'
 const DIMMED_COLOR = '#64748b'
+// Pointer must rest this long before an SST lookup (cached cells skip it).
+const SST_LOOKUP_DELAY_MS = 250
 const HIT_PX = 10
 
 function formatFix(fix: TrackFix): string {
@@ -35,6 +38,16 @@ export function ShipTrackModal({ onClose }: { onClose: () => void }) {
   const [hover, setHover] = useState<{ fix: TrackFix; x: number; y: number } | null>(null)
   const [trackDate, setTrackDate] = useState<string | null>(null)
   const [sstOn, setSstOn] = useState(false)
+  // "Values": live pointer lat/lon + OISST at that spot. The map's mousemove
+  // handler is registered once, so it reads the toggle through a ref.
+  const [valuesOn, setValuesOn] = useState(false)
+  const valuesOnRef = useRef(false)
+  const [pointer, setPointer] = useState<{ lat: number; lon: number } | null>(null)
+  const [reading, setReading] = useState<
+    { status: 'loading' } | { status: 'ok'; sst: number | null } | { status: 'error' } | null
+  >(null)
+  // SST per day + 0.25 deg cell (null = land), so revisiting a cell is instant.
+  const sstCacheRef = useRef(new Map<string, number | null>())
 
   // Create the map once.
   useEffect(() => {
@@ -52,8 +65,12 @@ export function ShipTrackModal({ onClose }: { onClose: () => void }) {
     map.on('mousemove', (e: L.LeafletMouseEvent) => {
       const fix = pick(e)
       setHover(fix ? { fix, x: e.containerPoint.x, y: e.containerPoint.y } : null)
+      if (valuesOnRef.current) setPointer({ lat: e.latlng.lat, lon: wrapLon(e.latlng.lng) })
     })
-    map.on('mouseout', () => setHover(null))
+    map.on('mouseout', () => {
+      setHover(null)
+      setPointer(null)
+    })
     map.on('click', (e: L.LeafletMouseEvent) => setTimeMarker(pick(e)?.idx ?? null))
     mapRef.current = map
     return () => {
@@ -140,6 +157,55 @@ export function ShipTrackModal({ onClose }: { onClose: () => void }) {
     }
   }, [sstOn, trackDate])
 
+  // Look up SST for the pointer's cell once it pauses (cached cells answer
+  // immediately); a newer pointer position cancels the pending lookup.
+  useEffect(() => {
+    if (!valuesOn || !pointer || !trackDate) {
+      setReading(null)
+      return
+    }
+    const { lat, lon } = pointer
+    const key = `${trackDate}|${snapToSstCell(lat, 89.875)}|${snapToSstCell(lon, 179.875)}`
+    const cache = sstCacheRef.current
+    if (cache.has(key)) {
+      setReading({ status: 'ok', sst: cache.get(key) ?? null })
+      return
+    }
+    setReading({ status: 'loading' })
+    let cancelled = false
+    const timer = setTimeout(() => {
+      getSstPoint(trackDate, lat, lon)
+        .then((r) => {
+          cache.set(key, r.sst)
+          if (!cancelled) setReading({ status: 'ok', sst: r.sst })
+        })
+        .catch(() => {
+          if (!cancelled) setReading({ status: 'error' })
+        })
+    }, SST_LOOKUP_DELAY_MS)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [valuesOn, pointer, trackDate])
+
+  const toggleValues = () => {
+    valuesOnRef.current = !valuesOn
+    setValuesOn(!valuesOn)
+    setPointer(null)
+  }
+
+  const sstText =
+    reading === null
+      ? ''
+      : reading.status === 'loading'
+        ? 'SST …'
+        : reading.status === 'error'
+          ? 'SST unavailable'
+          : reading.sst === null
+            ? 'SST: no data (land)'
+            : `SST ${reading.sst.toFixed(2)} °C`
+
   const message = !file
     ? 'Select a file to see its track.'
     : error
@@ -170,6 +236,16 @@ export function ShipTrackModal({ onClose }: { onClose: () => void }) {
         >
           SST
         </button>
+        <button
+          type="button"
+          className={`files-toolbar-btn${valuesOn ? ' active' : ''}`}
+          aria-pressed={valuesOn}
+          disabled={!trackDate}
+          onClick={toggleValues}
+          title="Show the position and SST under the mouse pointer"
+        >
+          Values
+        </button>
       </div>
       <div className="ship-track-modal-body">
         <div ref={mapElRef} className="ship-track-map" />
@@ -181,6 +257,18 @@ export function ShipTrackModal({ onClose }: { onClose: () => void }) {
         )}
         {sstOn && trackDate && (
           <img className="ship-track-legend" src={sstLegendUrl(trackDate)} alt="SST legend" />
+        )}
+        {valuesOn && (
+          <div className="ship-track-values" data-testid="ship-track-values">
+            {pointer ? (
+              <>
+                <span>{formatLatLon(pointer.lat, pointer.lon)}</span>
+                <span className="ship-track-values-sst">{sstText}</span>
+              </>
+            ) : (
+              <span>Move the pointer over the map</span>
+            )}
+          </div>
         )}
       </div>
       <div className="keybinds-modal-resize-handle" onMouseDown={panel.onResizeMouseDown} />

@@ -225,4 +225,108 @@ describe('ShipTrackModal', () => {
     expect(sst.removed).toBeGreaterThanOrEqual(1)
     expect(screen.getByAltText('SST legend')).toHaveAttribute('src', 'legend:2020-07-04')
   })
+
+  describe('Values readout', () => {
+    const TRACK = {
+      time: ['2019-03-01T14:19:00', '2019-03-01T15:19:00'],
+      variables: {
+        lat: { values: [32.8, 32.7], flags: null },
+        lon: { values: [280.05, 280.1], flags: null },
+      },
+    }
+    const move = (lat: number, lng: number) =>
+      act(() => drawn.handlers.mousemove({ containerPoint: { x: 9999, y: 9999 }, latlng: { lat, lng } }))
+
+    async function openValues() {
+      vi.spyOn(apiClient, 'getVariableData').mockResolvedValue(TRACK)
+      renderModal('FILE_A')
+      const btn = screen.getByRole('button', { name: 'Values' })
+      await waitFor(() => expect(btn).toBeEnabled())
+      act(() => btn.click())
+      expect(btn).toHaveAttribute('aria-pressed', 'true')
+    }
+
+    it('is disabled until the track loads, and hidden readout while off', async () => {
+      let resolve!: (v: unknown) => void
+      vi.spyOn(apiClient, 'getVariableData').mockReturnValue(new Promise((r) => (resolve = r)) as never)
+      renderModal('FILE_A')
+      expect(screen.getByRole('button', { name: 'Values' })).toBeDisabled()
+      await act(async () => resolve(TRACK))
+      expect(screen.getByRole('button', { name: 'Values' })).toBeEnabled()
+      expect(screen.queryByTestId('ship-track-values')).not.toBeInTheDocument()
+    })
+
+    it('shows pointer lat/lon and the SST for the file date after the pointer pauses', async () => {
+      const spy = vi.spyOn(apiClient, 'getSstPoint').mockResolvedValue({
+        date: '2019-03-01',
+        lat: 27.625,
+        lon: -84.375,
+        sst: 28.06,
+      })
+      await openValues()
+      const readout = screen.getByTestId('ship-track-values')
+      expect(readout).toHaveTextContent('Move the pointer over the map')
+
+      move(27.6, -84.3)
+      expect(readout).toHaveTextContent('27.60°N, 84.30°W')
+      expect(readout).toHaveTextContent('SST …')
+      expect(spy).not.toHaveBeenCalled() // debounced: waits for the pointer to pause
+      await waitFor(() => expect(spy).toHaveBeenCalledWith('2019-03-01', 27.6, -84.3))
+      await waitFor(() => expect(readout).toHaveTextContent('SST 28.06 °C'))
+    })
+
+    it('reuses the cached value for the same grid cell', async () => {
+      const spy = vi.spyOn(apiClient, 'getSstPoint').mockResolvedValue({
+        date: '2019-03-01',
+        lat: 27.625,
+        lon: -84.375,
+        sst: 28.06,
+      })
+      await openValues()
+      const readout = screen.getByTestId('ship-track-values')
+      move(27.6, -84.3)
+      await waitFor(() => expect(readout).toHaveTextContent('SST 28.06 °C'))
+      move(10, 10)
+      move(27.55, -84.26) // same 0.25 deg cell
+      expect(readout).toHaveTextContent('SST 28.06 °C')
+      await new Promise((r) => setTimeout(r, 350))
+      expect(spy).toHaveBeenCalledTimes(1)
+    })
+
+    it('says no data over land and unavailable on errors', async () => {
+      const spy = vi
+        .spyOn(apiClient, 'getSstPoint')
+        .mockResolvedValueOnce({ date: '2019-03-01', lat: 39.625, lon: -99.875, sst: null })
+        .mockRejectedValueOnce(new Error('502: {"detail":"SST service unavailable"}'))
+      await openValues()
+      const readout = screen.getByTestId('ship-track-values')
+      move(39.5, -100)
+      await waitFor(() => expect(readout).toHaveTextContent('SST: no data (land)'))
+      move(5, 5)
+      await waitFor(() => expect(readout).toHaveTextContent('SST unavailable'))
+      expect(spy).toHaveBeenCalledTimes(2)
+    })
+
+    it('wraps longitude from map world copies into -180..180', async () => {
+      const spy = vi.spyOn(apiClient, 'getSstPoint').mockResolvedValue({
+        date: '2019-03-01',
+        lat: 0.125,
+        lon: -79.875,
+        sst: 27,
+      })
+      await openValues()
+      move(0.1, 280.1)
+      expect(screen.getByTestId('ship-track-values')).toHaveTextContent('0.10°N, 79.90°W')
+      await waitFor(() => expect(spy).toHaveBeenCalled())
+      expect(spy.mock.calls[0][2]).toBeCloseTo(-79.9)
+    })
+
+    it('clears the position when the pointer leaves the map', async () => {
+      vi.spyOn(apiClient, 'getSstPoint').mockResolvedValue({ date: '2019-03-01', lat: 1, lon: 1, sst: 1 })
+      await openValues()
+      move(1, 1)
+      act(() => drawn.handlers.mouseout({}))
+      expect(screen.getByTestId('ship-track-values')).toHaveTextContent('Move the pointer over the map')
+    })
+  })
 })

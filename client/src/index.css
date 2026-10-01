@@ -1853,6 +1853,30 @@ code {
   cursor: not-allowed;
 }
 
+/* "Values" readout: pointer position + SST, pinned bottom-left over the map. */
+.ship-track-values {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--bg) 90%, transparent);
+  color: var(--text-h);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.ship-track-values-sst {
+  font-weight: 600;
+}
+
 .ship-track-legend {
   position: absolute;
   /* Top-right: the zoom buttons are top-left and the (multi-line)

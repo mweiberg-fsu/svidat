@@ -38,6 +38,8 @@ const ICONS = {
   flag: icon('M5 21V4M5 4h11l-2 4 2 4H5'),
   tools: icon('M14 7l3-3 3 3-3 3M17 4v0M4 20l9-9M11 4l-1 4 4 1'),
   user: icon('M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0'),
+  bulk: icon('M4 5h4v4H4zM4 15h4v4H4zM11 7h9M11 17h9M5 7l1 1 2-2M5 17l1 1 2-2'),
+  climo: icon('M3 17c3-6 6-6 9-2s6 4 9-2M5 9h.01M9 6h.01M13 9h.01M17 7h.01'),
 }
 
 export function PlotGuide({ roles }: { roles: string[] }) {
@@ -87,6 +89,17 @@ export function PlotGuide({ roles }: { roles: string[] }) {
         </ul>
       ),
     },
+    {
+      icon: ICONS.climo,
+      title: 'Climo & data points',
+      body: (
+        <>
+          <strong>Show climo</strong> in the top bar overlays a dashed line of the monthly climatology (UWM/COADS,
+          1945–89) along the ship's track, so out-of-range values stand out. <strong>Show points</strong> marks every
+          individual observation, which makes gaps and spikes easy to spot.
+        </>
+      ),
+    },
     ...(canEdit
       ? [
           {
@@ -97,6 +110,18 @@ export function PlotGuide({ roles }: { roles: string[] }) {
                 {kb('flag_select')} across points to open an edit session, then pick a flag code in the sidebar's
                 flags panel. When you're done, use <strong>{saveDraftLabel}</strong> or{' '}
                 <strong>{publishLabel}</strong> in the top bar. <strong>Close Session</strong> leaves without saving.
+              </>
+            ),
+          },
+          {
+            icon: ICONS.bulk,
+            title: 'Bulk edit',
+            body: (
+              <>
+                Flag several variables at once: turn on <strong>Bulk edit</strong> in the top bar, tick the checkbox
+                on each plot's tab you want included, then {kb('flag_select')} a time range on any of them and pick a
+                flag code. It's applied to every ticked variable over that range; the button shows how many are
+                selected.
               </>
             ),
           },

@@ -223,11 +223,11 @@ describe('FilesPage', () => {
       expect(screen.getByRole('button', { name: 'Close Session' })).toBeEnabled()
     )
 
-    const bulkEditBtn = screen.getByText('Bulk edit')
+    const bulkEditBtn = screen.getByRole('button', { name: 'Bulk edit' })
     expect(bulkEditBtn).not.toHaveClass('active')
 
     fireEvent.click(bulkEditBtn)
-    expect(screen.getByText('Bulk edit')).toHaveClass('active')
+    expect(screen.getByRole('button', { name: 'Bulk edit' })).toHaveClass('active')
   })
 
   it('shows the Show flags, Show climo and Show points toggles right after Bulk edit', () => {

@@ -11,7 +11,7 @@ describe('PlotGuide', () => {
   it('keeps the original prompt and shows the navigation steps', () => {
     render(<PlotGuide roles={[]} />)
     expect(screen.getByText('Select variables in the sidebar to view plots.')).toBeInTheDocument()
-    for (const title of ['Pick a file', 'Choose variables', 'Explore the plot', 'Handy tools', 'Make it yours']) {
+    for (const title of ['Pick a file', 'Choose variables', 'Explore the plot', 'Climo & data points', 'Handy tools', 'Make it yours']) {
       expect(screen.getByRole('heading', { name: title })).toBeInTheDocument()
     }
   })
@@ -32,9 +32,19 @@ describe('PlotGuide', () => {
     expect(screen.queryByRole('heading', { name: 'Flag & publish' })).not.toBeInTheDocument()
     expect(screen.getByText(/view-only/i)).toBeInTheDocument()
 
+    expect(screen.queryByRole('heading', { name: 'Bulk edit' })).not.toBeInTheDocument()
+
     rerender(<PlotGuide roles={['qca']} />)
     expect(screen.getByRole('heading', { name: 'Flag & publish' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Bulk edit' })).toBeInTheDocument()
     expect(screen.getByText('Save draft (v250)')).toBeInTheDocument()
     expect(screen.getByText('Publish (v300)')).toBeInTheDocument()
+  })
+
+  it('explains the climo and points toggles', () => {
+    render(<PlotGuide roles={[]} />)
+    const card = screen.getByRole('heading', { name: 'Climo & data points' }).closest('li') as HTMLElement
+    expect(within(card).getByText('Show climo')).toBeInTheDocument()
+    expect(within(card).getByText('Show points')).toBeInTheDocument()
   })
 })

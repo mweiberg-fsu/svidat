@@ -6,7 +6,7 @@ import { useAuth } from '../context/AuthContext'
 import { DEFAULT_SITE_NAME, useBranding } from '../theme'
 import { SessionNavActions } from './SessionNavActions'
 import { useGuardedNavigate } from '../hooks/useGuardedNavigate'
-import { PLOT_PATH } from '../routes'
+import { GUIDE_PATH, PLOT_PATH } from '../routes'
 
 // Stroke icons (24x24, currentColor), matching SessionNavActions' tab icons.
 function PlotIcon() {
@@ -35,6 +35,16 @@ function AdminIcon() {
       strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
       <path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z" />
       <path d="M9 12l2 2 4-4" />
+    </svg>
+  )
+}
+
+function GuideIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor"
+      strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M4 5a2 2 0 0 1 2-2h5v17H6a2 2 0 0 0-2 2z" />
+      <path d="M20 5a2 2 0 0 0-2-2h-5v17h5a2 2 0 0 1 2 2z" />
     </svg>
   )
 }
@@ -99,6 +109,14 @@ export function Navbar() {
               <span className="navbar-tab-label">Admin</span>
             </button>
           )}
+          <button
+            type="button"
+            className={`navbar-tab${location.pathname === GUIDE_PATH ? ' active' : ''}`}
+            onClick={() => goTo(GUIDE_PATH)}
+          >
+            <GuideIcon />
+            <span className="navbar-tab-label">Guide</span>
+          </button>
           <SessionNavActions />
         </div>
       </div>

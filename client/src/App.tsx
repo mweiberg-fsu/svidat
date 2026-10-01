@@ -5,7 +5,8 @@ import { LoginPage } from './pages/LoginPage'
 import { FilesPage } from './pages/FilesPage'
 import { AdminUsersPage } from './pages/AdminUsersPage'
 import { ProfilePage } from './pages/ProfilePage'
-import { LegacyPlotRedirect, PLOT_PATH } from './routes'
+import { GuidePage } from './pages/GuidePage'
+import { GUIDE_PATH, LegacyPlotRedirect, PLOT_PATH } from './routes'
 import { useFavicon } from './hooks/useFavicon'
 
 export default function App() {
@@ -37,6 +38,14 @@ export default function App() {
             element={
               <ProtectedRoute requiredRoles={['admin']}>
                 <AdminUsersPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path={GUIDE_PATH}
+            element={
+              <ProtectedRoute>
+                <GuidePage />
               </ProtectedRoute>
             }
           />

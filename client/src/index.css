@@ -409,6 +409,10 @@ code {
   padding: 24px;
 }
 
+.guide-page {
+  padding: 24px;
+}
+
 /* First card on the page: no gap above it now that there's no page title. */
 .profile-card-wide.profile-info {
   margin-top: 0;

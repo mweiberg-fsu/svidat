@@ -42,7 +42,9 @@ const ICONS = {
   climo: icon('M3 17c3-6 6-6 9-2s6 4 9-2M5 9h.01M9 6h.01M13 9h.01M17 7h.01'),
 }
 
-export function PlotGuide({ roles }: { roles: string[] }) {
+const PLOT_LEAD = 'Select variables in the sidebar to view plots.'
+
+export function PlotGuide({ roles, lead = PLOT_LEAD }: { roles: string[]; lead?: string }) {
   const { keybindings } = useAppConfig()
   const { siteName, saveDraftLabel, publishLabel } = useBranding()
   const canEdit = roles.includes('qca')
@@ -154,7 +156,7 @@ export function PlotGuide({ roles }: { roles: string[] }) {
       <div className="plot-guide-hero">
         <p className="plot-guide-eyebrow">Getting started</p>
         <h2 id="plot-guide-title">Welcome to {siteName}</h2>
-        <p className="plot-guide-lead">Select variables in the sidebar to view plots.</p>
+        <p className="plot-guide-lead">{lead}</p>
         {!canEdit && (
           <p className="plot-guide-note">
             You have view-only access. Ask an admin for the qca role to flag and publish data.
@@ -179,9 +181,9 @@ export function PlotGuide({ roles }: { roles: string[] }) {
   )
 }
 
-// The guide for whoever is signed in (only rendered in the plot area's empty
-// state, which always sits under AuthProvider).
-export function CurrentUserPlotGuide() {
+// The guide for whoever is signed in (plot area's empty state and the Guide
+// page; both sit under AuthProvider).
+export function CurrentUserPlotGuide({ lead }: { lead?: string }) {
   const { roles } = useAuth()
-  return <PlotGuide roles={roles} />
+  return <PlotGuide roles={roles} lead={lead} />
 }

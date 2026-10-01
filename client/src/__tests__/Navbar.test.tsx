@@ -121,7 +121,22 @@ describe('Navbar', () => {
     const tabs = Array.from(document.querySelectorAll('.navbar-tab')).map(
       (t) => t.querySelector('.navbar-tab-label')?.textContent
     )
-    expect(tabs).toEqual(['Plot', 'Profile', 'Admin', 'Save Image', 'Close Session'])
+    expect(tabs).toEqual(['Plot', 'Profile', 'Admin', 'Guide', 'Save Image', 'Close Session'])
+  })
+
+  it('puts Guide right after Profile for non-admins', () => {
+    renderNavbar('qca')
+    const tabs = Array.from(document.querySelectorAll('.navbar-tab')).map(
+      (t) => t.querySelector('.navbar-tab-label')?.textContent
+    )
+    expect(tabs.slice(0, 3)).toEqual(['Plot', 'Profile', 'Guide'])
+  })
+
+  it('navigates to the guide page and underlines the Guide tab there', () => {
+    renderNavbar('qca', '/profile')
+    fireEvent.click(screen.getByRole('button', { name: 'Guide' }))
+    expect(screen.getByTestId('path')).toHaveTextContent('/guide')
+    expect(screen.getByRole('button', { name: 'Guide' })).toHaveClass('active')
   })
 
   it('hides the Admin tab for non-admins', () => {

@@ -84,12 +84,6 @@ export function PlotGuide({ roles }: { roles: string[] }) {
           <li>
             {kb('undo')} or <Keys>Right-click</Keys> undo zoom
           </li>
-          <li>
-            {kb('redo')} or <Keys>Shift+right-click</Keys> redo zoom
-          </li>
-          <li>
-            Type exact limits in <strong>Y min</strong> / <strong>Y max</strong> in the top bar
-          </li>
         </ul>
       ),
     },

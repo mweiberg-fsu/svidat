@@ -98,13 +98,49 @@ def test_fetch_parses_erddap_json(monkeypatch):
 
     seen = {}
 
-    def fake_get(url, timeout):
+    def fake_get(url):
         seen["url"] = url
-        seen["timeout"] = timeout
         return Resp()
 
-    monkeypatch.setattr(sst.httpx, "get", fake_get)
+    monkeypatch.setattr(sst._client, "get", fake_get)
     assert sst._fetch("2024-06-01", 27.625, -84.375) == 28.06
     assert "ncdcOisst21Agg_LonPM180.json" in seen["url"]
     assert "2024-06-01T12%3A00%3A00Z" in seen["url"] or "2024-06-01T12:00:00Z" in seen["url"]
-    assert seen["timeout"] == sst.TIMEOUT_S
+
+
+def test_client_uses_ipv4_backend_with_short_connect_timeout():
+    # Regression: an unreachable IPv6 route made every lookup wait out the
+    # full connect timeout (~10 s) before httpx tried IPv4.
+    assert isinstance(sst._client._transport._pool._network_backend, sst._IPv4Backend)
+    assert sst._client.timeout.connect == sst.CONNECT_TIMEOUT_S
+
+
+def test_ipv4_backend_resolves_ipv4_only_and_tries_each_address(monkeypatch):
+    seen = {}
+
+    def fake_getaddrinfo(host, port, family, type_):
+        seen["family"] = family
+        return [(None, None, None, "", ("10.0.0.1", port)), (None, None, None, "", ("10.0.0.2", port))]
+
+    attempts = []
+
+    def fake_connect(self, host, port, timeout=None, local_address=None, socket_options=None):
+        attempts.append(host)
+        if host == "10.0.0.1":
+            raise sst.httpcore.ConnectTimeout("dead")
+        return "stream"
+
+    monkeypatch.setattr(sst.socket, "getaddrinfo", fake_getaddrinfo)
+    monkeypatch.setattr(sst.httpcore.SyncBackend, "connect_tcp", fake_connect)
+    assert sst._IPv4Backend().connect_tcp("example.org", 443, timeout=1) == "stream"
+    assert seen["family"] == sst.socket.AF_INET
+    assert attempts == ["10.0.0.1", "10.0.0.2"]
+
+
+def test_fetch_wraps_network_errors(monkeypatch):
+    def fail(url):
+        raise sst.httpx.ConnectTimeout("no route")
+
+    monkeypatch.setattr(sst._client, "get", fail)
+    with pytest.raises(sst.SstUnavailable):
+        sst._fetch("2024-06-01", 0.125, 0.125)

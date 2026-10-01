@@ -6,20 +6,50 @@ single-point queries but sends no CORS headers, so the browser can't call it
 directly; this proxies the lookup and caches it per grid cell and day.
 """
 import math
+import socket
 import threading
 from collections import OrderedDict
 from typing import Optional, Tuple
 from urllib.parse import quote
 
+import httpcore
 import httpx
 
 ERDDAP = "https://coastwatch.pfeg.noaa.gov/erddap"
 DATASET = "ncdcOisst21Agg_LonPM180"
 TIMEOUT_S = 10.0
+CONNECT_TIMEOUT_S = 3.0
 GRID_STEP = 0.25
 MAX_LAT = 89.875
 MAX_LON = 179.875
 CACHE_SIZE = 10000
+
+
+class _IPv4Backend(httpcore.SyncBackend):
+    """Connects over IPv4 only. The ERDDAP host publishes an AAAA record
+    whose route can be dead (connects hang); httpx's sync connect tries it
+    first with no fast fallback, so every lookup stalled for the whole
+    connect timeout before reaching IPv4 (curl falls back in milliseconds).
+    TLS still verifies against the request's hostname, not this IP."""
+
+    def connect_tcp(self, host, port, timeout=None, local_address=None, socket_options=None):
+        last_exc: Optional[Exception] = None
+        for *_, sockaddr in socket.getaddrinfo(host, port, socket.AF_INET, socket.SOCK_STREAM):
+            try:
+                return super().connect_tcp(sockaddr[0], port, timeout, local_address, socket_options)
+            except (httpcore.ConnectError, httpcore.ConnectTimeout) as exc:
+                last_exc = exc
+        raise last_exc or httpcore.ConnectError(f"no IPv4 address for {host}")
+
+
+def _make_client() -> httpx.Client:
+    transport = httpx.HTTPTransport(retries=1)
+    transport._pool._network_backend = _IPv4Backend()
+    # One shared client: keep-alive skips the TLS handshake on repeat lookups.
+    return httpx.Client(transport=transport, timeout=httpx.Timeout(TIMEOUT_S, connect=CONNECT_TIMEOUT_S))
+
+
+_client = _make_client()
 
 
 class SstUnavailable(Exception):
@@ -40,7 +70,7 @@ def _fetch(date: str, lat: float, lon: float) -> Optional[float]:
     query = f"sst[({date}T12:00:00Z)][(0.0)][({lat})][({lon})]"
     url = f"{ERDDAP}/griddap/{DATASET}.json?{quote(query, safe='')}"
     try:
-        resp = httpx.get(url, timeout=TIMEOUT_S)
+        resp = _client.get(url)
         resp.raise_for_status()
         table = resp.json()["table"]
         row = table["rows"][0]

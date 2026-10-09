@@ -1,0 +1,24 @@
+# docker compose up -d --build   (or podman compose)
+# Set SVIDAT_ADMIN_PASSWORD in the shell or a .env next to this file.
+services:
+  svidat:
+    build:
+      context: .
+      args:
+        VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
+        VITE_MS_CLIENT_ID: ${VITE_MS_CLIENT_ID:-}
+    ports:
+      - "${SVIDAT_PORT:-4173}:4173"
+    volumes:
+      - svidat-data:/data
+      # Mount ship data read-only and add it under Admin → Paths, e.g.:
+      # - /net/samos/data:/samos:ro
+    environment:
+      SVIDAT_ADMIN_USER: ${SVIDAT_ADMIN_USER:-admin}
+      SVIDAT_ADMIN_PASSWORD: ${SVIDAT_ADMIN_PASSWORD:?set SVIDAT_ADMIN_PASSWORD}
+      GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
+      MICROSOFT_CLIENT_ID: ${VITE_MS_CLIENT_ID:-}
+    restart: unless-stopped
+
+volumes:
+  svidat-data:

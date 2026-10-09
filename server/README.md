@@ -39,6 +39,13 @@ There is no seeded admin user yet — create the first one directly:
 validation, auth, roles, session locking, point/bulk edit, background jobs,
 save/publish, and audit history/revert.
 
+## CORS
+
+Browsers may call the API directly only from `CORS_ORIGINS` (comma-separated,
+default `http://localhost:5173,http://localhost:4173`). Not needed when the
+frontend is built with `VITE_API_URL=/api` and served by `../start.sh` or the
+Docker image — that goes through vite's same-origin proxy.
+
 ## Google / Microsoft OAuth login
 
 Set two env vars (via `.env` or the shell) to enable the OAuth sign-in

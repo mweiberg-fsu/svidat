@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     database_url: str = "sqlite:///./svidat.db"
     google_client_id: str = ""
     microsoft_client_id: str = ""
+    # Comma-separated browser origins allowed to call the API directly. Not
+    # needed when the frontend goes through vite's /api proxy (start.sh, Docker).
+    cors_origins: str = "http://localhost:5173,http://localhost:4173"
 
 
 settings = Settings()

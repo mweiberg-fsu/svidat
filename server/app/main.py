@@ -4,6 +4,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
+from app.config import settings
 from app.database import Base, engine, run_migrations
 from app.routers import admin, audit, auth, config, edit, files, session, theme, users, workflow
 
@@ -27,7 +28,7 @@ class BodySizeLimitMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:4173"],
+    allow_origins=[o.strip() for o in settings.cors_origins.split(",") if o.strip()],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

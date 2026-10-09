@@ -1,6 +1,9 @@
 import type { AppConfig, CurrentUser, CustomTrigger, Catalog, ClimatologyResponse, KeyBindings, ShipNames, OAuthSettings, TempSessionEntry, VariableDataResponse, ThemeSettings, ThemeSettingsUpdate, PathLists, PathSettings, DirectoryListing, SstPoint } from './types'
 
-const BASE_URL = 'http://localhost:8000'
+// Build-time override. start.sh / the Docker image build with VITE_API_URL=/api
+// so the browser talks to the backend through vite's same-origin proxy
+// (vite.config.ts) — only the frontend port needs exposing or SSH-forwarding.
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 const TOKEN_KEY = 'svidat_token'
 export const ROLE_KEY = 'svidat_role'
 export const USERNAME_KEY = 'svidat_username'

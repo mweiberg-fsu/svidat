@@ -1,0 +1,16 @@
+.git
+.worktrees
+.superpowers
+.claude
+docs
+**/node_modules
+**/__pycache__
+**/.DS_Store
+client/dist
+client/.env
+server/.venv
+server/.env
+server/data
+server/svidat.db
+Dockerfile
+.dockerignore

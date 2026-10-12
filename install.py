@@ -2,7 +2,9 @@
 """Set up svidat: backend venv, frontend deps, optional admin user.
 
 Usage:
-  python3 install.py                      # interactive (local dev)
+  python3 install.py                      # interactive (local dev), backend + frontend
+  python3 install.py --backend            # backend only (venv, deps, .env, admin)
+  python3 install.py --frontend --build   # frontend only (npm deps, optional build)
   python3 install.py --yes --build        # non-interactive, e.g. in a container / over SSH
   SVIDAT_ADMIN_PASSWORD=... python3 install.py --yes --admin-user admin
 
@@ -48,8 +50,16 @@ def node_version_ok(version):
     return major == 20 and minor >= 19
 
 
-def check_prereqs(skip_frontend):
+def check_prereqs(backend, frontend):
     print("Checking prerequisites...")
+    if backend:
+        check_python()
+    if frontend:
+        check_node()
+    print("  OK")
+
+
+def check_python():
     if sys.version_info < (3, 10):
         die(f"Python 3.10+ required, found {platform.python_version()}.")
     if sys.version_info >= (3, 13):
@@ -58,15 +68,16 @@ def check_prereqs(skip_frontend):
             "dependencies (numpy, netCDF4) don't yet ship wheels for Python 3.13+. "
             "Re-run with Python 3.10-3.12, e.g. `python3.12 install.py`."
         )
-    if not skip_frontend:
-        if shutil.which("node") is None:
-            die("Node.js not found on PATH. Install Node 20.19+ or 22.12+ from https://nodejs.org/ and re-run.")
-        if shutil.which("npm") is None:
-            die("npm not found on PATH. It ships with Node.js — https://nodejs.org/")
-        version = subprocess.run(["node", "--version"], capture_output=True, text=True).stdout.strip()
-        if not node_version_ok(version):
-            die(f"Node.js {version} is too old for Vite 8. Install Node 20.19+ or 22.12+.")
-    print("  OK")
+
+
+def check_node():
+    if shutil.which("node") is None:
+        die("Node.js not found on PATH. Install Node 20.19+ or 22.12+ from https://nodejs.org/ and re-run.")
+    if shutil.which("npm") is None:
+        die("npm not found on PATH. It ships with Node.js — https://nodejs.org/")
+    version = subprocess.run(["node", "--version"], capture_output=True, text=True).stdout.strip()
+    if not node_version_ok(version):
+        die(f"Node.js {version} is too old for Vite 8. Install Node 20.19+ or 22.12+.")
 
 
 def create_venv():
@@ -135,7 +146,11 @@ def maybe_create_admin(args):
     create_admin(username)
 
 
-def print_next_steps():
+def print_next_steps(args):
+    if not (args.backend and args.frontend):
+        part = "Backend" if args.backend else "Frontend"
+        print(f"\n{part} setup complete. Run install.py without --backend/--frontend to set up both.")
+        return
     if IS_WINDOWS:
         activate = r"server\.venv\Scripts\activate"
     else:
@@ -168,28 +183,43 @@ def parse_args():
         "--admin-user", metavar="NAME",
         help="create this admin user if missing (password from SVIDAT_ADMIN_PASSWORD, else prompted)",
     )
-    parser.add_argument("--skip-frontend", action="store_true", help="backend only; don't touch Node/npm")
+    only = parser.add_mutually_exclusive_group()
+    only.add_argument(
+        "--backend", "--skip-frontend", dest="backend_only", action="store_true",
+        help="backend only; don't touch Node/npm",
+    )
+    only.add_argument(
+        "--frontend", dest="frontend_only", action="store_true",
+        help="frontend only; don't touch the Python venv or admin user",
+    )
     parser.add_argument("--build", action="store_true", help="also build the frontend for ./start.sh")
     args = parser.parse_args()
     if not sys.stdin.isatty():
         args.yes = True
-    if args.skip_frontend and args.build:
-        parser.error("--build needs the frontend; drop --skip-frontend")
+    # Neither flag = install both.
+    args.backend = not args.frontend_only
+    args.frontend = not args.backend_only
+    if args.build and not args.frontend:
+        parser.error("--build needs the frontend; drop --backend")
+    if args.admin_user and not args.backend:
+        parser.error("--admin-user needs the backend; drop --frontend")
     return args
 
 
 def main():
     args = parse_args()
-    check_prereqs(args.skip_frontend)
-    create_venv()
-    install_backend_deps()
-    write_env_file()
-    if not args.skip_frontend:
+    check_prereqs(args.backend, args.frontend)
+    if args.backend:
+        create_venv()
+        install_backend_deps()
+        write_env_file()
+    if args.frontend:
         install_frontend_deps()
         if args.build:
             build_frontend()
-    maybe_create_admin(args)
-    print_next_steps()
+    if args.backend:
+        maybe_create_admin(args)
+    print_next_steps(args)
 
 
 if __name__ == "__main__":

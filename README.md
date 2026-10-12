@@ -30,6 +30,7 @@ or `SVIDAT_ADMIN_PASSWORD='change-me' docker compose up -d --build`.
 ```bash
 python3 install.py --yes --build                              # non-interactive
 SVIDAT_ADMIN_PASSWORD='change-me' python3 install.py --yes --admin-user admin
+python3 install.py --backend    # or --frontend [--build]: set up just one half
 SKIP_BUILD=1 ./start.sh
 ```
 

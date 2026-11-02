@@ -32,3 +32,5 @@ CLAUDE.md
 
 # Local git worktrees used for isolated feature-branch work.
 .worktrees/
+# Host-specific compose additions (e.g. ship data mounts)
+/docker-compose.override.yml

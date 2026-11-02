@@ -1,7 +1,9 @@
 import os
 import shutil
+import threading
+import time
 from pathlib import Path
-from typing import Dict, List
+from typing import Dict, List, Optional, Tuple
 
 from app.config import settings
 
@@ -95,25 +97,130 @@ def raw_dirs(configured: List[Path]) -> List[Path]:
 
 
 def find_raw(filename: str, configured: List[Path]) -> Path:
-    """First raw dir holding {filename}.nc; else the first candidate (so the
-    caller's .exists() check reports it missing)."""
+    """First raw dir holding {filename}.nc, at its top level or anywhere
+    below it; else the first top-level candidate (so the caller's .exists()
+    check reports it missing)."""
     validate_segment(filename, "filename")
-    candidates = [d / f"{filename}.nc" for d in raw_dirs(configured)]
-    return next((p for p in candidates if _exists(p)), candidates[0])
+    dirs = raw_dirs(configured)
+    for d in dirs:
+        direct = d / f"{filename}.nc"
+        if _exists(direct):
+            return direct
+        if _is_dir(d):
+            nested = _raw_tree(d).get(filename)
+            if nested is not None:
+                return nested
+    return dirs[0] / f"{filename}.nc"
 
 
 def list_raw_files(configured: List[Path]) -> Dict[str, Path]:
-    """Stem -> path of every raw *.nc; the earlier dir wins a duplicate."""
+    """Stem -> path of every *.nc in or below the raw dirs. The earlier dir
+    wins a duplicate, and within a dir the shallower file does."""
     files: Dict[str, Path] = {}
     for d in raw_dirs(configured):
         if _is_dir(d):
-            try:
-                found = sorted(d.glob("*.nc"))
-            except OSError:
-                continue
-            for p in found:
-                files.setdefault(p.stem, p)
+            for stem, p in _raw_tree(d).items():
+                files.setdefault(stem, p)
     return files
+
+
+# Raw dirs may be nested trees (e.g. SAMOS <SHIP>/<YEAR>/*.nc, ~100k files
+# on NFS). Each folder's listing is cached against its mtime, so a repeat
+# scan only stats the folders and re-lists the ones whose entries changed;
+# each root's finished stem -> path map is cached against the mtimes of every
+# folder in it, so an unchanged tree also skips rebuilding ~100k Paths.
+# Folders modified in the last few seconds aren't cached: an entry added in
+# the same mtime tick as a listing would otherwise be missed until the next
+# change to that folder.
+_DIR_CACHE_MIN_AGE_NS = 2_000_000_000
+# path -> (mtime_ns, sorted *.nc names, sorted subfolder names)
+_dir_cache: Dict[str, Tuple[int, List[str], List[str]]] = {}
+# root -> (((path, mtime_ns), ...) of every folder in the tree, stem -> path)
+_tree_cache: Dict[str, Tuple[Tuple[Tuple[str, int], ...], Dict[str, Path]]] = {}
+_dir_cache_lock = threading.Lock()
+
+
+def _list_dir(path: str) -> Optional[Tuple[int, List[str], List[str], bool]]:
+    """(mtime_ns, *.nc names, subfolder names, cacheable) or None if
+    unreadable."""
+    try:
+        mtime = os.stat(path).st_mtime_ns
+    except OSError:
+        return None
+    with _dir_cache_lock:
+        cached = _dir_cache.get(path)
+    if cached is not None and cached[0] == mtime:
+        return mtime, cached[1], cached[2], True
+    files: List[str] = []
+    subdirs: List[str] = []
+    try:
+        with os.scandir(path) as it:
+            for entry in it:
+                # Trust the name for *.nc: is_dir() costs a stat per entry
+                # when the filesystem (NFSv3) doesn't report entry types,
+                # which is most of the time on a 100k-file tree.
+                if entry.name.endswith(".nc"):
+                    files.append(entry.name)
+                else:
+                    try:
+                        if entry.is_dir(follow_symlinks=False):
+                            subdirs.append(entry.name)
+                    except OSError:
+                        pass
+    except OSError:
+        return None
+    files.sort()
+    subdirs.sort()
+    cacheable = time.time_ns() - mtime >= _DIR_CACHE_MIN_AGE_NS
+    with _dir_cache_lock:
+        if cacheable:
+            _dir_cache[path] = (mtime, files, subdirs)
+        else:
+            _dir_cache.pop(path, None)
+    return mtime, files, subdirs, cacheable
+
+
+def _raw_tree(root: Path) -> Dict[str, Path]:
+    """Stem -> path of every *.nc under root, breadth-first (shallower files
+    win a duplicate stem), not following symlinked folders. The returned
+    dict may be shared with the cache: don't mutate it."""
+    listings: List[Tuple[str, List[str]]] = []
+    signature: List[Tuple[str, int]] = []
+    cacheable = True
+    level = [str(root)]
+    while level:
+        next_level: List[str] = []
+        for path in level:
+            listing = _list_dir(path)
+            if listing is None:
+                continue
+            mtime, files, subdirs, ok = listing
+            cacheable = cacheable and ok
+            signature.append((path, mtime))
+            listings.append((path, files))
+            next_level.extend(os.path.join(path, s) for s in subdirs)
+        level = next_level
+
+    key = str(root)
+    sig = tuple(signature)
+    with _dir_cache_lock:
+        cached = _tree_cache.get(key)
+    if cacheable and cached is not None and cached[0] == sig:
+        return cached[1]
+
+    found: Dict[str, Path] = {}
+    for path, files in listings:
+        folder = Path(path)
+        for name in files:
+            stem = name[:-3]
+            if stem not in found:
+                found[stem] = folder / name
+    with _dir_cache_lock:
+        if cacheable:
+            _tree_cache[key] = (sig, found)
+        else:
+            _tree_cache.pop(key, None)
+    return found
 
 
 def draft_paths(username: str, filename: str, configured: List[Path]) -> List[Path]:

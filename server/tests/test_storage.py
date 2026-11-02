@@ -107,6 +107,80 @@ def test_list_raw_files_first_dir_wins(monkeypatch, tmp_path):
     assert storage.list_raw_files([a, b]) == {"x": a / "x.nc", "y": b / "y.nc"}
 
 
+def _touch(p):
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_bytes(b"x")
+
+
+def test_raw_dirs_are_scanned_recursively(monkeypatch, tmp_path):
+    # SAMOS layout: <root>/<SHIP>/<YEAR>/<SHIP>_<DATE>v<VER>.nc
+    a, _ = _iso(monkeypatch, tmp_path)
+    _touch(a / "KTDQ" / "2026" / "KTDQ_20261023v20001.nc")
+    _touch(a / "KTDQ" / "2025" / "KTDQ_20250101v20001.nc")
+    _touch(a / "KTDQ" / "2026" / "notes.txt")
+    assert storage.list_raw_files([a]) == {
+        "KTDQ_20261023v20001": a / "KTDQ" / "2026" / "KTDQ_20261023v20001.nc",
+        "KTDQ_20250101v20001": a / "KTDQ" / "2025" / "KTDQ_20250101v20001.nc",
+    }
+    assert storage.find_raw("KTDQ_20261023v20001", [a]) == (
+        a / "KTDQ" / "2026" / "KTDQ_20261023v20001.nc"
+    )
+
+
+def test_recursive_duplicates_root_level_then_first_dir_wins(monkeypatch, tmp_path):
+    a, b = _iso(monkeypatch, tmp_path)
+    _touch(a / "sub" / "f.nc")
+    _touch(a / "f.nc")  # a root file beats a nested one in the same dir
+    _touch(a / "sub" / "g.nc")
+    _touch(b / "g.nc")  # an earlier dir's nested file beats a later dir's
+    files = storage.list_raw_files([a, b])
+    assert files["f"] == a / "f.nc"
+    assert files["g"] == a / "sub" / "g.nc"
+    assert storage.find_raw("f", [a, b]) == a / "f.nc"
+    assert storage.find_raw("g", [a, b]) == a / "sub" / "g.nc"
+
+
+def test_recursive_scan_sees_added_and_removed_files(monkeypatch, tmp_path):
+    a, _ = _iso(monkeypatch, tmp_path)
+    _touch(a / "S" / "2026" / "one.nc")
+    assert set(storage.list_raw_files([a])) == {"one"}
+    _touch(a / "S" / "2026" / "two.nc")
+    assert set(storage.list_raw_files([a])) == {"one", "two"}
+    (a / "S" / "2026" / "one.nc").unlink()
+    assert set(storage.list_raw_files([a])) == {"two"}
+    assert storage.find_raw("two", [a]) == a / "S" / "2026" / "two.nc"
+
+
+def test_recursive_scan_reuses_cached_tree_until_a_folder_changes(monkeypatch, tmp_path):
+    import os
+
+    a, _ = _iso(monkeypatch, tmp_path)
+    monkeypatch.setattr(storage, "_DIR_CACHE_MIN_AGE_NS", 0)
+    _touch(a / "S" / "2026" / "one.nc")
+    first = storage._raw_tree(a)
+    assert storage._raw_tree(a) is first  # unchanged: no rebuild
+    calls = []
+    real_scandir = os.scandir
+    monkeypatch.setattr(
+        storage.os, "scandir", lambda p: calls.append(p) or real_scandir(p)
+    )
+    storage._raw_tree(a)
+    assert calls == []  # unchanged: no folder re-listed
+    _touch(a / "S" / "2026" / "two.nc")
+    os.utime(a / "S" / "2026", ns=(1, 1))  # force a distinct mtime tick
+    second = storage._raw_tree(a)
+    assert second is not first
+    assert set(second) == {"one", "two"}
+    assert calls == [str(a / "S" / "2026")]  # only the changed folder
+
+
+def test_recursive_scan_does_not_follow_dir_symlinks(monkeypatch, tmp_path):
+    a, _ = _iso(monkeypatch, tmp_path)
+    _touch(a / "S" / "f.nc")
+    (a / "S" / "loop").symlink_to(a, target_is_directory=True)
+    assert storage.list_raw_files([a]) == {"f": a / "S" / "f.nc"}
+
+
 def test_draft_paths_and_find_and_list(monkeypatch, tmp_path):
     a, b = _iso(monkeypatch, tmp_path)
     assert storage.draft_paths("u", "f", []) == [storage.draft_path("u", "f")]
@@ -170,7 +244,11 @@ def test_helpers_skip_unreadable_dirs(monkeypatch, tmp_path):
     monkeypatch.setattr(Path, "exists", exists)
     monkeypatch.setattr(Path, "is_dir", is_dir)
     assert storage.find_raw("f", [a, b]) == b / "f.nc"
-    assert storage.list_raw_files([a, b]) == {"f": b / "f.nc"}
+    # b doubles as a draft dir here, so the recursive raw scan also sees
+    # b/u/f_v250.nc; what matters is that nothing comes from unreadable a.
+    raw = storage.list_raw_files([a, b])
+    assert raw["f"] == b / "f.nc"
+    assert all(a not in p.parents for p in raw.values())
     assert storage.find_draft("u", "f", [a, b]) == b / "u" / "f_v250.nc"
     assert storage.list_drafts("u", [a, b]) == ["f"]
 

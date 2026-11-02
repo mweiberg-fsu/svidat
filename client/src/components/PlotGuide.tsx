@@ -109,8 +109,9 @@ export function PlotGuide({ roles, lead = PLOT_LEAD }: { roles: string[]; lead?:
             title: 'Flag & publish',
             body: (
               <>
-                {kb('flag_select')} across points to open an edit session, then pick a flag code in the sidebar's
-                flags panel. When you're done, use <strong>{saveDraftLabel}</strong> or{' '}
+                {kb('flag_select')} a box around the points to flag — only points inside the box are selected, so it
+                can be as small as one point — to open an edit session, then pick a flag code in the sidebar's flags
+                panel. When you're done, use <strong>{saveDraftLabel}</strong> or{' '}
                 <strong>{publishLabel}</strong> in the top bar. <strong>Close Session</strong> leaves without saving.
               </>
             ),
@@ -121,8 +122,8 @@ export function PlotGuide({ roles, lead = PLOT_LEAD }: { roles: string[]; lead?:
             body: (
               <>
                 Flag several variables at once: turn on <strong>Bulk edit</strong> in the top bar, tick the checkbox
-                on each plot's tab you want included, then {kb('flag_select')} a time range on any of them and pick a
-                flag code.
+                on each plot's tab you want included, then {kb('flag_select')} a box on any of them and pick a flag
+                code — the same time steps are flagged on every included plot.
               </>
             ),
           },

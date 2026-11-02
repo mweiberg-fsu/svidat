@@ -1,0 +1,9 @@
+.venv
+.env
+data
+svidat.db
+**/__pycache__
+.pytest_cache
+**/.DS_Store
+Dockerfile
+.dockerignore

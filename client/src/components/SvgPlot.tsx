@@ -87,7 +87,7 @@ const FLAG_MARKER_COLORS = [
 ]
 const FLAG_HIGHLIGHT_COLOR = '#ff00ff'
 const FLAG_HIGHLIGHT_FILL_OPACITY = 0.15
-const FLAG_HIGHLIGHT_PAD_PX = 12
+const FLAG_HIGHLIGHT_PAD_PX = 4
 const FONT_FAMILY = 'Arial, sans-serif'
 const TOOLTIP_BG_COLOR = '#1f2937'
 const TOOLTIP_TEXT_COLOR = '#ffffff'
@@ -399,50 +399,81 @@ function buildFlagSegments(
   return segments
 }
 
-// Y-extent (in plot pixels) a magenta highlight band should cover for a
-// selected/flagged index range — tight around the values actually present
-// in that range (not the full row height), padded a few px, and clamped to
-// the plot's inner vertical extent. Returns null when the range has no
-// numeric values (nothing to highlight around).
-function computeTightBand(
-  values: (number | null)[],
-  startIdx: number,
-  endIdx: number,
-  scale: Scale,
-  rowHeight: number
-): { y: number; height: number } | null {
-  const windowValues = values.slice(startIdx, endIdx + 1)
-  const numeric = windowValues.filter((v): v is number => v !== null && v !== undefined)
-  if (numeric.length === 0) return null
-
-  const dataMin = Math.min(...numeric)
-  const dataMax = Math.max(...numeric)
-  // scale.y is inverted (larger value -> smaller pixel y).
-  const rawTop = Math.min(scale.y(dataMax), scale.y(dataMin)) - FLAG_HIGHLIGHT_PAD_PX
-  const rawBottom = Math.max(scale.y(dataMax), scale.y(dataMin)) + FLAG_HIGHLIGHT_PAD_PX
-
-  const plotTop = MARGIN.top
-  const plotBottom = rowHeight - MARGIN.bottom
-  const y = Math.max(plotTop, rawTop)
-  const bottom = Math.min(plotBottom, rawBottom)
-  return { y, height: Math.max(0, bottom - y) }
+// A flag-select box in a row's plot pixels, normalised so x0 <= x1 and
+// y0 <= y1.
+interface PxBox {
+  x0: number
+  x1: number
+  y0: number
+  y1: number
 }
 
-// Derives an approximate [startIdx, endIdx] selection range from an
-// in-progress flag-drag's pixel span, via the same px->idx conversion the
-// drag's own mouseup handler uses. Only valid to call while `flagDragStartRef`
-// still holds the gesture's start data — the mousedown/mouseup handlers
-// always write `flagDrag` state and `flagDragStartRef.current` together, so
-// by the time `flagDrag` is non-null for a row, the ref is guaranteed set.
-function computeDragHighlightRange(
-  flagDrag: { varName: string; startPx: number; currentPx: number },
-  start: FlagDragStart,
+function normalizeBox(ax: number, ay: number, bx: number, by: number): PxBox {
+  return { x0: Math.min(ax, bx), x1: Math.max(ax, bx), y0: Math.min(ay, by), y1: Math.max(ay, by) }
+}
+
+// Indices in [startIdx, endIdx] whose plotted point falls inside `box`.
+// The box is drawn freely in both X and Y — not snapped to time steps or
+// auto-fit to the values — so it can take a single spike, or only the
+// points above some value, and leave its neighbours out. The box is
+// clamped to the plot area first, so points scrolled out of view by a
+// Y-zoom are never captured.
+function indicesInBox(
+  values: (number | null)[],
+  scale: Scale,
+  startIdx: number,
+  endIdx: number,
+  box: PxBox,
   plotWidth: number,
-  axis: TimeAxis
-): [number, number] {
-  const a = pxToIdx(flagDrag.startPx, start.startIdx, start.endIdx, plotWidth, axis)
-  const b = pxToIdx(flagDrag.currentPx, start.startIdx, start.endIdx, plotWidth, axis)
-  return [Math.min(a, b), Math.max(a, b)]
+  rowHeight: number
+): number[] {
+  const x0 = Math.max(box.x0, MARGIN.left)
+  const x1 = Math.min(box.x1, plotWidth - MARGIN.right)
+  const y0 = Math.max(box.y0, MARGIN.top)
+  const y1 = Math.min(box.y1, rowHeight - MARGIN.bottom)
+  const out: number[] = []
+  if (x0 > x1 || y0 > y1) return out
+  for (let i = startIdx; i <= endIdx; i++) {
+    const v = values[i]
+    if (v === null || v === undefined) continue
+    const px = scale.x(i)
+    const py = scale.y(v)
+    if (px >= x0 && px <= x1 && py >= y0 && py <= y1) out.push(i)
+  }
+  return out
+}
+
+// Pixel bounding box (padded a few px, clamped to the plot area) around the
+// selected points visible in [startIdx, endIdx], or null when none are.
+function selectionBand(
+  values: (number | null)[],
+  indices: number[],
+  scale: Scale,
+  startIdx: number,
+  endIdx: number,
+  plotWidth: number,
+  rowHeight: number
+): { x: number; y: number; width: number; height: number } | null {
+  let minX = Infinity
+  let maxX = -Infinity
+  let minY = Infinity
+  let maxY = -Infinity
+  for (const i of indices) {
+    const v = values[i]
+    if (i < startIdx || i > endIdx || v === null || v === undefined) continue
+    const px = scale.x(i)
+    const py = scale.y(v)
+    minX = Math.min(minX, px)
+    maxX = Math.max(maxX, px)
+    minY = Math.min(minY, py)
+    maxY = Math.max(maxY, py)
+  }
+  if (minX === Infinity) return null
+  const x = Math.max(MARGIN.left, minX - FLAG_HIGHLIGHT_PAD_PX)
+  const y = Math.max(MARGIN.top, minY - FLAG_HIGHLIGHT_PAD_PX)
+  const right = Math.min(plotWidth - MARGIN.right, maxX + FLAG_HIGHLIGHT_PAD_PX)
+  const bottom = Math.min(rowHeight - MARGIN.bottom, maxY + FLAG_HIGHLIGHT_PAD_PX)
+  return { x, y, width: Math.max(0, right - x), height: Math.max(0, bottom - y) }
 }
 
 // Rounds a step size up to the nearest "nice" 1/2/5-times-a-power-of-ten
@@ -652,16 +683,28 @@ interface BoxDragStart {
 // Same idea for one plain-drag (flag-select) gesture — no modifier key,
 // armed whenever `canEdit` is true (role permits editing), independent of
 // whether a session is already open — a drag that commits while no session
-// is open fires `openSession()` itself. `varName`/`startIdx`/`endIdx` are
-// captured at mousedown (mirroring XDragStart) so mouseup can turn the
-// pixel range back into a data-index range without depending on
-// render-time closures.
+// is open fires `openSession()` itself. A free 2D box like BoxDragStart:
+// the X window and the row's Y scale are captured at mousedown so mouseup
+// can hit-test points against the box without depending on render-time
+// closures.
 interface FlagDragStart {
-  originLeft: number
-  startPx: number
   varName: string
+  originLeft: number
+  originTop: number
+  startX: number
+  startY: number
   startIdx: number
   endIdx: number
+  scaleMin: number
+  scaleMax: number
+}
+
+interface FlagDrag {
+  varName: string
+  startX: number
+  startY: number
+  currentX: number
+  currentY: number
 }
 
 // One entry in the shared undo/redo history — a snapshot of whichever piece
@@ -736,11 +779,7 @@ export function SvgPlot() {
   const lastPressRef = useRef<{ button: number; startedDrag: boolean }>({ button: -1, startedDrag: false })
   // When the last middle / right click happened, for the double-click window.
   const lastAuxClickAtRef = useRef<Record<'middle' | 'right', number>>({ middle: -Infinity, right: -Infinity })
-  const [flagDrag, setFlagDrag] = useState<{
-    varName: string
-    startPx: number
-    currentPx: number
-  } | null>(null)
+  const [flagDrag, setFlagDrag] = useState<FlagDrag | null>(null)
   const [hoverTip, setHoverTip] = useState<{
     varName: string
     clientX: number
@@ -1152,9 +1191,34 @@ export function SvgPlot() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [boxDrag])
 
+  // The flag-select scale for a drag: the row's X window and Y domain as
+  // they were at mousedown (an exact override reproduces the Y domain
+  // as-is), so hit-testing matches what the user drew the box over.
+  const flagDragScale = (start: FlagDragStart, values: (number | null)[]): Scale =>
+    buildScale(values, timeAxis!, start.startIdx, start.endIdx, plotWidth, rowHeight, {
+      range: [start.scaleMin, start.scaleMax],
+      exact: true,
+    })
+
+  const flagDragIndices = (start: FlagDragStart, drag: FlagDrag): number[] => {
+    const series = data?.variables[start.varName]
+    if (!series || !timeAxis) return []
+    const box = normalizeBox(drag.startX, drag.startY, drag.currentX, drag.currentY)
+    return indicesInBox(
+      series.values,
+      flagDragScale(start, series.values),
+      start.startIdx,
+      start.endIdx,
+      box,
+      plotWidth,
+      rowHeight
+    )
+  }
+
   // Runs for the duration of one plain-drag (flag-select) gesture — same
-  // shape as the X/Y-zoom effects above, but sets a flag *selection* in
-  // EditSessionContext (picked up by FlagsPanel) instead of changing the view.
+  // shape as the box-zoom effect above, but sets a flag *selection* in
+  // EditSessionContext (picked up by FlagsPanel) instead of changing the
+  // view. The selection is exactly the points inside the drawn box.
   useEffect(() => {
     if (!flagDrag) return
     const handleMouseMove = (e: MouseEvent) => {
@@ -1162,8 +1226,10 @@ export function SvgPlot() {
       if (!start) return
       setFlagDrag({
         varName: start.varName,
-        startPx: start.startPx,
-        currentPx: e.clientX - start.originLeft,
+        startX: start.startX,
+        startY: start.startY,
+        currentX: e.clientX - start.originLeft,
+        currentY: e.clientY - start.originTop,
       })
     }
     const handleMouseUp = (e: MouseEvent) => {
@@ -1171,34 +1237,38 @@ export function SvgPlot() {
       flagDragStartRef.current = null
       setFlagDrag(null)
       if (!start || !data || !timeAxis) return
-      const currentPx = e.clientX - start.originLeft
-      if (Math.abs(currentPx - start.startPx) < MIN_DRAG_PX) return
+      const currentX = e.clientX - start.originLeft
+      const currentY = e.clientY - start.originTop
+      // A press without movement is a click, not a box.
+      if (
+        Math.abs(currentX - start.startX) < MIN_DRAG_PX &&
+        Math.abs(currentY - start.startY) < MIN_DRAG_PX
+      ) {
+        return
+      }
 
-      const selStart = pxToIdx(
-        Math.min(start.startPx, currentPx),
-        start.startIdx,
-        start.endIdx,
-        plotWidth,
-        timeAxis
-      )
-      const selEnd = pxToIdx(
-        Math.max(start.startPx, currentPx),
-        start.startIdx,
-        start.endIdx,
-        plotWidth,
-        timeAxis
-      )
-      if (selEnd - selStart < 1) return
+      const indices = flagDragIndices(start, {
+        varName: start.varName,
+        startX: start.startX,
+        startY: start.startY,
+        currentX,
+        currentY,
+      })
+      if (indices.length === 0) {
+        setFlagSelection(null)
+        return
+      }
 
       if (!sessionOpen) {
         openSession()
       }
 
+      const first = data.time[indices[0]].slice(11, 19)
+      const last = data.time[indices[indices.length - 1]].slice(11, 19)
       setFlagSelection({
         varName: start.varName,
-        startIdx: selStart,
-        endIdx: selEnd,
-        rangeLabel: `${data.time[selStart].slice(11, 19)}–${data.time[selEnd].slice(11, 19)}`,
+        indices,
+        rangeLabel: indices.length === 1 ? first : `${first}–${last}`,
       })
     }
     window.addEventListener('mousemove', handleMouseMove)
@@ -1362,9 +1432,20 @@ export function SvgPlot() {
     if (flag) {
       startDrag()
       const rect = e.currentTarget.getBoundingClientRect()
-      const startPx = e.clientX - rect.left
-      flagDragStartRef.current = { originLeft: rect.left, startPx, varName, startIdx, endIdx }
-      setFlagDrag({ varName, startPx, currentPx: startPx })
+      const startX = e.clientX - rect.left
+      const startY = e.clientY - rect.top
+      flagDragStartRef.current = {
+        varName,
+        originLeft: rect.left,
+        originTop: rect.top,
+        startX,
+        startY,
+        startIdx,
+        endIdx,
+        scaleMin,
+        scaleMax,
+      }
+      setFlagDrag({ varName, startX, startY, currentX: startX, currentY: startY })
       return
     }
     // Keep a bare middle press (e.g. a middle-click binding) from starting
@@ -1570,15 +1651,19 @@ export function SvgPlot() {
         )
         const flagMarkers = buildFlagMarkers(series.flags, series.values, startIdx, endIdx)
         const flagSegments = buildFlagSegments(series.flags, series.values, scale, timeAxis, startIdx, endIdx)
-        const highlightRange: [number, number] | null =
-          flagSelection && flagSelection.varName === varName
-            ? [flagSelection.startIdx, flagSelection.endIdx]
-            : flagDrag && flagDrag.varName === varName && flagDragStartRef.current
-              ? computeDragHighlightRange(flagDrag, flagDragStartRef.current, plotWidth, timeAxis)
-              : null
-        const highlightBand = highlightRange
-          ? computeTightBand(series.values, highlightRange[0], highlightRange[1], scale, rowHeight)
-          : null
+        const rowFlagDrag =
+          flagDrag && flagDrag.varName === varName && flagDragStartRef.current ? flagDrag : null
+        // An in-progress drag previews the points its box currently holds;
+        // otherwise show the committed selection.
+        const highlightIndices: number[] | null = rowFlagDrag
+          ? flagDragIndices(flagDragStartRef.current!, rowFlagDrag)
+          : flagSelection && flagSelection.varName === varName
+            ? flagSelection.indices
+            : null
+        const highlightBand =
+          highlightIndices && !rowFlagDrag
+            ? selectionBand(series.values, highlightIndices, scale, startIdx, endIdx, plotWidth, rowHeight)
+            : null
         const yTicks = scale.yTicks
         const isActive = varName === activeVariable
         const axisColor = isActive ? ACTIVE_COLOR : AXIS_COLOR
@@ -1810,24 +1895,36 @@ export function SvgPlot() {
                     strokeDasharray={CLIMATOLOGY_DASH}
                   />
                 )}
-                {highlightRange && highlightBand && (
+                {highlightBand && (
                   <rect
                     data-export="skip"
-                    x={scale.x(highlightRange[0])}
+                    data-testid="flag-selection-band"
+                    x={highlightBand.x}
                     y={highlightBand.y}
-                    width={scale.x(highlightRange[1]) - scale.x(highlightRange[0])}
+                    width={highlightBand.width}
                     height={highlightBand.height}
                     fill={FLAG_HIGHLIGHT_COLOR}
                     opacity={FLAG_HIGHLIGHT_FILL_OPACITY}
                   />
                 )}
-                {highlightRange &&
-                  Array.from(
-                    { length: highlightRange[1] - highlightRange[0] + 1 },
-                    (_, i) => highlightRange[0] + i
-                  ).map((idx) => {
+                {rowFlagDrag && (
+                  <rect
+                    data-export="skip"
+                    data-testid="flag-select-box"
+                    x={Math.min(rowFlagDrag.startX, rowFlagDrag.currentX)}
+                    y={Math.min(rowFlagDrag.startY, rowFlagDrag.currentY)}
+                    width={Math.abs(rowFlagDrag.currentX - rowFlagDrag.startX)}
+                    height={Math.abs(rowFlagDrag.currentY - rowFlagDrag.startY)}
+                    fill={FLAG_HIGHLIGHT_COLOR}
+                    fillOpacity={FLAG_HIGHLIGHT_FILL_OPACITY}
+                    stroke={FLAG_HIGHLIGHT_COLOR}
+                    strokeDasharray="4 2"
+                  />
+                )}
+                {highlightIndices &&
+                  highlightIndices.map((idx) => {
                     const v = series.values[idx]
-                    if (v === null || v === undefined) return null
+                    if (idx < startIdx || idx > endIdx || v === null || v === undefined) return null
                     return (
                       <circle
                         data-export="skip"

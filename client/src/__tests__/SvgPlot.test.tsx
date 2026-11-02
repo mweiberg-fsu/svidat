@@ -764,15 +764,15 @@ describe('SvgPlot', () => {
       const svg = container.querySelector('svg')!
 
       // A plain drag no longer selects a flag range.
-      fireEvent.mouseDown(svg, { clientX: pxForIndex(4, 18) })
-      fireEvent.mouseMove(window, { clientX: pxForIndex(14, 18) })
-      fireEvent.mouseUp(window, { clientX: pxForIndex(14, 18) })
+      fireEvent.mouseDown(svg, { clientY: 0, clientX: pxForIndex(4, 18) })
+      fireEvent.mouseMove(window, { clientY: 200, clientX: pxForIndex(14, 18) })
+      fireEvent.mouseUp(window, { clientY: 200, clientX: pxForIndex(14, 18) })
       expect(container.querySelector('rect[fill="#ff00ff"]')).not.toBeInTheDocument()
 
       // Alt-drag does.
-      fireEvent.mouseDown(svg, { clientX: pxForIndex(4, 18), altKey: true })
-      fireEvent.mouseMove(window, { clientX: pxForIndex(14, 18), altKey: true })
-      fireEvent.mouseUp(window, { clientX: pxForIndex(14, 18), altKey: true })
+      fireEvent.mouseDown(svg, { clientY: 0, clientX: pxForIndex(4, 18), altKey: true })
+      fireEvent.mouseMove(window, { clientY: 200, clientX: pxForIndex(14, 18), altKey: true })
+      fireEvent.mouseUp(window, { clientY: 200, clientX: pxForIndex(14, 18), altKey: true })
       await waitFor(() => expect(container.querySelector('rect[fill="#ff00ff"]')).toBeInTheDocument())
     } finally {
       act(() => applyConfig({ keybindings: DEFAULT_KEYBINDINGS, documentation: DEFAULT_DOCUMENTATION }))
@@ -1599,16 +1599,17 @@ describe('SvgPlot', () => {
     await waitFor(() => expect(container.querySelector('svg')).toBeInTheDocument())
 
     const svg = container.querySelector('svg')!
-    fireEvent.mouseDown(svg, { clientX: pxForIndex(4, 18) })
-    fireEvent.mouseMove(window, { clientX: pxForIndex(14, 18) })
-    fireEvent.mouseUp(window, { clientX: pxForIndex(14, 18) })
+    fireEvent.mouseDown(svg, { clientY: 0, clientX: pxForIndex(4, 18) })
+    fireEvent.mouseMove(window, { clientY: 200, clientX: pxForIndex(14, 18) })
+    fireEvent.mouseUp(window, { clientY: 200, clientX: pxForIndex(14, 18) })
     await waitFor(() => expect(container.querySelector('rect[fill="#ff00ff"]')).toBeInTheDocument())
 
     const band = container.querySelector('rect[fill="#ff00ff"]')
     expect(band).toBeInTheDocument()
     expect(band?.getAttribute('opacity')).toBe('0.15')
-    expect(Number(band?.getAttribute('x'))).toBeCloseTo(pxForIndex(4, 18), 1)
-    expect(Number(band?.getAttribute('width'))).toBeCloseTo(pxForIndex(14, 18) - pxForIndex(4, 18), 1)
+    // Bounding box of the selected points, padded 4px each side.
+    expect(Number(band?.getAttribute('x'))).toBeCloseTo(pxForIndex(4, 18) - 4, 1)
+    expect(Number(band?.getAttribute('width'))).toBeCloseTo(pxForIndex(14, 18) - pxForIndex(4, 18) + 8, 1)
     expect(Number(band?.getAttribute('height'))).toBeLessThan(138)
   })
 
@@ -1643,18 +1644,18 @@ describe('SvgPlot', () => {
     // Indices [0, 2] hold the row's lowest values (0, 1, 2). The row's Y
     // domain is niceTicks-rounded to [0, 20] (buildScale pads for
     // "breathing room"), and scale.y(0) lands exactly on the plot's bottom
-    // edge (rowHeight - MARGIN.bottom = 164) by construction — so the 12px
-    // pad here would push the band's bottom to 176, past that edge, unless
+    // edge (rowHeight - MARGIN.bottom = 164) by construction — so the 4px
+    // pad here would push the band's bottom to 168, past that edge, unless
     // clamped back to 164.
-    fireEvent.mouseDown(svg, { clientX: pxForIndex(0, 18) })
-    fireEvent.mouseMove(window, { clientX: pxForIndex(2, 18) })
-    fireEvent.mouseUp(window, { clientX: pxForIndex(2, 18) })
+    fireEvent.mouseDown(svg, { clientY: 0, clientX: pxForIndex(0, 18) })
+    fireEvent.mouseMove(window, { clientY: 200, clientX: pxForIndex(2, 18) })
+    fireEvent.mouseUp(window, { clientY: 200, clientX: pxForIndex(2, 18) })
     await waitFor(() => expect(container.querySelector('rect[fill="#ff00ff"]')).toBeInTheDocument())
 
     const band = container.querySelector('rect[fill="#ff00ff"]')
     const y = Number(band?.getAttribute('y'))
     const height = Number(band?.getAttribute('height'))
-    // Unclamped this would be ~176 (38px past the edge) — clamped, it must
+    // Unclamped this would be ~168 (4px past the edge) — clamped, it must
     // land exactly on rowHeight - MARGIN.bottom (164).
     expect(y + height).toBeCloseTo(164, 1)
   })
@@ -1862,7 +1863,7 @@ describe('SvgPlot', () => {
       return (
         <span data-testid="selection-readout">
           {flagSelection
-            ? `${flagSelection.varName}:${flagSelection.startIdx}-${flagSelection.endIdx}:${flagSelection.rangeLabel}`
+            ? `${flagSelection.varName}:${flagSelection.indices.join(',')}:${flagSelection.rangeLabel}`
             : 'none'}
         </span>
       )
@@ -1886,13 +1887,97 @@ describe('SvgPlot', () => {
     await waitFor(() => expect(container.querySelector('svg')).toBeInTheDocument())
 
     const svg = container.querySelector('svg')!
-    fireEvent.mouseDown(svg, { clientX: pxForIndex(4, 18) })
-    fireEvent.mouseMove(window, { clientX: pxForIndex(14, 18) })
-    fireEvent.mouseUp(window, { clientX: pxForIndex(14, 18) })
+    fireEvent.mouseDown(svg, { clientY: 0, clientX: pxForIndex(4, 18) })
+    fireEvent.mouseMove(window, { clientY: 200, clientX: pxForIndex(14, 18) })
+    fireEvent.mouseUp(window, { clientY: 200, clientX: pxForIndex(14, 18) })
 
     expect(screen.getByTestId('selection-readout')).toHaveTextContent(
-      'temperature:4-14:04:00:00–14:00:00'
+      'temperature:4,5,6,7,8,9,10,11,12,13,14:04:00:00–14:00:00'
     )
+  })
+
+  describe('free-drawn flag box', () => {
+    function SelectionReadout() {
+      const { flagSelection } = useEditSession()
+      return (
+        <span data-testid="selection-readout">
+          {flagSelection
+            ? `${flagSelection.indices.join(',')}|${flagSelection.rangeLabel}`
+            : 'none'}
+        </span>
+      )
+    }
+
+    async function renderWithReadout(time: string[], values: number[]) {
+      vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
+        time,
+        variables: { temperature: { values, flags: time.map(() => 'Z') } },
+      })
+      vi.spyOn(apiClient, 'openSession').mockResolvedValue({ status: 'opened' })
+      setToken('tok')
+      localStorage.setItem('svidat_role', JSON.stringify(['qca']))
+      localStorage.setItem('svidat_username', 'testuser')
+      const { container } = render(
+        <AuthProvider>
+          <MemoryRouter>
+            <PlotSelectionProvider>
+              <EditSessionProvider>
+                <Setup file="FILE_A" variables={['temperature']} />
+                <SelectionReadout />
+                <SvgPlot />
+              </EditSessionProvider>
+            </PlotSelectionProvider>
+          </MemoryRouter>
+        </AuthProvider>
+      )
+      fireEvent.click(screen.getByTestId('set-file'))
+      fireEvent.click(screen.getByTestId('set-variables'))
+      await waitFor(() => expect(container.querySelector('svg')).toBeInTheDocument())
+      return container
+    }
+
+    function drag(svg: Element, x0: number, y0: number, x1: number, y1: number) {
+      fireEvent.mouseDown(svg, { clientX: x0, clientY: y0 })
+      fireEvent.mouseMove(window, { clientX: x1, clientY: y1 })
+      fireEvent.mouseUp(window, { clientX: x1, clientY: y1 })
+    }
+
+    it('a small box around one spike selects only that point, not its neighbours', async () => {
+      const time = hourlyTimes(18)
+      const values = time.map((_, i) => (i === 9 ? 50 : 5))
+      const container = await renderWithReadout(time, values)
+      const svg = container.querySelector('svg')!
+      // Narrower than one time step, and only over the top of the plot.
+      drag(svg, pxForIndex(9, 18) - 3, 0, pxForIndex(9, 18) + 3, 60)
+      expect(screen.getByTestId('selection-readout')).toHaveTextContent('9|09:00:00')
+    })
+
+    it('a box cut off at a value selects only the points beyond it', async () => {
+      const time = hourlyTimes(18)
+      const container = await renderWithReadout(time, time.map((_, i) => i))
+      const svg = container.querySelector('svg')!
+      // Full time range, but only values above 9.5 (Y domain is [0, 20]).
+      drag(svg, 0, 0, 2000, pyForValue(9.5, 0, 20))
+      expect(screen.getByTestId('selection-readout')).toHaveTextContent(
+        '10,11,12,13,14,15,16,17,18|10:00:00–18:00:00'
+      )
+    })
+
+    it('a box holding no points selects nothing', async () => {
+      const time = hourlyTimes(18)
+      const values = time.map((_, i) => (i === 9 ? 50 : 5))
+      const container = await renderWithReadout(time, values)
+      const svg = container.querySelector('svg')!
+      drag(svg, pxForIndex(2, 18), 0, pxForIndex(6, 18), 60)
+      expect(screen.getByTestId('selection-readout')).toHaveTextContent('none')
+    })
+
+    it('can flag the only point of a single-time-step file', async () => {
+      const container = await renderWithReadout(hourlyTimes(0), [12])
+      const svg = container.querySelector('svg')!
+      drag(svg, 60, 0, 80, 200)
+      expect(screen.getByTestId('selection-readout')).toHaveTextContent('0|00:00:00')
+    })
   })
 
   it('refetches variable data when flagAppliedAt increments', async () => {
@@ -2008,9 +2093,9 @@ describe('SvgPlot', () => {
     await waitFor(() => expect(container.querySelector('svg')).toBeInTheDocument())
 
     const svg = container.querySelector('svg')!
-    fireEvent.mouseDown(svg, { clientX: pxForIndex(4, 18) })
-    fireEvent.mouseMove(window, { clientX: pxForIndex(14, 18) })
-    fireEvent.mouseUp(window, { clientX: pxForIndex(14, 18) })
+    fireEvent.mouseDown(svg, { clientY: 0, clientX: pxForIndex(4, 18) })
+    fireEvent.mouseMove(window, { clientY: 200, clientX: pxForIndex(14, 18) })
+    fireEvent.mouseUp(window, { clientY: 200, clientX: pxForIndex(14, 18) })
 
     expect(openSpy).toHaveBeenCalledTimes(1)
     await waitFor(() =>

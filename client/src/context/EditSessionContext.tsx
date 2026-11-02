@@ -4,10 +4,11 @@ import { closeSession, openSession } from '../api/client'
 import { useAuth } from './AuthContext'
 import { usePlotSelection } from './PlotSelectionContext'
 
+// The time indices (ascending) captured by a flag-select box — exactly the
+// points inside it, so possibly one point or a non-contiguous set.
 export interface FlagSelection {
   varName: string
-  startIdx: number
-  endIdx: number
+  indices: number[]
   rangeLabel: string
 }
 

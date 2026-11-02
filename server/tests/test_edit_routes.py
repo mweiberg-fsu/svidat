@@ -188,6 +188,49 @@ def test_flag_edit_writes_flag_and_logs_audit(client, auth_header, synthetic_nc_
     assert flag_entries[0]["new_value"] == "K"
 
 
+def test_flag_edit_explicit_indices_flags_only_those_points(
+    client, auth_header, synthetic_nc_with_qc
+):
+    synthetic_nc_with_qc("shipx_2026-08-27b")
+    headers = auth_header("flageditor1b", is_qca=True)
+    client.post("/session/shipx_2026-08-27b/open", params={"source": "raw"}, headers=headers)
+
+    resp = client.post(
+        "/edit/flag",
+        json={
+            "filename": "shipx_2026-08-27b",
+            "var_name": "temperature",
+            "indices": [4, 2],
+            "flag_code": "K",
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 200, resp.text
+    assert _wait_for_job(client, headers, resp.json()["job_id"])["status"] == "done"
+
+    data_resp = client.get(
+        "/files/shipx_2026-08-27b/data", params={"vars": "temperature"}, headers=headers
+    )
+    assert data_resp.json()["variables"]["temperature"]["flags"] == ["Z", "Z", "K", "Z", "K"]
+
+
+def test_flag_edit_rejects_empty_indices(client, auth_header, synthetic_nc_with_qc):
+    synthetic_nc_with_qc("shipx_2026-08-27c")
+    headers = auth_header("flageditor1c", is_qca=True)
+    client.post("/session/shipx_2026-08-27c/open", params={"source": "raw"}, headers=headers)
+    resp = client.post(
+        "/edit/flag",
+        json={
+            "filename": "shipx_2026-08-27c",
+            "var_name": "temperature",
+            "indices": [],
+            "flag_code": "K",
+        },
+        headers=headers,
+    )
+    assert resp.status_code == 422
+
+
 def test_flag_edit_requires_open_session(client, auth_header, synthetic_nc_with_qc):
     synthetic_nc_with_qc("shipx_2026-08-28")
     headers = auth_header("flageditor2", is_qca=True)

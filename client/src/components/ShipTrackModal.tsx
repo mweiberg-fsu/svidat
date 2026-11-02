@@ -6,7 +6,9 @@ import { usePlotSelection } from '../context/PlotSelectionContext'
 import { useEditSession } from '../context/EditSessionContext'
 import { useFloatingPanel } from '../hooks/useFloatingPanel'
 import { buildTrack, nearestFix, windowSegments, type TrackFix } from '../shipTrack'
-import { createSstLayer, sstLegendUrl } from '../sstLayer'
+import { createSstLayer } from '../sstLayer'
+import { SstLegend } from './SstLegend'
+import { SSS_LEGEND_URL, createSssLayer, formatSssBin, resolveSssDate, sssAt, type SssBin } from '../sssLayer'
 import { formatLatLon, snapToSstCell, wrapLon } from '../sstPoint'
 
 const ESRI_OCEAN_URL =
@@ -18,6 +20,16 @@ const DIMMED_COLOR = '#64748b'
 // Pointer must rest this long before an SST lookup (cached cells skip it).
 const SST_LOOKUP_DELAY_MS = 250
 const HIT_PX = 10
+// Default panel size, shrunk to fit smaller windows (leaving this much
+// room) so the header and resize grip stay reachable.
+const DEFAULT_WIDTH = 960
+const DEFAULT_HEIGHT = 800
+const MIN_WIDTH = 280
+const MIN_HEIGHT = 220
+const VIEWPORT_MARGIN_PX = 32
+
+// One map overlay at a time: both are semi-opaque colour fields.
+type Overlay = 'none' | 'sst' | 'sss'
 
 function formatFix(fix: TrackFix): string {
   return `${fix.time.slice(0, 10)} ${fix.time.slice(11, 16)}Z · ${fix.lat.toFixed(3)}, ${fix.lon.toFixed(3)}`
@@ -28,7 +40,12 @@ function formatFix(fix: TrackFix): string {
 export function ShipTrackModal({ onClose }: { onClose: () => void }) {
   const { file } = usePlotSelection()
   const { xWindow, timeMarker, setTimeMarker } = useEditSession()
-  const panel = useFloatingPanel({ width: 480, height: 400, minWidth: 280, minHeight: 220 })
+  const panel = useFloatingPanel({
+    width: Math.max(MIN_WIDTH, Math.min(DEFAULT_WIDTH, window.innerWidth - VIEWPORT_MARGIN_PX)),
+    height: Math.max(MIN_HEIGHT, Math.min(DEFAULT_HEIGHT, window.innerHeight - VIEWPORT_MARGIN_PX)),
+    minWidth: MIN_WIDTH,
+    minHeight: MIN_HEIGHT,
+  })
   const mapElRef = useRef<HTMLDivElement | null>(null)
   const mapRef = useRef<L.Map | null>(null)
   const layerRef = useRef<L.LayerGroup | null>(null)
@@ -37,7 +54,17 @@ export function ShipTrackModal({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState<string | null>(null)
   const [hover, setHover] = useState<{ fix: TrackFix; x: number; y: number } | null>(null)
   const [trackDate, setTrackDate] = useState<string | null>(null)
-  const [sstOn, setSstOn] = useState(false)
+  const [overlay, setOverlay] = useState<Overlay>('none')
+  const sstOn = overlay === 'sst'
+  const sssOn = overlay === 'sss'
+  // The salinity map date for the file's day (latest 8-day mean on or
+  // before it; GIBS's record has gaps and lags real time).
+  const [sssDate, setSssDate] = useState<
+    { status: 'loading' } | { status: 'ok'; date: string } | { status: 'none' } | { status: 'error' } | null
+  >(null)
+  const [sssReading, setSssReading] = useState<
+    { status: 'loading' } | { status: 'ok'; bin: SssBin | null } | { status: 'error' } | null
+  >(null)
   // "Values": live pointer lat/lon + OISST at that spot. The map's mousemove
   // handler is registered once, so it reads the toggle through a ref.
   const [valuesOn, setValuesOn] = useState(false)
@@ -157,6 +184,62 @@ export function ShipTrackModal({ onClose }: { onClose: () => void }) {
     }
   }, [sstOn, trackDate])
 
+  // Resolve which salinity map to show for the file's day.
+  useEffect(() => {
+    if (!sssOn || !trackDate) {
+      setSssDate(null)
+      return
+    }
+    setSssDate({ status: 'loading' })
+    let cancelled = false
+    resolveSssDate(trackDate)
+      .then((date) => {
+        if (!cancelled) setSssDate(date ? { status: 'ok', date } : { status: 'none' })
+      })
+      .catch(() => {
+        if (!cancelled) setSssDate({ status: 'error' })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [sssOn, trackDate])
+
+  const sssMapDate = sssDate?.status === 'ok' ? sssDate.date : null
+
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map || !sssMapDate) return
+    const layer = createSssLayer(sssMapDate).addTo(map)
+    return () => {
+      layer.remove()
+    }
+  }, [sssMapDate])
+
+  // Salinity under the pointer while the salinity overlay is on, read from
+  // the overlay's own tiles once the pointer pauses.
+  useEffect(() => {
+    if (!valuesOn || !pointer || !sssMapDate) {
+      setSssReading(null)
+      return
+    }
+    const { lat, lon } = pointer
+    setSssReading({ status: 'loading' })
+    let cancelled = false
+    const timer = setTimeout(() => {
+      sssAt(sssMapDate, lat, lon)
+        .then((bin) => {
+          if (!cancelled) setSssReading({ status: 'ok', bin })
+        })
+        .catch(() => {
+          if (!cancelled) setSssReading({ status: 'error' })
+        })
+    }, SST_LOOKUP_DELAY_MS)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [valuesOn, pointer, sssMapDate])
+
   // Look up SST for the pointer's cell once it pauses (cached cells answer
   // immediately); a newer pointer position cancels the pending lookup.
   useEffect(() => {
@@ -206,6 +289,28 @@ export function ShipTrackModal({ onClose }: { onClose: () => void }) {
             ? 'SST: no data (land)'
             : `SST ${reading.sst.toFixed(2)} °C`
 
+  const sssText =
+    sssReading === null
+      ? ''
+      : sssReading.status === 'loading'
+        ? 'SSS …'
+        : sssReading.status === 'error'
+          ? 'SSS unavailable'
+          : sssReading.bin === null
+            ? 'SSS: no data'
+            : `SSS ${formatSssBin(sssReading.bin)} PSU`
+
+  const sssCaption =
+    sssDate === null
+      ? ''
+      : sssDate.status === 'loading'
+        ? 'Loading salinity…'
+        : sssDate.status === 'error'
+          ? 'Salinity unavailable'
+          : sssDate.status === 'none'
+            ? `No salinity data on or within 30 days before ${trackDate}`
+            : `8-day mean ending ${sssDate.date}`
+
   const message = !file
     ? 'Select a file to see its track.'
     : error
@@ -231,10 +336,20 @@ export function ShipTrackModal({ onClose }: { onClose: () => void }) {
           className={`files-toolbar-btn${sstOn ? ' active' : ''}`}
           aria-pressed={sstOn}
           disabled={!trackDate}
-          onClick={() => setSstOn((v) => !v)}
+          onClick={() => setOverlay((o) => (o === 'sst' ? 'none' : 'sst'))}
           title="Sea surface temperature (NOAA OISST v2.1) for the file's date"
         >
           SST
+        </button>
+        <button
+          type="button"
+          className={`files-toolbar-btn${sssOn ? ' active' : ''}`}
+          aria-pressed={sssOn}
+          disabled={!trackDate}
+          onClick={() => setOverlay((o) => (o === 'sss' ? 'none' : 'sss'))}
+          title="Sea surface salinity (NASA SMAP 8-day mean, via NASA GIBS/Worldview) for the file's date"
+        >
+          Salinity
         </button>
         <button
           type="button"
@@ -242,7 +357,7 @@ export function ShipTrackModal({ onClose }: { onClose: () => void }) {
           aria-pressed={valuesOn}
           disabled={!trackDate}
           onClick={toggleValues}
-          title="Show the position and SST under the mouse pointer"
+          title="Show the position, SST and (with the Salinity overlay) salinity under the mouse pointer"
         >
           Values
         </button>
@@ -256,7 +371,15 @@ export function ShipTrackModal({ onClose }: { onClose: () => void }) {
           </div>
         )}
         {sstOn && trackDate && (
-          <img className="ship-track-legend" src={sstLegendUrl(trackDate)} alt="SST legend" />
+          <div className="ship-track-legend">
+            <SstLegend />
+          </div>
+        )}
+        {sssOn && sssDate && (
+          <div className="ship-track-legend" data-testid="sss-legend">
+            {sssDate.status === 'ok' && <img src={SSS_LEGEND_URL} alt="Salinity legend" />}
+            <span className="ship-track-legend-caption">{sssCaption}</span>
+          </div>
         )}
         {valuesOn && (
           <div className="ship-track-values" data-testid="ship-track-values">
@@ -264,6 +387,7 @@ export function ShipTrackModal({ onClose }: { onClose: () => void }) {
               <>
                 <span>{formatLatLon(pointer.lat, pointer.lon)}</span>
                 <span className="ship-track-values-sst">{sstText}</span>
+                {sssText && <span className="ship-track-values-sst">{sssText}</span>}
               </>
             ) : (
               <span>Move the pointer over the map</span>

@@ -40,7 +40,7 @@ function Consumer() {
       <button onClick={() => closeSession()}>close</button>
       <button
         onClick={() =>
-          setFlagSelection({ varName: 'temperature', startIdx: 4, endIdx: 14, rangeLabel: '04:00–14:00' })
+          setFlagSelection({ varName: 'temperature', indices: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14], rangeLabel: '04:00–14:00' })
         }
       >
         select
@@ -71,7 +71,7 @@ function FlagSetterSibling() {
   return (
     <button
       onClick={() =>
-        setFlagSelection({ varName: 'humidity', startIdx: 1, endIdx: 2, rangeLabel: '01:00–02:00' })
+        setFlagSelection({ varName: 'humidity', indices: [1, 2], rangeLabel: '01:00–02:00' })
       }
     >
       set-flag-sibling

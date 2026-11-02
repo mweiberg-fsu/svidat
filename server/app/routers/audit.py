@@ -147,11 +147,17 @@ def revert(
             old_value_ref=entry.old_value_ref,
         )
     else:  # flag_edit
-        start_idx, end_idx = json.loads(entry.indices_json)
+        stored = json.loads(entry.indices_json)
+        # {"indices": [...]}; rows written before free-box flagging hold a
+        # half-open [start, end) range instead.
+        if isinstance(stored, dict):
+            indices = stored["indices"]
+        else:
+            indices = list(range(stored[0], stored[1]))
         try:
             old_values = np.load(entry.old_value_ref)
             with file_write_lock(f"nc:{entry.filename}"):
-                netcdf_ops.restore_flags(path, entry.var_name, start_idx, end_idx, old_values)
+                netcdf_ops.restore_flags(path, entry.var_name, indices, old_values)
         except (OSError, ValueError, KeyError, IndexError) as exc:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST, detail=f"could not revert: {exc}"

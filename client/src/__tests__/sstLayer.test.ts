@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mercatorRowLat, sstGetMapUrl, sstLegendUrl, sstTime, tileLatBounds } from '../sstLayer'
+import { mercatorRowLat, sstGetMapUrl, sstTime, tileLatBounds } from '../sstLayer'
 
 describe('sstLayer', () => {
   it('tileLatBounds gives the Web Mercator latitude span of a tile row', () => {
@@ -40,12 +40,5 @@ describe('sstLayer', () => {
     expect(p.get('format')).toBe('image/png')
     expect(p.get('transparent')).toBe('true')
     expect(p.get('time')).toBe('2019-03-01T12:00:00Z')
-  })
-
-  it('sstLegendUrl asks ERDDAP for a legend-only image for that day', () => {
-    const url = sstLegendUrl('2019-03-01')
-    expect(url).toContain('/erddap/griddap/ncdcOisst21Agg_LonPM180.png?')
-    expect(decodeURIComponent(url)).toContain('sst[(2019-03-01T12:00:00Z)][(0.0)]')
-    expect(url).toContain('.legend=Only')
   })
 })

@@ -179,9 +179,21 @@ def _flag_column(ds, var_name: str) -> int:
     return qcindex - 1
 
 
-def write_flags(
-    path, var_name: str, start_idx: int, end_idx: int, flag_code: str
-) -> np.ndarray:
+def _flag_indices(indices, n_obs: int) -> np.ndarray:
+    idx = np.unique(np.asarray(indices, dtype=int))
+    if idx.size == 0:
+        raise ValueError("no time indices to flag")
+    if idx[0] < 0 or idx[-1] >= n_obs:
+        raise IndexError(f"time index out of range [0, {n_obs})")
+    return idx
+
+
+def write_flags(path, var_name: str, indices, flag_code: str) -> np.ndarray:
+    """Sets `flag_code` at each time index in `indices` (any order, need not be
+    contiguous) for `var_name`'s flag column; returns the previous codes in
+    ascending index order. The touched span is read/written as one block
+    rather than via netCDF4 integer-sequence indexing, which is slow for
+    scattered indices."""
     if len(flag_code) != 1:
         raise ValueError(f"flag_code must be a single character: {flag_code!r}")
     with netCDF4.Dataset(path, "r+") as ds:
@@ -197,21 +209,27 @@ def write_flags(
                 f"invalid flag_code {flag_code!r}, must be one of {sorted(valid_codes)}"
             )
 
-        old_values = np.array(flag_var[start_idx:end_idx, col])
-        flag_var[start_idx:end_idx, col] = np.array(
-            [flag_code.encode()] * (end_idx - start_idx), dtype="S1"
-        )
+        idx = _flag_indices(indices, flag_var.shape[0])
+        lo, hi = int(idx[0]), int(idx[-1]) + 1
+        span = np.array(flag_var[lo:hi, col])
+        old_values = span[idx - lo].copy()
+        span[idx - lo] = flag_code.encode()
+        flag_var[lo:hi, col] = span
     return old_values
 
 
-def restore_flags(
-    path, var_name: str, start_idx: int, end_idx: int, old_values: np.ndarray
-) -> None:
+def restore_flags(path, var_name: str, indices, old_values: np.ndarray) -> None:
     with netCDF4.Dataset(path, "r+") as ds:
         ds.set_auto_mask(False)
         col = _flag_column(ds, var_name)
         flag_var = ds.variables["flag"]
-        flag_var[start_idx:end_idx, col] = old_values
+        idx = _flag_indices(indices, flag_var.shape[0])
+        if len(old_values) != idx.size:
+            raise ValueError("stored flag values do not match the edited indices")
+        lo, hi = int(idx[0]), int(idx[-1]) + 1
+        span = np.array(flag_var[lo:hi, col])
+        span[idx - lo] = old_values
+        flag_var[lo:hi, col] = span
 
 
 def get_track(path) -> Dict[str, np.ndarray]:

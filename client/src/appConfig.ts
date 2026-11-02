@@ -49,7 +49,7 @@ export const DEFAULT_DOCUMENTATION: DocTab[] = [
       '## Plot gestures',
       '',
       '- Click a row — set that row as the active variable.',
-      '- {{flag_select}} on a row (admin/qca only) — select a point range and open the flag toolbar.',
+      '- {{flag_select}} on a row (admin/qca only) — draw a box around the points to flag (only points inside it are selected) and open the flags panel.',
       '- {{x_zoom}} — zoom the X axis.',
       '- {{y_zoom}} — zoom the Y axis.',
       '- {{box_zoom}} — box-zoom the X axis and that row\'s Y axis together.',

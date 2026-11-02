@@ -18,12 +18,11 @@ type FlagJobResult =
 async function runFlagJob(
   file: string,
   varName: string,
-  startIdx: number,
-  endIdx: number,
+  indices: number[],
   code: string
 ): Promise<FlagJobResult> {
   try {
-    const result = await applyFlag(file, varName, startIdx, endIdx, code)
+    const result = await applyFlag(file, varName, indices, code)
     const start = Date.now()
     while (Date.now() - start < FLAG_POLL_TIMEOUT_MS) {
       await new Promise((r) => setTimeout(r, FLAG_POLL_INTERVAL_MS))
@@ -71,15 +70,15 @@ export function FlagsPanel() {
     if (!flagSelection) return
     setSubmitting(true)
     setError(null)
-    // Bulk mode fans the same drag range out to every explicitly selected
-    // panel; falls back to just the dragged-on variable if none are
-    // selected.
+    // Bulk mode fans the same time indices out to every explicitly
+    // selected panel; falls back to just the dragged-on variable if none
+    // are selected.
     const targets =
       bulkEdit && selectedVariables.length > 0 ? selectedVariables : [flagSelection.varName]
     try {
       const results = await Promise.all(
         targets.map((varName) =>
-          runFlagJob(file, varName, flagSelection.startIdx, flagSelection.endIdx, code)
+          runFlagJob(file, varName, flagSelection.indices, code)
         )
       )
       if (!isMountedRef.current) return
@@ -106,13 +105,13 @@ export function FlagsPanel() {
   }
 
   const disabled = !editable || !flagSelection || submitting
-  const pointCount = flagSelection ? flagSelection.endIdx - flagSelection.startIdx + 1 : 0
+  const pointCount = flagSelection ? flagSelection.indices.length : 0
 
   return (
     <div className="sidebar-flags-panel">
       <p className="sidebar-flags-panel-status">
         {flagSelection
-          ? `${flagSelection.rangeLabel} — ${pointCount} points selected`
+          ? `${flagSelection.rangeLabel} — ${pointCount} ${pointCount === 1 ? 'point' : 'points'} selected`
           : editable
             ? 'Select points on the plot to flag them'
             : 'Drag on the plot to start editing'}

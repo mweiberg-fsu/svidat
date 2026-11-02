@@ -309,6 +309,46 @@ def test_revert_flag_edit_restores_values(client, auth_header, synthetic_nc_with
     assert flag_entry["reverted"] is True
 
 
+def test_revert_single_point_flag_edit(client, auth_header, synthetic_nc_with_qc):
+    import time
+
+    synthetic_nc_with_qc("shipx_2026-08-31c")
+    headers = auth_header("audituser13c", is_qca=True)
+    client.post("/session/shipx_2026-08-31c/open", params={"source": "raw"}, headers=headers)
+    flag_resp = client.post(
+        "/edit/flag",
+        json={
+            "filename": "shipx_2026-08-31c",
+            "var_name": "temperature",
+            "indices": [3],
+            "flag_code": "K",
+        },
+        headers=headers,
+    )
+    job_id = flag_resp.json()["job_id"]
+
+    deadline = time.time() + 2
+    audit_id = None
+    while time.time() < deadline:
+        body = client.get(f"/edit/jobs/{job_id}", headers=headers).json()
+        if body["status"] == "done":
+            audit_id = body["result"]["audit_id"]
+            break
+        time.sleep(0.02)
+    assert audit_id is not None
+
+    data = client.get(
+        "/files/shipx_2026-08-31c/data", params={"vars": "temperature"}, headers=headers
+    )
+    assert data.json()["variables"]["temperature"]["flags"] == ["Z", "Z", "Z", "K", "Z"]
+
+    assert client.post(f"/audit/{audit_id}/revert", headers=headers).status_code == 200
+    data = client.get(
+        "/files/shipx_2026-08-31c/data", params={"vars": "temperature"}, headers=headers
+    )
+    assert data.json()["variables"]["temperature"]["flags"] == ["Z", "Z", "Z", "Z", "Z"]
+
+
 def test_revert_flag_edit_already_reverted_returns_409(client, auth_header, synthetic_nc_with_qc):
     import time
 

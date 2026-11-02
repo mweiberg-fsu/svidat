@@ -1,5 +1,7 @@
 # svidat: backend + built frontend in one image; only port 4173 is exposed
 # (the frontend proxies /api to the backend inside the container).
+# docker-compose.yml instead runs them as separate containers, built from
+# server/Dockerfile and client/Dockerfile.
 #
 #   docker build -t svidat .
 #   docker run -d --name svidat -p 4173:4173 -v svidat-data:/data \

@@ -73,7 +73,33 @@ vi.mock('../sstLayer', () => ({
     }
     return layer
   },
-  sstLegendUrl: (date: string) => `legend:${date}`,
+}))
+
+const sss = vi.hoisted(() => ({
+  created: [] as string[],
+  removed: 0,
+  resolve: (async (date: string) => date) as (date: string) => Promise<string | null>,
+  at: (async () => ({ min: 35, max: 35.04 })) as (
+    date: string,
+    lat: number,
+    lon: number
+  ) => Promise<{ min: number; max: number } | null>,
+}))
+vi.mock('../sssLayer', () => ({
+  SSS_LEGEND_URL: 'sss-legend.svg',
+  createSssLayer: (date: string) => {
+    sss.created.push(date)
+    const layer = {
+      addTo: () => layer,
+      remove: () => {
+        sss.removed++
+      },
+    }
+    return layer
+  },
+  resolveSssDate: (date: string) => sss.resolve(date),
+  sssAt: (date: string, lat: number, lon: number) => sss.at(date, lat, lon),
+  formatSssBin: (bin: { min: number; max: number }) => ((bin.min + bin.max) / 2).toFixed(2),
 }))
 
 import { ShipTrackModal } from '../components/ShipTrackModal'
@@ -120,6 +146,18 @@ describe('ShipTrackModal', () => {
     sst.created.length = 0
     sst.added = 0
     sst.removed = 0
+    sss.created.length = 0
+    sss.removed = 0
+    sss.resolve = async (date) => date
+    sss.at = async () => ({ min: 35, max: 35.04 })
+  })
+
+  it('opens at 960x800, shrunk to fit a smaller window', () => {
+    const { container } = renderModal(null)
+    const panel = container.querySelector('.ship-track-modal') as HTMLElement
+    // jsdom's window is 1024x768: width fits, height is capped at 768 - 32.
+    expect(panel.style.width).toBe('960px')
+    expect(panel.style.height).toBe('736px')
   })
 
   it('asks for a file when none is selected', () => {
@@ -204,11 +242,11 @@ describe('ShipTrackModal', () => {
     expect(sstBtn).toHaveAttribute('aria-pressed', 'true')
     expect(sst.created).toEqual(['2019-03-01'])
     expect(sst.added).toBe(1)
-    expect(screen.getByAltText('SST legend')).toHaveAttribute('src', 'legend:2019-03-01')
+    expect(screen.getByRole('img', { name: 'SST legend' })).toHaveTextContent('Sea Surface Temperature')
 
     act(() => sstBtn.click())
     expect(sst.removed).toBe(1)
-    expect(screen.queryByAltText('SST legend')).not.toBeInTheDocument()
+    expect(screen.queryByRole('img', { name: 'SST legend' })).not.toBeInTheDocument()
   })
 
   it('switching files with SST on redraws it for the new file date', async () => {
@@ -223,7 +261,111 @@ describe('ShipTrackModal', () => {
     act(() => screen.getByText('set file 2').click())
     await waitFor(() => expect(sst.created).toEqual(['2019-03-01', '2020-07-04']))
     expect(sst.removed).toBeGreaterThanOrEqual(1)
-    expect(screen.getByAltText('SST legend')).toHaveAttribute('src', 'legend:2020-07-04')
+  })
+
+  describe('Salinity overlay', () => {
+    const TRACK = {
+      time: ['2026-07-30T14:19:00', '2026-07-30T15:19:00'],
+      variables: {
+        lat: { values: [27.6, 27.7], flags: null },
+        lon: { values: [275.7, 275.8], flags: null },
+      },
+    }
+
+    async function openModal() {
+      vi.spyOn(apiClient, 'getVariableData').mockResolvedValue(TRACK)
+      renderModal('FILE_A')
+      const btn = screen.getByRole('button', { name: 'Salinity' })
+      await waitFor(() => expect(btn).toBeEnabled())
+      return btn
+    }
+
+    it('adds the SMAP layer for the file date with legend and caption; toggling off removes it', async () => {
+      const btn = await openModal()
+      act(() => btn.click())
+      expect(btn).toHaveAttribute('aria-pressed', 'true')
+      await waitFor(() => expect(sss.created).toEqual(['2026-07-30']))
+      expect(screen.getByAltText('Salinity legend')).toHaveAttribute('src', 'sss-legend.svg')
+      expect(screen.getByTestId('sss-legend')).toHaveTextContent('8-day mean ending 2026-07-30')
+
+      act(() => btn.click())
+      expect(sss.removed).toBe(1)
+      expect(screen.queryByTestId('sss-legend')).not.toBeInTheDocument()
+    })
+
+    it('shows the latest earlier map when the file date has none', async () => {
+      sss.resolve = async () => '2026-07-25'
+      const btn = await openModal()
+      act(() => btn.click())
+      await waitFor(() => expect(sss.created).toEqual(['2026-07-25']))
+      expect(screen.getByTestId('sss-legend')).toHaveTextContent('8-day mean ending 2026-07-25')
+    })
+
+    it('says so when there is no salinity data near the file date', async () => {
+      sss.resolve = async () => null
+      const btn = await openModal()
+      act(() => btn.click())
+      await waitFor(() =>
+        expect(screen.getByTestId('sss-legend')).toHaveTextContent(
+          'No salinity data on or within 30 days before 2026-07-30'
+        )
+      )
+      expect(sss.created).toEqual([])
+      expect(screen.queryByAltText('Salinity legend')).not.toBeInTheDocument()
+    })
+
+    it('is exclusive with SST', async () => {
+      const sssBtn = await openModal()
+      const sstBtn = screen.getByRole('button', { name: 'SST' })
+      act(() => sstBtn.click())
+      act(() => sssBtn.click())
+      expect(sstBtn).toHaveAttribute('aria-pressed', 'false')
+      expect(sssBtn).toHaveAttribute('aria-pressed', 'true')
+      expect(sst.removed).toBe(1)
+      expect(screen.queryByRole('img', { name: 'SST legend' })).not.toBeInTheDocument()
+      await waitFor(() => expect(sss.created).toHaveLength(1))
+      act(() => sstBtn.click())
+      expect(sssBtn).toHaveAttribute('aria-pressed', 'false')
+      expect(sss.removed).toBe(1)
+    })
+
+    it('adds the salinity under the pointer to the Values readout', async () => {
+      vi.spyOn(apiClient, 'getSstPoint').mockResolvedValue({ date: '2026-07-30', lat: 1, lon: 1, sst: 29 })
+      const at = vi.fn(async () => ({ min: 36.12, max: 36.16 }))
+      sss.at = at
+      const btn = await openModal()
+      act(() => btn.click())
+      await waitFor(() => expect(sss.created).toHaveLength(1))
+      act(() => screen.getByRole('button', { name: 'Values' }).click())
+      act(() => drawn.handlers.mousemove({ containerPoint: { x: 9999, y: 9999 }, latlng: { lat: 27.6, lng: -84.3 } }))
+      const readout = screen.getByTestId('ship-track-values')
+      expect(readout).toHaveTextContent('SSS …')
+      await waitFor(() => expect(readout).toHaveTextContent('SSS 36.14 PSU'))
+      expect(at).toHaveBeenCalledWith('2026-07-30', 27.6, -84.3)
+    })
+
+    it('reports no data and lookup errors in the readout', async () => {
+      vi.spyOn(apiClient, 'getSstPoint').mockResolvedValue({ date: '2026-07-30', lat: 1, lon: 1, sst: 29 })
+      sss.at = vi.fn().mockResolvedValueOnce(null).mockRejectedValueOnce(new Error('boom'))
+      const btn = await openModal()
+      act(() => btn.click())
+      await waitFor(() => expect(sss.created).toHaveLength(1))
+      act(() => screen.getByRole('button', { name: 'Values' }).click())
+      const readout = screen.getByTestId('ship-track-values')
+      act(() => drawn.handlers.mousemove({ containerPoint: { x: 9999, y: 9999 }, latlng: { lat: 40, lng: -100 } }))
+      await waitFor(() => expect(readout).toHaveTextContent('SSS: no data'))
+      act(() => drawn.handlers.mousemove({ containerPoint: { x: 9999, y: 9999 }, latlng: { lat: 5, lng: 5 } }))
+      await waitFor(() => expect(readout).toHaveTextContent('SSS unavailable'))
+    })
+
+    it('leaves salinity out of the readout while the overlay is off', async () => {
+      vi.spyOn(apiClient, 'getSstPoint').mockResolvedValue({ date: '2026-07-30', lat: 1, lon: 1, sst: 29 })
+      await openModal()
+      act(() => screen.getByRole('button', { name: 'Values' }).click())
+      act(() => drawn.handlers.mousemove({ containerPoint: { x: 9999, y: 9999 }, latlng: { lat: 27.6, lng: -84.3 } }))
+      await waitFor(() => expect(screen.getByTestId('ship-track-values')).toHaveTextContent('SST 29.00 °C'))
+      expect(screen.getByTestId('ship-track-values')).not.toHaveTextContent('SSS')
+    })
   })
 
   describe('Values readout', () => {

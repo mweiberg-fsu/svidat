@@ -1790,6 +1790,8 @@ code {
   position: relative;
   flex: 1;
   min-height: 0;
+  /* The legend sizes itself off the map's width (cqw). */
+  container-type: inline-size;
 }
 
 .ship-track-map {
@@ -1892,10 +1894,30 @@ code {
      attribution runs along the bottom. */
   top: 8px;
   right: 8px;
-  width: 180px;
+  /* Scales with the panel: 180px at the old 480px-wide panel. */
+  width: 37.5cqw;
   z-index: 800; /* above Leaflet panes, below controls */
-  border-radius: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   pointer-events: none;
+}
+
+.ship-track-legend img,
+.ship-track-legend svg {
+  display: block;
+  width: 100%;
+  border-radius: 4px;
+}
+
+.ship-track-legend-caption {
+  align-self: flex-end;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: clamp(11px, 2.3cqw, 18px);
+  background: var(--bg);
+  color: var(--text);
+  opacity: 0.9;
 }
 
 /* Leaflet's corner controls (attribution) sit at z-index 1000, so the resize

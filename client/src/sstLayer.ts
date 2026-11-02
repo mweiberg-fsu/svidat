@@ -58,11 +58,6 @@ export function sstGetMapUrl(
   return `${WMS_URL}?${params.toString()}`
 }
 
-export function sstLegendUrl(date: string): string {
-  const query = `sst[(${sstTime(date)})][(0.0)][(-89.875):(89.875)][(-179.875):(179.875)]`
-  return `${ERDDAP}/griddap/${DATASET}.png?${encodeURIComponent(query)}&.legend=Only`
-}
-
 // A GridLayer drawing the day's SST. Each 256px Mercator tile fetches the
 // EPSG:4326 image covering the same lat/lon box, then copies it one output
 // row at a time from the source row at that row's latitude (the lat->y

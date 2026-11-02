@@ -5,6 +5,7 @@
 server/data/
 
 # Backend runtime state
+/.env
 server/.env
 server/svidat.db
 server/.venv/

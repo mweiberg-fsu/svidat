@@ -13,12 +13,25 @@ expose or forward**.
 ### Docker / Podman
 
 ```bash
+cp .env.example .env && chmod 600 .env   # set SVIDAT_ADMIN_PASSWORD, port, etc.
+docker compose up -d --build
+```
+
+All settings (port, admin bootstrap, `SECRET_KEY`, SSO client IDs, any backend
+setting from `server/app/config.py`) live in `.env`; see `.env.example`.
+
+Compose runs two containers: `backend` (uvicorn, built from `server/Dockerfile`,
+not published) and `frontend` (nginx serving the built app and proxying `/api`
+to the backend, built from `client/Dockerfile`, published on `SVIDAT_PORT`,
+default 8080). The SQLite database lives in the `svidat-data` volume.
+
+Single-container alternative (backend + `vite preview` via `start.sh`):
+
+```bash
 docker build -t svidat .
 docker run -d --name svidat -p 4173:4173 -v svidat-data:/data \
   -e SVIDAT_ADMIN_USER=admin -e SVIDAT_ADMIN_PASSWORD='change-me' svidat
 ```
-
-or `SVIDAT_ADMIN_PASSWORD='change-me' docker compose up -d --build`.
 
 - `/data` holds the database, netCDF storage tree and generated secret key; keep it on a volume.
 - The admin is only created if missing, so the password env var only matters on first start.
@@ -39,6 +52,7 @@ SKIP_BUILD=1 ./start.sh
 - SSH tunnel: `ssh -L 4173:localhost:4173 user@server`, then open http://localhost:4173.
 - By hostname (http://server:4173): set `VITE_ALLOWED_HOSTS=server.example.edu`
   (or `all`; the Docker image defaults to `all`) — vite rejects unknown Host headers otherwise.
+  Not needed with compose (nginx accepts any Host).
 
 `start.sh` env vars: `FRONTEND_PORT` (4173), `FRONTEND_HOST` (0.0.0.0),
 `BACKEND_PORT` (8000), `BACKEND_HOST` (127.0.0.1), `SKIP_BUILD`,

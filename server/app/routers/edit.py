@@ -134,17 +134,14 @@ def flag_edit(
         )
 
     user_id = user.id
+    indices = payload.time_indices()
 
     def run_flag_edit() -> dict:
         job_db = SessionLocal()
         try:
             with file_write_lock(f"nc:{payload.filename}"):
                 old_values = netcdf_ops.write_flags(
-                    path,
-                    payload.var_name,
-                    payload.start_time_idx,
-                    payload.end_time_idx,
-                    payload.flag_code,
+                    path, payload.var_name, indices, payload.flag_code
                 )
 
                 log = AuditLog(
@@ -152,7 +149,7 @@ def flag_edit(
                     user_id=user_id,
                     action="flag_edit",
                     var_name=payload.var_name,
-                    indices_json=json.dumps([payload.start_time_idx, payload.end_time_idx]),
+                    indices_json=json.dumps({"indices": indices}),
                     new_value_str=payload.flag_code,
                 )
                 job_db.add(log)

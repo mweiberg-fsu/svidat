@@ -282,7 +282,7 @@ describe('Sidebar', () => {
       return (
         <button
           onClick={() =>
-            setFlagSelection({ varName: 'temperature', startIdx: 4, endIdx: 14, rangeLabel: 'x' })
+            setFlagSelection({ varName: 'temperature', indices: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14], rangeLabel: 'x' })
           }
         >
           resolve selection
@@ -329,7 +329,7 @@ describe('Sidebar', () => {
           <button onClick={() => openSession()}>open session</button>
           <button
             onClick={() =>
-              setFlagSelection({ varName: 'temperature', startIdx: 4, endIdx: 14, rangeLabel: 'x' })
+              setFlagSelection({ varName: 'temperature', indices: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14], rangeLabel: 'x' })
             }
           >
             resolve selection

@@ -293,8 +293,7 @@ export const getClimatology = (
 export const applyFlag = (
   filename: string,
   varName: string,
-  startTimeIdx: number,
-  endTimeIdx: number,
+  indices: number[],
   flagCode: string
 ) =>
   apiFetch('/edit/flag', {
@@ -302,8 +301,7 @@ export const applyFlag = (
     body: JSON.stringify({
       filename,
       var_name: varName,
-      start_time_idx: startTimeIdx,
-      end_time_idx: endTimeIdx,
+      indices,
       flag_code: flagCode,
     }),
   }).then((r) => r.json())

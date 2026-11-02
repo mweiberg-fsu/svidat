@@ -1,23 +1,41 @@
-# docker compose up -d --build   (or podman compose)
-# Set SVIDAT_ADMIN_PASSWORD in the shell or a .env next to this file.
+# Settings live in .env (see .env.example):
+#   cp .env.example .env && chmod 600 .env    # then edit
+#   docker compose up -d --build              # (or podman compose)
+#
+# Two containers: backend (uvicorn, internal only) and frontend (nginx serving
+# the built React app and proxying /api to the backend). The SQLite database
+# is a file in the svidat-data volume, owned by the backend.
 services:
-  svidat:
-    build:
-      context: .
-      args:
-        VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
-        VITE_MS_CLIENT_ID: ${VITE_MS_CLIENT_ID:-}
-    ports:
-      - "${SVIDAT_PORT:-4173}:4173"
+  backend:
+    build: ./server
+    env_file: .env
     volumes:
       - svidat-data:/data
       # Mount ship data read-only and add it under Admin → Paths, e.g.:
       # - /net/samos/data:/samos:ro
     environment:
-      SVIDAT_ADMIN_USER: ${SVIDAT_ADMIN_USER:-admin}
-      SVIDAT_ADMIN_PASSWORD: ${SVIDAT_ADMIN_PASSWORD:?set SVIDAT_ADMIN_PASSWORD}
-      GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID:-}
-      MICROSOFT_CLIENT_ID: ${VITE_MS_CLIENT_ID:-}
+      SVIDAT_ADMIN_PASSWORD: ${SVIDAT_ADMIN_PASSWORD:?set SVIDAT_ADMIN_PASSWORD in .env}
+      GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID}
+      MICROSOFT_CLIENT_ID: ${VITE_MS_CLIENT_ID}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/docs')"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 10s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./client
+      args:
+        VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID}
+        VITE_MS_CLIENT_ID: ${VITE_MS_CLIENT_ID}
+    ports:
+      - "${SVIDAT_PORT:?set SVIDAT_PORT in .env}:8080"
+    depends_on:
+      backend:
+        condition: service_healthy
     restart: unless-stopped
 
 volumes:

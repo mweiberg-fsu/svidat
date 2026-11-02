@@ -23,7 +23,7 @@ function Probe() {
       <button onClick={() => openSession()}>open session</button>
       <button
         onClick={() =>
-          setFlagSelection({ varName: 'T', startIdx: 1, endIdx: 3, rangeLabel: '01:00–03:00' })
+          setFlagSelection({ varName: 'T', indices: [1, 2, 3], rangeLabel: '01:00–03:00' })
         }
       >
         highlight

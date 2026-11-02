@@ -85,11 +85,34 @@ class BulkEditRequest(BaseModel):
 
 
 class FlagEditRequest(BaseModel):
+    """Either `indices` (explicit time indices — what a free-drawn flag box
+    selects, possibly a single point or a non-contiguous set) or the legacy
+    half-open range [start_time_idx, end_time_idx)."""
+
     filename: str
     var_name: str
-    start_time_idx: int
-    end_time_idx: int
     flag_code: str
+    indices: Optional[List[int]] = None
+    start_time_idx: Optional[int] = None
+    end_time_idx: Optional[int] = None
+
+    @model_validator(mode="after")
+    def check_target(self) -> "FlagEditRequest":
+        if self.indices is not None:
+            if not self.indices:
+                raise ValueError("indices must not be empty")
+            if any(i < 0 for i in self.indices):
+                raise ValueError("indices must be non-negative")
+        elif self.start_time_idx is None or self.end_time_idx is None:
+            raise ValueError("give either indices or start_time_idx/end_time_idx")
+        elif not 0 <= self.start_time_idx < self.end_time_idx:
+            raise ValueError("need 0 <= start_time_idx < end_time_idx")
+        return self
+
+    def time_indices(self) -> List[int]:
+        if self.indices is not None:
+            return sorted(set(self.indices))
+        return list(range(self.start_time_idx, self.end_time_idx))
 
 
 class SaveRequest(BaseModel):

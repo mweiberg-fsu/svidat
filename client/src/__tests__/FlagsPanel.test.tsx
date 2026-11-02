@@ -37,8 +37,7 @@ function Driver() {
         onClick={() =>
           setFlagSelection({
             varName: 'temperature',
-            startIdx: 4,
-            endIdx: 14,
+            indices: [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14],
             rangeLabel: '04:00:00–14:00:00',
           })
         }
@@ -144,7 +143,7 @@ describe('FlagsPanel', () => {
     fireEvent.click(screen.getByText('K-Suspect/Caution'))
 
     await waitFor(() =>
-      expect(applyFlagSpy).toHaveBeenCalledWith('FILE_A', 'temperature', 4, 14, 'K')
+      expect(applyFlagSpy).toHaveBeenCalledWith('FILE_A', 'temperature', [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14], 'K')
     )
     // The selection/highlight stays active after a successful apply — only
     // an explicit "Clear selection" click or a file/variable change resets
@@ -204,7 +203,7 @@ describe('FlagsPanel', () => {
     fireEvent.click(screen.getByText('K-Suspect/Caution'))
 
     await waitFor(() => expect(applyFlagSpy).toHaveBeenCalledTimes(1))
-    expect(applyFlagSpy).toHaveBeenCalledWith('FILE_A', 'temperature', 4, 14, 'K')
+    expect(applyFlagSpy).toHaveBeenCalledWith('FILE_A', 'temperature', [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14], 'K')
   })
 
   it('with bulk edit on, applying a code calls applyFlag once per selected variable with the same range', async () => {
@@ -223,9 +222,9 @@ describe('FlagsPanel', () => {
     fireEvent.click(screen.getByText('K-Suspect/Caution'))
 
     await waitFor(() => expect(applyFlagSpy).toHaveBeenCalledTimes(3))
-    expect(applyFlagSpy).toHaveBeenCalledWith('FILE_A', 'temperature', 4, 14, 'K')
-    expect(applyFlagSpy).toHaveBeenCalledWith('FILE_A', 'humidity', 4, 14, 'K')
-    expect(applyFlagSpy).toHaveBeenCalledWith('FILE_A', 'salinity', 4, 14, 'K')
+    expect(applyFlagSpy).toHaveBeenCalledWith('FILE_A', 'temperature', [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14], 'K')
+    expect(applyFlagSpy).toHaveBeenCalledWith('FILE_A', 'humidity', [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14], 'K')
+    expect(applyFlagSpy).toHaveBeenCalledWith('FILE_A', 'salinity', [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14], 'K')
     // notifyFlagged fires once for the whole batch, not once per variable.
     await waitFor(() => expect(screen.getByTestId('flag-applied-at')).toHaveTextContent('1'))
   })
@@ -243,7 +242,7 @@ describe('FlagsPanel', () => {
     fireEvent.click(screen.getByText('K-Suspect/Caution'))
 
     await waitFor(() => expect(applyFlagSpy).toHaveBeenCalledTimes(1))
-    expect(applyFlagSpy).toHaveBeenCalledWith('FILE_A', 'temperature', 4, 14, 'K')
+    expect(applyFlagSpy).toHaveBeenCalledWith('FILE_A', 'temperature', [4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14], 'K')
   })
 
   it('with bulk edit on, a partial failure reports the failing variables and still notifies for the successes', async () => {

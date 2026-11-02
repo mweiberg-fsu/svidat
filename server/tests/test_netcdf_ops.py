@@ -107,7 +107,7 @@ def test_get_variable_data_unknown_variable_raises_keyerror(synthetic_nc_with_qc
 
 def test_write_flags_sets_range_and_returns_old(synthetic_nc_with_qc):
     path = synthetic_nc_with_qc()
-    old = netcdf_ops.write_flags(path, "temperature", 1, 3, "K")
+    old = netcdf_ops.write_flags(path, "temperature", [1, 2], "K")
     assert [v.decode() if isinstance(v, bytes) else v for v in old] == ["Z", "Z"]
 
     result = netcdf_ops.get_variable_data(path, ["temperature", "salinity"])
@@ -119,13 +119,31 @@ def test_write_flags_sets_range_and_returns_old(synthetic_nc_with_qc):
 def test_write_flags_rejects_unknown_code(synthetic_nc_with_qc):
     path = synthetic_nc_with_qc()
     with pytest.raises(ValueError):
-        netcdf_ops.write_flags(path, "temperature", 0, 1, "Q")
+        netcdf_ops.write_flags(path, "temperature", [0], "Q")
 
 
 def test_write_flags_rejects_var_without_qcindex(synthetic_nc_with_qc):
     path = synthetic_nc_with_qc()
     with pytest.raises(ValueError):
-        netcdf_ops.write_flags(path, "flag", 0, 1, "K")
+        netcdf_ops.write_flags(path, "flag", [0], "K")
+
+
+def test_write_flags_single_and_scattered_indices(synthetic_nc_with_qc):
+    path = synthetic_nc_with_qc()
+    old = netcdf_ops.write_flags(path, "temperature", [3, 0], "K")
+    assert [v.decode() if isinstance(v, bytes) else v for v in old] == ["Z", "Z"]
+    result = netcdf_ops.get_variable_data(path, ["temperature"])
+    assert result["variables"]["temperature"]["flags"] == ["K", "Z", "Z", "K", "Z"]
+
+    netcdf_ops.restore_flags(path, "temperature", [0, 3], old)
+    result = netcdf_ops.get_variable_data(path, ["temperature"])
+    assert result["variables"]["temperature"]["flags"] == ["Z", "Z", "Z", "Z", "Z"]
+
+
+def test_write_flags_rejects_out_of_range_index(synthetic_nc_with_qc):
+    path = synthetic_nc_with_qc()
+    with pytest.raises(IndexError):
+        netcdf_ops.write_flags(path, "temperature", [5], "K")
 
 
 def test_get_variable_data_variable_without_qcindex_has_no_flags(synthetic_nc_with_qc):
@@ -150,13 +168,13 @@ def test_write_flags_rejects_qcindex_below_one(synthetic_nc_with_qc):
         ds.variables["temperature"].qcindex = 0
 
     with pytest.raises(ValueError):
-        netcdf_ops.write_flags(path, "temperature", 0, 1, "K")
+        netcdf_ops.write_flags(path, "temperature", [0], "K")
 
 
 def test_restore_flags_restores_previous_values(synthetic_nc_with_qc):
     path = synthetic_nc_with_qc()
-    old = netcdf_ops.write_flags(path, "temperature", 1, 3, "K")
-    netcdf_ops.restore_flags(path, "temperature", 1, 3, old)
+    old = netcdf_ops.write_flags(path, "temperature", [1, 2], "K")
+    netcdf_ops.restore_flags(path, "temperature", [1, 2], old)
 
     result = netcdf_ops.get_variable_data(path, ["temperature"])
     assert result["variables"]["temperature"]["flags"] == ["Z", "Z", "Z", "Z", "Z"]

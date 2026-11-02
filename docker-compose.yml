@@ -2,19 +2,31 @@
 #   cp .env.example .env && chmod 600 .env    # then edit
 #   docker compose up -d --build              # (or podman compose)
 #
+# If the checkout is on root-squashed NFS, root (sudo docker) can't read a
+# 600 .env there. Set SVIDAT_ENV_FILE=/dev/null in it (so the backend doesn't
+# try to open it) and feed it to compose on stdin, read as you:
+#   cat .env | sudo docker compose --env-file /dev/stdin up -d --build
+# Every compose command needs the same prefix (ps, logs, down, ...).
+#
 # Two containers: backend (uvicorn, internal only) and frontend (nginx serving
 # the built React app and proxying /api to the backend). The SQLite database
 # is a file in the svidat-data volume, owned by the backend.
 services:
   backend:
     build: ./server
-    env_file: .env
+    env_file: ${SVIDAT_ENV_FILE:-.env}
     volumes:
       - svidat-data:/data
       # Mount ship data read-only and add it under Admin → Paths, e.g.:
       # - /net/samos/data:/samos:ro
+    # The standard settings are also passed explicitly, so they still reach
+    # the backend when env_file is /dev/null (see above).
     environment:
+      SVIDAT_ADMIN_USER: ${SVIDAT_ADMIN_USER:-}
       SVIDAT_ADMIN_PASSWORD: ${SVIDAT_ADMIN_PASSWORD:?set SVIDAT_ADMIN_PASSWORD in .env}
+      SECRET_KEY: ${SECRET_KEY:-}
+      JWT_EXPIRE_MINUTES: ${JWT_EXPIRE_MINUTES:-480}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://localhost:4173}
       GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID}
       MICROSOFT_CLIENT_ID: ${VITE_MS_CLIENT_ID}
     healthcheck:

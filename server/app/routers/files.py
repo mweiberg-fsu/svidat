@@ -102,16 +102,39 @@ def sst_point(
     _: User = Depends(get_current_user),
 ):
     """OISST sea surface temperature (deg C) at the 0.25 deg cell containing
-    (lat, lon) on `date`; `sst` is null over land. For the ship-track
-    widget's pointer readout (see app/sst.py)."""
+    (lat, lon) on `date`; `sst` is null over land. From the final dataset
+    if it has that day, else the preliminary one (`preliminary: true`); 404
+    if neither has it yet. For the ship-track widget's pointer readout (see
+    app/sst.py)."""
+    _check_sst_date(date)
+    try:
+        return sst.sst_at(date, lat, lon)
+    except sst.SstNoData:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"no SST data for {date} yet")
+    except sst.SstUnavailable:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="SST service unavailable")
+
+
+@router.get("/sst-source")
+def sst_source(
+    date: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    _: User = Depends(get_current_user),
+):
+    """Which OISST dataset the ship-track SST map should draw for `date`:
+    the final one if it has that day, else the preliminary one, else null."""
+    _check_sst_date(date)
+    try:
+        dataset = sst.source_for(date)
+    except sst.SstUnavailable:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="SST service unavailable")
+    return {"date": date, "dataset": dataset, "preliminary": dataset == sst.PRELIMINARY_DATASET}
+
+
+def _check_sst_date(date: str) -> None:
     try:
         datetime.strptime(date, "%Y-%m-%d")
     except ValueError:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"invalid date: {date}")
-    try:
-        return sst.sst_at(date, lat, lon)
-    except sst.SstUnavailable:
-        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="SST service unavailable")
 
 
 @router.get("/{filename}/metadata")

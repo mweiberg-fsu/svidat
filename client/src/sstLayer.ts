@@ -1,12 +1,13 @@
 import L from 'leaflet'
 
-// NOAA OISST v2.1 (final, daily, 0.25 deg) served by CoastWatch ERDDAP's WMS.
+// NOAA OISST v2.1 (daily, 0.25 deg) served by CoastWatch ERDDAP's WMS.
 // Nothing is downloaded or stored by svidat: the browser requests rendered
 // images for what the map is showing. ERDDAP's WMS only speaks EPSG:4326, so
 // the grid layer below reprojects each tile into the map's Web Mercator.
-const DATASET = 'ncdcOisst21Agg_LonPM180'
+// Which dataset to draw for a day (final, or preliminary for days the final
+// one doesn't have yet) comes from the backend: getSstSource.
+export const SST_FINAL_DATASET = 'ncdcOisst21Agg_LonPM180'
 const ERDDAP = 'https://coastwatch.pfeg.noaa.gov/erddap'
-const WMS_URL = `${ERDDAP}/wms/${DATASET}/request`
 const TILE = 256
 export const SST_ATTRIBUTION = 'SST: NOAA OISST v2.1 via CoastWatch ERDDAP'
 
@@ -38,13 +39,14 @@ export function sstGetMapUrl(
   latN: number,
   lonE: number,
   width: number,
-  height: number
+  height: number,
+  dataset: string = SST_FINAL_DATASET
 ): string {
   const params = new URLSearchParams({
     service: 'WMS',
     version: '1.3.0',
     request: 'GetMap',
-    layers: `${DATASET}:sst`,
+    layers: `${dataset}:sst`,
     styles: '',
     crs: 'EPSG:4326',
     // WMS 1.3.0 + EPSG:4326 uses latitude-first axis order.
@@ -55,14 +57,14 @@ export function sstGetMapUrl(
     transparent: 'true',
     time: sstTime(date),
   })
-  return `${WMS_URL}?${params.toString()}`
+  return `${ERDDAP}/wms/${dataset}/request?${params.toString()}`
 }
 
 // A GridLayer drawing the day's SST. Each 256px Mercator tile fetches the
 // EPSG:4326 image covering the same lat/lon box, then copies it one output
 // row at a time from the source row at that row's latitude (the lat->y
 // mapping is linear in the source but not in Mercator).
-export function createSstLayer(date: string): L.GridLayer {
+export function createSstLayer(date: string, dataset: string = SST_FINAL_DATASET): L.GridLayer {
   const SstLayer = L.GridLayer.extend({
     createTile(coords: L.Coords, done: L.DoneCallback) {
       const canvas = document.createElement('canvas')
@@ -85,7 +87,7 @@ export function createSstLayer(date: string): L.GridLayer {
         done(undefined, canvas)
       }
       img.onerror = () => done(new Error('SST tile failed to load'), canvas)
-      img.src = sstGetMapUrl(date, latS, lonW, latN, lonE, TILE, TILE)
+      img.src = sstGetMapUrl(date, latS, lonW, latN, lonE, TILE, TILE, dataset)
       return canvas
     },
   })

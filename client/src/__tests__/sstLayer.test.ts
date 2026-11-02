@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { mercatorRowLat, sstGetMapUrl, sstTime, tileLatBounds } from '../sstLayer'
+import { SST_FINAL_DATASET, mercatorRowLat, sstGetMapUrl, sstTime, tileLatBounds } from '../sstLayer'
 
 describe('sstLayer', () => {
   it('tileLatBounds gives the Web Mercator latitude span of a tile row', () => {
@@ -40,5 +40,12 @@ describe('sstLayer', () => {
     expect(p.get('format')).toBe('image/png')
     expect(p.get('transparent')).toBe('true')
     expect(p.get('time')).toBe('2019-03-01T12:00:00Z')
+  })
+
+  it('sstGetMapUrl defaults to the final dataset and can draw another one', () => {
+    expect(SST_FINAL_DATASET).toBe('ncdcOisst21Agg_LonPM180')
+    const url = new URL(sstGetMapUrl('2026-10-25', 30, -85, 35, -75, 256, 256, 'ncdcOisst21NrtAgg_LonPM180'))
+    expect(url.pathname).toBe('/erddap/wms/ncdcOisst21NrtAgg_LonPM180/request')
+    expect(url.searchParams.get('layers')).toBe('ncdcOisst21NrtAgg_LonPM180:sst')
   })
 })

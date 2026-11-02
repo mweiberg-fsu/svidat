@@ -56,12 +56,14 @@ vi.mock('leaflet', () => {
 
 const sst = vi.hoisted(() => ({
   created: [] as string[],
+  datasets: [] as string[],
   added: 0,
   removed: 0,
 }))
 vi.mock('../sstLayer', () => ({
-  createSstLayer: (date: string) => {
+  createSstLayer: (date: string, dataset: string) => {
     sst.created.push(date)
+    sst.datasets.push(dataset)
     const layer = {
       addTo: () => {
         sst.added++
@@ -144,6 +146,12 @@ describe('ShipTrackModal', () => {
     drawn.handlers = {}
     drawn.fitBounds.mockClear()
     sst.created.length = 0
+    sst.datasets.length = 0
+    vi.spyOn(apiClient, 'getSstSource').mockImplementation(async (date: string) => ({
+      date,
+      dataset: 'FINAL',
+      preliminary: false,
+    }))
     sst.added = 0
     sst.removed = 0
     sss.created.length = 0
@@ -240,7 +248,8 @@ describe('ShipTrackModal', () => {
 
     act(() => sstBtn.click())
     expect(sstBtn).toHaveAttribute('aria-pressed', 'true')
-    expect(sst.created).toEqual(['2019-03-01'])
+    await waitFor(() => expect(sst.created).toEqual(['2019-03-01']))
+    expect(sst.datasets).toEqual(['FINAL'])
     expect(sst.added).toBe(1)
     expect(screen.getByRole('img', { name: 'SST legend' })).toHaveTextContent('Sea Surface Temperature')
 
@@ -258,9 +267,57 @@ describe('ShipTrackModal', () => {
     const sstBtn = screen.getByRole('button', { name: 'SST' })
     await waitFor(() => expect(sstBtn).toBeEnabled())
     act(() => sstBtn.click())
+    await waitFor(() => expect(sst.created).toEqual(['2019-03-01']))
     act(() => screen.getByText('set file 2').click())
     await waitFor(() => expect(sst.created).toEqual(['2019-03-01', '2020-07-04']))
     expect(sst.removed).toBeGreaterThanOrEqual(1)
+  })
+
+  describe('SST dataset choice', () => {
+    async function turnOnSst() {
+      vi.spyOn(apiClient, 'getVariableData').mockResolvedValue({
+        time: ['2019-03-01T00:00:00'],
+        variables: { lat: { values: [1], flags: null }, lon: { values: [2], flags: null } },
+      })
+      renderModal('FILE_A')
+      const btn = screen.getByRole('button', { name: 'SST' })
+      await waitFor(() => expect(btn).toBeEnabled())
+      act(() => btn.click())
+    }
+
+    it('asks the backend which dataset has the day and draws that one', async () => {
+      const spy = vi.spyOn(apiClient, 'getSstSource').mockResolvedValue({
+        date: '2019-03-01',
+        dataset: 'PRELIM',
+        preliminary: true,
+      })
+      await turnOnSst()
+      await waitFor(() => expect(sst.datasets).toEqual(['PRELIM']))
+      expect(spy).toHaveBeenCalledWith('2019-03-01')
+      expect(screen.getByRole('img', { name: 'SST legend' })).toBeInTheDocument()
+      expect(screen.getByTestId('sst-legend')).toHaveTextContent('Preliminary OISST (final not yet available)')
+    })
+
+    it('final data shows the legend without a caption', async () => {
+      await turnOnSst()
+      await waitFor(() => expect(sst.datasets).toEqual(['FINAL']))
+      expect(screen.getByTestId('sst-legend')).not.toHaveTextContent('Preliminary')
+    })
+
+    it('says so when neither dataset has the day yet', async () => {
+      vi.spyOn(apiClient, 'getSstSource').mockResolvedValue({ date: '2019-03-01', dataset: null, preliminary: false })
+      await turnOnSst()
+      await waitFor(() => expect(screen.getByTestId('sst-legend')).toHaveTextContent('No SST data for 2019-03-01 yet'))
+      expect(sst.created).toEqual([])
+      expect(screen.queryByRole('img', { name: 'SST legend' })).not.toBeInTheDocument()
+    })
+
+    it('says SST is unavailable when the lookup fails', async () => {
+      vi.spyOn(apiClient, 'getSstSource').mockRejectedValue(new Error('502: SST service unavailable'))
+      await turnOnSst()
+      await waitFor(() => expect(screen.getByTestId('sst-legend')).toHaveTextContent('SST unavailable'))
+      expect(sst.created).toEqual([])
+    })
   })
 
   describe('Salinity overlay', () => {
@@ -318,6 +375,7 @@ describe('ShipTrackModal', () => {
       const sssBtn = await openModal()
       const sstBtn = screen.getByRole('button', { name: 'SST' })
       act(() => sstBtn.click())
+      await waitFor(() => expect(sst.created).toHaveLength(1))
       act(() => sssBtn.click())
       expect(sstBtn).toHaveAttribute('aria-pressed', 'false')
       expect(sssBtn).toHaveAttribute('aria-pressed', 'true')
@@ -330,7 +388,7 @@ describe('ShipTrackModal', () => {
     })
 
     it('adds the salinity under the pointer to the Values readout', async () => {
-      vi.spyOn(apiClient, 'getSstPoint').mockResolvedValue({ date: '2026-07-30', lat: 1, lon: 1, sst: 29 })
+      vi.spyOn(apiClient, 'getSstPoint').mockResolvedValue({ date: '2026-07-30', lat: 1, lon: 1, sst: 29, dataset: 'F', preliminary: false })
       const at = vi.fn(async () => ({ min: 36.12, max: 36.16 }))
       sss.at = at
       const btn = await openModal()
@@ -345,7 +403,7 @@ describe('ShipTrackModal', () => {
     })
 
     it('reports no data and lookup errors in the readout', async () => {
-      vi.spyOn(apiClient, 'getSstPoint').mockResolvedValue({ date: '2026-07-30', lat: 1, lon: 1, sst: 29 })
+      vi.spyOn(apiClient, 'getSstPoint').mockResolvedValue({ date: '2026-07-30', lat: 1, lon: 1, sst: 29, dataset: 'F', preliminary: false })
       sss.at = vi.fn().mockResolvedValueOnce(null).mockRejectedValueOnce(new Error('boom'))
       const btn = await openModal()
       act(() => btn.click())
@@ -359,7 +417,7 @@ describe('ShipTrackModal', () => {
     })
 
     it('leaves salinity out of the readout while the overlay is off', async () => {
-      vi.spyOn(apiClient, 'getSstPoint').mockResolvedValue({ date: '2026-07-30', lat: 1, lon: 1, sst: 29 })
+      vi.spyOn(apiClient, 'getSstPoint').mockResolvedValue({ date: '2026-07-30', lat: 1, lon: 1, sst: 29, dataset: 'F', preliminary: false })
       await openModal()
       act(() => screen.getByRole('button', { name: 'Values' }).click())
       act(() => drawn.handlers.mousemove({ containerPoint: { x: 9999, y: 9999 }, latlng: { lat: 27.6, lng: -84.3 } }))
@@ -404,6 +462,8 @@ describe('ShipTrackModal', () => {
         lat: 27.625,
         lon: -84.375,
         sst: 28.06,
+        dataset: 'F',
+        preliminary: false,
       })
       await openValues()
       const readout = screen.getByTestId('ship-track-values')
@@ -417,12 +477,39 @@ describe('ShipTrackModal', () => {
       await waitFor(() => expect(readout).toHaveTextContent('SST 28.06 °C'))
     })
 
+    it('marks a preliminary SST value', async () => {
+      vi.spyOn(apiClient, 'getSstPoint').mockResolvedValue({
+        date: '2019-03-01',
+        lat: 27.625,
+        lon: -84.375,
+        sst: 26.94,
+        dataset: 'PRELIM',
+        preliminary: true,
+      })
+      await openValues()
+      move(27.6, -84.3)
+      await waitFor(() =>
+        expect(screen.getByTestId('ship-track-values')).toHaveTextContent('SST 26.94 °C (preliminary)')
+      )
+    })
+
+    it('says when there is no SST for the day yet (404), distinct from an outage', async () => {
+      vi.spyOn(apiClient, 'getSstPoint').mockRejectedValue(new Error('404: {"detail":"no SST data for 2019-03-01 yet"}'))
+      await openValues()
+      move(27.6, -84.3)
+      await waitFor(() =>
+        expect(screen.getByTestId('ship-track-values')).toHaveTextContent('SST: no data for this date yet')
+      )
+    })
+
     it('reuses the cached value for the same grid cell', async () => {
       const spy = vi.spyOn(apiClient, 'getSstPoint').mockResolvedValue({
         date: '2019-03-01',
         lat: 27.625,
         lon: -84.375,
         sst: 28.06,
+        dataset: 'F',
+        preliminary: false,
       })
       await openValues()
       const readout = screen.getByTestId('ship-track-values')
@@ -438,7 +525,7 @@ describe('ShipTrackModal', () => {
     it('says no data over land and unavailable on errors', async () => {
       const spy = vi
         .spyOn(apiClient, 'getSstPoint')
-        .mockResolvedValueOnce({ date: '2019-03-01', lat: 39.625, lon: -99.875, sst: null })
+        .mockResolvedValueOnce({ date: '2019-03-01', lat: 39.625, lon: -99.875, sst: null, dataset: 'F', preliminary: false })
         .mockRejectedValueOnce(new Error('502: {"detail":"SST service unavailable"}'))
       await openValues()
       const readout = screen.getByTestId('ship-track-values')
@@ -455,6 +542,8 @@ describe('ShipTrackModal', () => {
         lat: 0.125,
         lon: -79.875,
         sst: 27,
+        dataset: 'F',
+        preliminary: false,
       })
       await openValues()
       move(0.1, 280.1)
@@ -464,7 +553,7 @@ describe('ShipTrackModal', () => {
     })
 
     it('clears the position when the pointer leaves the map', async () => {
-      vi.spyOn(apiClient, 'getSstPoint').mockResolvedValue({ date: '2019-03-01', lat: 1, lon: 1, sst: 1 })
+      vi.spyOn(apiClient, 'getSstPoint').mockResolvedValue({ date: '2019-03-01', lat: 1, lon: 1, sst: 1, dataset: 'F', preliminary: false })
       await openValues()
       move(1, 1)
       act(() => drawn.handlers.mouseout({}))

@@ -167,4 +167,14 @@ export interface SstPoint {
   lat: number
   lon: number
   sst: number | null
+  dataset: string
+  preliminary: boolean
+}
+
+// Which OISST dataset has a day: the final one, else the preliminary one
+// (preliminary: true), else none (dataset: null).
+export interface SstSource {
+  date: string
+  dataset: string | null
+  preliminary: boolean
 }

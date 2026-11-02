@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { getSstPoint, getVariableData } from '../api/client'
+import { getSstPoint, getSstSource, getVariableData } from '../api/client'
 import { usePlotSelection } from '../context/PlotSelectionContext'
 import { useEditSession } from '../context/EditSessionContext'
 import { useFloatingPanel } from '../hooks/useFloatingPanel'
@@ -57,6 +57,15 @@ export function ShipTrackModal({ onClose }: { onClose: () => void }) {
   const [overlay, setOverlay] = useState<Overlay>('none')
   const sstOn = overlay === 'sst'
   const sssOn = overlay === 'sss'
+  // Which OISST dataset has the file's day: final, else preliminary (the
+  // final one trails real time by ~2 weeks), else none yet.
+  const [sstSource, setSstSource] = useState<
+    | { status: 'loading' }
+    | { status: 'ok'; date: string; dataset: string; preliminary: boolean }
+    | { status: 'none' }
+    | { status: 'error' }
+    | null
+  >(null)
   // The salinity map date for the file's day (latest 8-day mean on or
   // before it; GIBS's record has gaps and lags real time).
   const [sssDate, setSssDate] = useState<
@@ -71,10 +80,14 @@ export function ShipTrackModal({ onClose }: { onClose: () => void }) {
   const valuesOnRef = useRef(false)
   const [pointer, setPointer] = useState<{ lat: number; lon: number } | null>(null)
   const [reading, setReading] = useState<
-    { status: 'loading' } | { status: 'ok'; sst: number | null } | { status: 'error' } | null
+    | { status: 'loading' }
+    | { status: 'ok'; sst: number | null; preliminary: boolean }
+    | { status: 'none' }
+    | { status: 'error' }
+    | null
   >(null)
   // SST per day + 0.25 deg cell (null = land), so revisiting a cell is instant.
-  const sstCacheRef = useRef(new Map<string, number | null>())
+  const sstCacheRef = useRef(new Map<string, { sst: number | null; preliminary: boolean }>())
 
   // Create the map once.
   useEffect(() => {
@@ -174,15 +187,43 @@ export function ShipTrackModal({ onClose }: { onClose: () => void }) {
     }
   }, [segments, xWindow, timeMarker])
 
+  // Resolve which SST dataset to draw for the file's day.
+  useEffect(() => {
+    if (!sstOn || !trackDate) {
+      setSstSource(null)
+      return
+    }
+    setSstSource({ status: 'loading' })
+    let cancelled = false
+    getSstSource(trackDate)
+      .then((src) => {
+        if (cancelled) return
+        setSstSource(
+          src.dataset
+            ? { status: 'ok', date: trackDate, dataset: src.dataset, preliminary: src.preliminary }
+            : { status: 'none' }
+        )
+      })
+      .catch(() => {
+        if (!cancelled) setSstSource({ status: 'error' })
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [sstOn, trackDate])
+
+  const sstMapDate = sstSource?.status === 'ok' ? sstSource.date : null
+  const sstDataset = sstSource?.status === 'ok' ? sstSource.dataset : null
+
   // SST overlay for the loaded file's day; recreated when the day changes.
   useEffect(() => {
     const map = mapRef.current
-    if (!map || !sstOn || !trackDate) return
-    const layer = createSstLayer(trackDate).addTo(map)
+    if (!map || !sstMapDate || !sstDataset) return
+    const layer = createSstLayer(sstMapDate, sstDataset).addTo(map)
     return () => {
       layer.remove()
     }
-  }, [sstOn, trackDate])
+  }, [sstMapDate, sstDataset])
 
   // Resolve which salinity map to show for the file's day.
   useEffect(() => {
@@ -250,8 +291,9 @@ export function ShipTrackModal({ onClose }: { onClose: () => void }) {
     const { lat, lon } = pointer
     const key = `${trackDate}|${snapToSstCell(lat, 89.875)}|${snapToSstCell(lon, 179.875)}`
     const cache = sstCacheRef.current
-    if (cache.has(key)) {
-      setReading({ status: 'ok', sst: cache.get(key) ?? null })
+    const cached = cache.get(key)
+    if (cached) {
+      setReading({ status: 'ok', ...cached })
       return
     }
     setReading({ status: 'loading' })
@@ -259,11 +301,14 @@ export function ShipTrackModal({ onClose }: { onClose: () => void }) {
     const timer = setTimeout(() => {
       getSstPoint(trackDate, lat, lon)
         .then((r) => {
-          cache.set(key, r.sst)
-          if (!cancelled) setReading({ status: 'ok', sst: r.sst })
+          const value = { sst: r.sst, preliminary: r.preliminary }
+          cache.set(key, value)
+          if (!cancelled) setReading({ status: 'ok', ...value })
         })
-        .catch(() => {
-          if (!cancelled) setReading({ status: 'error' })
+        .catch((err: unknown) => {
+          // apiFetch errors read "<status>: <body>"; 404 = no data that day.
+          const noData = err instanceof Error && err.message.startsWith('404')
+          if (!cancelled) setReading({ status: noData ? 'none' : 'error' })
         })
     }, SST_LOOKUP_DELAY_MS)
     return () => {
@@ -285,9 +330,24 @@ export function ShipTrackModal({ onClose }: { onClose: () => void }) {
         ? 'SST …'
         : reading.status === 'error'
           ? 'SST unavailable'
-          : reading.sst === null
-            ? 'SST: no data (land)'
-            : `SST ${reading.sst.toFixed(2)} °C`
+          : reading.status === 'none'
+            ? 'SST: no data for this date yet'
+            : reading.sst === null
+              ? 'SST: no data (land)'
+              : `SST ${reading.sst.toFixed(2)} °C${reading.preliminary ? ' (preliminary)' : ''}`
+
+  const sstCaption =
+    sstSource === null
+      ? ''
+      : sstSource.status === 'loading'
+        ? 'Loading SST…'
+        : sstSource.status === 'error'
+          ? 'SST unavailable'
+          : sstSource.status === 'none'
+            ? `No SST data for ${trackDate} yet`
+            : sstSource.preliminary
+              ? 'Preliminary OISST (final not yet available)'
+              : ''
 
   const sssText =
     sssReading === null
@@ -337,7 +397,7 @@ export function ShipTrackModal({ onClose }: { onClose: () => void }) {
           aria-pressed={sstOn}
           disabled={!trackDate}
           onClick={() => setOverlay((o) => (o === 'sst' ? 'none' : 'sst'))}
-          title="Sea surface temperature (NOAA OISST v2.1) for the file's date"
+          title="Sea surface temperature (NOAA OISST v2.1) for the file's date; preliminary data for recent days the final dataset doesn't have yet"
         >
           SST
         </button>
@@ -370,9 +430,10 @@ export function ShipTrackModal({ onClose }: { onClose: () => void }) {
             {formatFix(hover.fix)}
           </div>
         )}
-        {sstOn && trackDate && (
-          <div className="ship-track-legend">
-            <SstLegend />
+        {sstOn && sstSource && (
+          <div className="ship-track-legend" data-testid="sst-legend">
+            {sstSource.status === 'ok' && <SstLegend />}
+            {sstCaption && <span className="ship-track-legend-caption">{sstCaption}</span>}
           </div>
         )}
         {sssOn && sssDate && (

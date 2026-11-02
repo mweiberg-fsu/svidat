@@ -1,4 +1,4 @@
-import type { AppConfig, CurrentUser, CustomTrigger, Catalog, ClimatologyResponse, KeyBindings, ShipNames, OAuthSettings, TempSessionEntry, VariableDataResponse, ThemeSettings, ThemeSettingsUpdate, PathLists, PathSettings, DirectoryListing, SstPoint } from './types'
+import type { AppConfig, CurrentUser, CustomTrigger, Catalog, ClimatologyResponse, KeyBindings, ShipNames, OAuthSettings, TempSessionEntry, VariableDataResponse, ThemeSettings, ThemeSettingsUpdate, PathLists, PathSettings, DirectoryListing, SstPoint, SstSource } from './types'
 
 // Build-time override. start.sh / the Docker image build with VITE_API_URL=/api
 // so the browser talks to the backend through vite's same-origin proxy
@@ -340,3 +340,6 @@ export const getSstPoint = (date: string, lat: number, lon: number): Promise<Sst
   apiFetch(
     `/files/sst-point?${new URLSearchParams({ date, lat: String(lat), lon: String(lon) }).toString()}`
   ).then((r) => r.json())
+
+export const getSstSource = (date: string): Promise<SstSource> =>
+  apiFetch(`/files/sst-source?${new URLSearchParams({ date }).toString()}`).then((r) => r.json())

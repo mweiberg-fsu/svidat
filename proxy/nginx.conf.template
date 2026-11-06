@@ -1,0 +1,76 @@
+# Rendered by the nginx image's envsubst step: ${SVIDAT_*} come from the
+# container environment (see proxy/entrypoint.sh and docker-compose.yml).
+
+server_tokens off;
+
+# Docker's embedded DNS: re-resolve "frontend" so a recreated frontend
+# container (new IP) doesn't need a proxy restart.
+resolver 127.0.0.11 valid=30s ipv6=off;
+
+# Brute-force guard for password/SSO login, per client IP.
+limit_req_zone $binary_remote_addr zone=svidat_login:10m rate=10r/m;
+limit_req_status 429;
+
+# Plain HTTP: only the Let's Encrypt challenge, everything else -> HTTPS.
+server {
+    listen 80 default_server;
+    server_name ${SVIDAT_DOMAIN};
+
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    location / {
+        return 301 https://${SVIDAT_DOMAIN}${SVIDAT_HTTPS_PORT_SUFFIX}$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl default_server;
+    http2 on;
+    server_name ${SVIDAT_DOMAIN};
+
+    ssl_certificate     /etc/nginx/ssl/cert.pem;
+    ssl_certificate_key /etc/nginx/ssl/key.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
+
+    # netCDF/avatar uploads (matches the frontend container's limit).
+    client_max_body_size 1g;
+
+    # Security headers. No full CSP: the app loads map tiles, ERDDAP/GIBS
+    # layers and Google/Microsoft sign-in from several origins.
+    add_header Strict-Transport-Security "max-age=31536000" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Permissions-Policy "camera=(), microphone=(), geolocation=()" always;
+    add_header Content-Security-Policy "frame-ancestors 'self'; base-uri 'self'; object-src 'none'" always;
+
+    set $svidat_frontend http://frontend:8080;
+
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto https;
+    proxy_read_timeout 300s;
+    proxy_send_timeout 300s;
+
+    # FastAPI's interactive API docs / schema: not needed by the app.
+    location ~ ^/api/(docs|redoc|openapi\.json)(/|$) {
+        return 404;
+    }
+
+    location ~ ^/api/auth/(login|oauth/) {
+        limit_req zone=svidat_login burst=10 nodelay;
+        proxy_pass $svidat_frontend;
+    }
+
+    location / {
+        proxy_pass $svidat_frontend;
+    }
+}

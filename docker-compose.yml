@@ -11,6 +11,13 @@
 # Two containers: backend (uvicorn, internal only) and frontend (nginx serving
 # the built React app and proxying /api to the backend). The SQLite database
 # is a file in the svidat-data volume, owned by the backend.
+#
+# Optional HTTPS front end (compose profiles, e.g. COMPOSE_PROFILES in .env):
+#   proxy        - nginx on 80/443: TLS, http->https, security headers, login
+#                  rate limit, hides the API docs. Skip it if you already run
+#                  Apache/nginx; point that at SVIDAT_PORT instead.
+#   letsencrypt  - certbot: gets and renews the proxy's certificate. Leave it
+#                  off when using your own cert (SVIDAT_SSL_CERT/KEY).
 services:
   backend:
     build: ./server
@@ -44,11 +51,65 @@ services:
         VITE_GOOGLE_CLIENT_ID: ${VITE_GOOGLE_CLIENT_ID}
         VITE_MS_CLIENT_ID: ${VITE_MS_CLIENT_ID}
     ports:
-      - "${SVIDAT_PORT:?set SVIDAT_PORT in .env}:8080"
+      # SVIDAT_BIND=127.0.0.1 keeps this plain-HTTP port off the network when
+      # the proxy (or a host web server) is the public entry point.
+      - "${SVIDAT_BIND:-0.0.0.0}:${SVIDAT_PORT:?set SVIDAT_PORT in .env}:8080"
     depends_on:
       backend:
         condition: service_healthy
     restart: unless-stopped
 
+  proxy:
+    build: ./proxy
+    profiles: [proxy]
+    ports:
+      - "${SVIDAT_HTTP_PORT:-80}:80"
+      - "${SVIDAT_HTTPS_PORT:-443}:443"
+    environment:
+      SVIDAT_DOMAIN: ${SVIDAT_DOMAIN:-}
+      SVIDAT_HTTPS_PORT: ${SVIDAT_HTTPS_PORT:-443}
+      # Your own certificate instead of Let's Encrypt: put the files in
+      # SVIDAT_CERTS_DIR and name them here as /certs/<file>.
+      SVIDAT_SSL_CERT: ${SVIDAT_SSL_CERT:-}
+      SVIDAT_SSL_KEY: ${SVIDAT_SSL_KEY:-}
+    volumes:
+      - letsencrypt:/etc/letsencrypt:ro
+      - acme-webroot:/var/www/certbot:ro
+      - ${SVIDAT_CERTS_DIR:-./proxy/certs}:/certs:ro
+    depends_on:
+      - frontend
+    restart: unless-stopped
+
+  certbot:
+    image: certbot/certbot:latest
+    profiles: [letsencrypt]
+    environment:
+      SVIDAT_DOMAIN: ${SVIDAT_DOMAIN:-}
+      LETSENCRYPT_EMAIL: ${LETSENCRYPT_EMAIL:-}
+      LETSENCRYPT_STAGING: ${LETSENCRYPT_STAGING:-0}
+    volumes:
+      - letsencrypt:/etc/letsencrypt
+      - acme-webroot:/var/www/certbot
+    depends_on:
+      - proxy
+    # Issue once (retrying hourly until port 80 is reachable from Let's
+    # Encrypt), then try renewal every 12h; the proxy picks up new certs.
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        : "$${SVIDAT_DOMAIN:?set SVIDAT_DOMAIN in .env}" "$${LETSENCRYPT_EMAIL:?set LETSENCRYPT_EMAIL in .env}"
+        trap exit TERM
+        staging=""; [ "$$LETSENCRYPT_STAGING" = 1 ] && staging=--test-cert
+        while :; do
+          if [ ! -s "/etc/letsencrypt/live/$$SVIDAT_DOMAIN/fullchain.pem" ]; then
+            certbot certonly --webroot -w /var/www/certbot -d "$$SVIDAT_DOMAIN" --email "$$LETSENCRYPT_EMAIL" --agree-tos --no-eff-email --non-interactive $$staging || { echo "certbot: issuance failed, retrying in 1h"; sleep 3600 & wait $$!; continue; }
+          fi
+          certbot renew --webroot -w /var/www/certbot --quiet
+          sleep 43200 & wait $$!
+        done
+    restart: unless-stopped
+
 volumes:
   svidat-data:
+  letsencrypt:
+  acme-webroot:

@@ -25,6 +25,46 @@ not published) and `frontend` (nginx serving the built app and proxying `/api`
 to the backend, built from `client/Dockerfile`, published on `SVIDAT_PORT`,
 default 8080). The SQLite database lives in the `svidat-data` volume.
 
+#### HTTPS
+
+The app itself speaks plain HTTP. For a public deployment, either put your
+existing web server (Apache/nginx) in front of `SVIDAT_PORT`, or enable the
+bundled proxy: an nginx container on ports 80/443 that terminates TLS,
+redirects http → https, adds security headers (HSTS, nosniff, frame
+protection), rate-limits login, and hides FastAPI's `/api/docs` and
+`/api/openapi.json`. API routes other than login and public config already
+require a login token.
+
+In `.env`:
+
+```bash
+COMPOSE_PROFILES=proxy,letsencrypt
+SVIDAT_DOMAIN=svidat.example.edu
+LETSENCRYPT_EMAIL=you@example.edu
+SVIDAT_BIND=127.0.0.1        # stop exposing plain HTTP on SVIDAT_PORT
+```
+
+then `docker compose up -d --build`. Until a certificate exists, the proxy
+serves a self-signed placeholder. The `certbot` container requests a Let's
+Encrypt certificate (retrying hourly) and renews it every 12h. The proxy picks
+up new certificates within a minute, without a restart.
+
+- **DNS + port 80:** `SVIDAT_DOMAIN` must resolve to this host, and port 80
+  must be reachable **from the internet**. Let's Encrypt validates over HTTP
+  from its own servers, so a firewall that allows only campus networks will
+  block issuance. Port 80 only serves the challenge and the redirect.
+- **Testing:** `LETSENCRYPT_STAGING=1` gets untrusted test certificates without
+  hitting Let's Encrypt's rate limits. Before switching to real ones, remove
+  the staging certificate with
+  `docker compose run --rm --entrypoint certbot certbot delete --cert-name $SVIDAT_DOMAIN`.
+- **Own certificate** (e.g. issued by your institution): use
+  `COMPOSE_PROFILES=proxy`, put the files in `proxy/certs/` (or set
+  `SVIDAT_CERTS_DIR`), and set `SVIDAT_SSL_CERT=/certs/fullchain.pem`
+  and `SVIDAT_SSL_KEY=/certs/privkey.pem`. The chain file should include
+  intermediates. Replacing the files is picked up automatically.
+- **Other ports:** `SVIDAT_HTTP_PORT` / `SVIDAT_HTTPS_PORT`. Let's Encrypt
+  still needs public port 80 to reach the proxy.
+
 Single-container alternative (backend + `vite preview` via `start.sh`):
 
 ```bash

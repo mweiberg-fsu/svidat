@@ -34,3 +34,7 @@ CLAUDE.md
 .worktrees/
 # Host-specific compose additions (e.g. ship data mounts)
 /docker-compose.override.yml
+
+# Own TLS certificates for the HTTPS proxy (private keys)
+/proxy/certs/*
+!/proxy/certs/.gitkeep

@@ -10,6 +10,7 @@
 #   BACKEND_HOST (127.0.0.1; set 0.0.0.0 to expose the API directly)
 #   SKIP_BUILD=1         reuse an existing client/dist (e.g. built into an image)
 #   VITE_ALLOWED_HOSTS   hostnames the frontend may be reached by ("all" for any)
+#   VITE_BASE_PATH       URL prefix to serve under, e.g. /svidat/ (default /)
 #   SVIDAT_ADMIN_USER + SVIDAT_ADMIN_PASSWORD   create that admin on start if missing
 set -euo pipefail
 
@@ -78,7 +79,7 @@ if [ "${SKIP_BUILD:-0}" = "1" ] && [ -f "$CLIENT_DIR/dist/index.html" ]; then
   echo "SKIP_BUILD=1, using existing client/dist."
 else
   echo "Building frontend..."
-  (cd "$CLIENT_DIR" && VITE_API_URL="${VITE_API_URL:-/api}" npm run build)
+  (cd "$CLIENT_DIR" && VITE_API_URL="${VITE_API_URL:-${VITE_BASE_PATH:-/}api}" npm run build)
 fi
 
 echo "Starting frontend (vite preview) on $FRONTEND_HOST:$FRONTEND_PORT ..."

@@ -61,11 +61,11 @@ server {
     proxy_send_timeout 300s;
 
     # FastAPI's interactive API docs / schema: not needed by the app.
-    location ~ ^/api/(docs|redoc|openapi\.json)(/|$) {
+    location ~ ^${SVIDAT_BASE_PATH}api/(docs|redoc|openapi\.json)(/|$) {
         return 404;
     }
 
-    location ~ ^/api/auth/(login|oauth/) {
+    location ~ ^${SVIDAT_BASE_PATH}api/auth/(login|oauth/) {
         limit_req zone=svidat_login burst=10 nodelay;
         proxy_pass $svidat_frontend;
     }

@@ -14,7 +14,8 @@ export default function App() {
   useFavicon()
   return (
     <AuthProvider>
-      <BrowserRouter>
+      {/* BASE_URL is vite's `base` ("/" or e.g. "/svidat/"). */}
+      <BrowserRouter basename={import.meta.env.BASE_URL.replace(/\/+$/, '') || '/'}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           <Route

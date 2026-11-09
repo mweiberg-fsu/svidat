@@ -3,7 +3,7 @@ import { useBranding } from '../theme'
 import { useLogo } from './useLogo'
 
 // Shipped icon from index.html, used whenever no admin logo is set.
-export const DEFAULT_FAVICON = '/favicon.svg'
+export const DEFAULT_FAVICON = `${import.meta.env.BASE_URL}favicon.svg`
 
 // Keeps the browser tab icon in sync with the admin-set logo (the same image
 // the navbar and login page show), falling back to the default icon.

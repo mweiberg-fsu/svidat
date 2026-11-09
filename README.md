@@ -65,6 +65,17 @@ up new certificates within a minute, without a restart.
 - **Other ports:** `SVIDAT_HTTP_PORT` / `SVIDAT_HTTPS_PORT`. Let's Encrypt
   still needs public port 80 to reach the proxy.
 
+#### Serving under a path (e.g. `https://host.example.edu/svidat/`)
+
+Set `SVIDAT_BASE_PATH=/svidat/` (leading and trailing slash) in `.env` and
+rebuild (`docker compose up -d --build`). The prefix is baked into the
+frontend build, and the frontend container serves everything under it,
+including `/svidat/api/`. Requests outside the prefix (`/`, old `/plot`
+links) redirect into it. A host web server only needs to forward the prefix
+unchanged, e.g. Apache `ProxyPass /svidat/ http://127.0.0.1:8080/svidat/`.
+Without containers, set `VITE_BASE_PATH=/svidat/` for `start.sh` /
+`install.py --build`.
+
 Single-container alternative (backend + `vite preview` via `start.sh`):
 
 ```bash

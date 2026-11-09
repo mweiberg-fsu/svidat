@@ -122,7 +122,9 @@ def install_frontend_deps():
 
 def build_frontend():
     print("Building frontend (API via same-origin /api proxy)...")
-    env = {**os.environ, "VITE_API_URL": os.environ.get("VITE_API_URL", "/api")}
+    # VITE_BASE_PATH (e.g. /svidat/) serves the app under a URL prefix.
+    api = os.environ.get("VITE_BASE_PATH", "/") + "api"
+    env = {**os.environ, "VITE_API_URL": os.environ.get("VITE_API_URL", api)}
     run([shutil.which("npm"), "run", "build"], cwd=CLIENT_DIR, env=env)
 
 

@@ -44,8 +44,10 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
   const response = await fetch(`${BASE_URL}${path}`, { ...init, headers })
   if (response.status === 401) {
     clearAuthStorage()
-    if (window.location.pathname !== '/login') {
-      window.location.href = '/login'
+    // Full page load, outside the router: include the app's base path.
+    const loginPath = `${import.meta.env.BASE_URL}login`
+    if (window.location.pathname !== loginPath) {
+      window.location.href = loginPath
     }
     throw new Error('401: session expired')
   }

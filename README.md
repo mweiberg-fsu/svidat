@@ -62,6 +62,10 @@ up new certificates within a minute, without a restart.
   `SVIDAT_CERTS_DIR`), and set `SVIDAT_SSL_CERT=/certs/fullchain.pem`
   and `SVIDAT_SSL_KEY=/certs/privkey.pem`. The chain file should include
   intermediates. Replacing the files is picked up automatically.
+- **IP allowlist:** `SVIDAT_ALLOW_IPS="146.201.220.0/24 10.1.2.3"` limits the
+  HTTPS site to those addresses/CIDRs (others get 403); port 80 stays open so
+  Let's Encrypt can still validate. Also set `SVIDAT_BIND=127.0.0.1`, or
+  `SVIDAT_PORT` is an unrestricted way around it. Apply with `up -d`.
 - **Other ports:** `SVIDAT_HTTP_PORT` / `SVIDAT_HTTPS_PORT`. Let's Encrypt
   still needs public port 80 to reach the proxy.
 

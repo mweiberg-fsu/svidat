@@ -24,6 +24,26 @@ if [ -n "${SVIDAT_SSL_CERT:-}" ] || [ -n "${SVIDAT_SSL_KEY:-}" ]; then
     done
 fi
 
+# Optional IP allowlist for the HTTPS site (port 80 only serves the ACME
+# challenge and the redirect, so it stays open for Let's Encrypt).
+# SVIDAT_ALLOW_IPS: addresses/CIDRs separated by spaces or commas.
+ALLOW_CONF=/etc/nginx/svidat-allow.conf
+: > "$ALLOW_CONF"
+allow_list=$(printf '%s' "${SVIDAT_ALLOW_IPS:-}" | tr ',' ' ')
+if [ -n "$(printf '%s' "$allow_list" | tr -d ' \t\n')" ]; then
+    for ip in $allow_list; do
+        if ! printf '%s\n' "$ip" | grep -qE '^(([0-9]{1,3}\.){3}[0-9]{1,3}(/[0-9]{1,2})?|[0-9A-Fa-f:]*:[0-9A-Fa-f:.]*(/[0-9]{1,3})?)$'; then
+            echo "svidat-proxy: SVIDAT_ALLOW_IPS entry '$ip' is not an IP address or CIDR" >&2
+            exit 1
+        fi
+        echo "allow $ip;" >> "$ALLOW_CONF"
+    done
+    echo "deny all;" >> "$ALLOW_CONF"
+    echo "svidat-proxy: HTTPS restricted to: $allow_list"
+else
+    echo "svidat-proxy: no SVIDAT_ALLOW_IPS, HTTPS open to all addresses"
+fi
+
 if [ ! -s "$SSL_DIR/selfsigned.crt" ]; then
     openssl req -x509 -nodes -newkey rsa:2048 -days 30 \
         -subj "/CN=$SVIDAT_DOMAIN" \

@@ -38,6 +38,10 @@ server {
     ssl_session_timeout 1d;
     ssl_session_tickets off;
 
+    # SVIDAT_ALLOW_IPS allow/deny rules, written by entrypoint.sh (empty =
+    # open to all). Others get 403.
+    include /etc/nginx/svidat-allow.conf;
+
     # netCDF/avatar uploads (matches the frontend container's limit).
     client_max_body_size 1g;
 

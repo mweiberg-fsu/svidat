@@ -71,6 +71,8 @@ services:
       SVIDAT_DOMAIN: ${SVIDAT_DOMAIN:-}
       SVIDAT_HTTPS_PORT: ${SVIDAT_HTTPS_PORT:-443}
       SVIDAT_BASE_PATH: ${SVIDAT_BASE_PATH:-/}
+      # Only these addresses/CIDRs may use the HTTPS site (empty = all).
+      SVIDAT_ALLOW_IPS: ${SVIDAT_ALLOW_IPS:-}
       # Your own certificate instead of Let's Encrypt: put the files in
       # SVIDAT_CERTS_DIR and name them here as /certs/<file>.
       SVIDAT_SSL_CERT: ${SVIDAT_SSL_CERT:-}
